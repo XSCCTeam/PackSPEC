@@ -454,7 +454,7 @@ class PackSPEC:
                 f"echo | tee -a \"$LOG_FILE\""
             ])
 
-        if BOSC_API_KEY != "" and BOSC_AT_USER != "":
+        if BOSC_API_KEY != "":
             script_content.extend([
                 f"curl -X POST \"http://172.38.8.102:8848/send-message\" \\",
                 f"     -H \"api-key: {BOSC_API_KEY}\" \\",
