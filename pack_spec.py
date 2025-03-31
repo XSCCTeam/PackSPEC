@@ -308,12 +308,12 @@ class PackSPEC:
         for bench_name in self.spec_benches:
             src_build_dir = get_bench_dir(bench_name, src_build_bench_dir)
             if src_build_dir == "":
-                logger.error(f"Cannot match '{bench_name}' from '{src_build_bench_dir}'")
-                return []
+                logger.warning(f"Cannot match '{bench_name}' from '{src_build_bench_dir}'")
+                continue
             src_run_dir = get_bench_dir(bench_name, src_run_bench_dir)
             if src_run_dir == "":
-                logger.error(f"Cannot match '{bench_name}' from '{src_run_dir}'")
-                return []
+                logger.warning(f"Cannot match '{bench_name}' from '{src_run_dir}'")
+                continue
             dest_dir = os.path.join(dest_bench_dir, bench_name)
 
             logger.info(f"Copying {bench_name}\n")
