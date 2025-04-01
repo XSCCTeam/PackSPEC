@@ -14,6 +14,9 @@ class ActionType(Enum):
         none (int): 未定义动作类型，默认值0
         build (int): 构建阶段，对应值1
         run (int): 运行阶段，对应值2
+    
+    Note:
+        用于指定SPEC基准测试的执行阶段，build阶段编译测试程序，run阶段运行测试程序
     """
     none = 0
     build = 1
@@ -28,6 +31,9 @@ class TuneType(Enum):
     Attributes:
         base (int): 基础优化级别，对应值1
         peak (int): 峰值优化级别，对应值2
+    
+    Note:
+        base级别使用标准优化，peak级别使用更激进的优化策略
     """
     base = 1
     peak = 2
@@ -42,6 +48,9 @@ class InputType(Enum):
         test (int): 测试输入数据集，对应值1
         train (int): 训练输入数据集，对应值2
         ref (int): 参考输入数据集，对应值3
+    
+    Note:
+        test数据集最小，用于快速验证；train数据集中等大小；ref数据集最大，用于正式测试
     """
     test = 1
     train = 2
@@ -90,6 +99,7 @@ class PackSPEC:
         tune_type (TuneType): 优化类型枚举值
         input_type (InputType): 输入类型枚举值
         iterations (int): 每个基准测试的运行迭代次数，默认为3
+        test_core_num (int): 测试使用的核心编号
         spec_dir (str): SPEC安装目录路径
         spec_bench_map (dict): 基准测试名称到二进制文件名的映射
         spec_bench_path (str): 基准测试目录路径
@@ -102,6 +112,8 @@ class PackSPEC:
         copy_benches: 复制完整的基准测试目录结构
         execute_specinvoke: 生成基准测试的运行脚本
         create_run_all_script: 创建运行所有基准测试的批处理脚本
+        create_test_script: 创建单个基准测试的运行脚本
+        set_bench_info: 设置基准测试相关信息
     """
     def __init__(self,
                  spec_bench: SPECBench, 
@@ -160,6 +172,7 @@ class PackSPEC:
             self.spec_build_dir = 'build'
     
     def get_bench_path(self, label: str, action_type: ActionType = ActionType.none) -> list:
+
         """
         获取指定配置的基准测试路径
         
@@ -290,11 +303,29 @@ class PackSPEC:
             except Exception as e:
                 logger.error(f"Failed to copy {bench_name}: {str(e)}")
                 continue
-        logger.info(f"Successfully copied {copy_num} files.")
+        logger.success(f"Successfully copied {copy_num} files.")
         return dest_binary_dir
 
 
-    def copy_benches(self, label: str, dest_bench_dir: str = ""):
+    def copy_benches(self, label: str, dest_bench_dir: str = "") -> list:
+        """
+        复制完整的基准测试目录结构
+        
+        复制指定标签的SPEC基准测试完整目录结构到目标目录，
+        包括构建目录和运行目录。
+        
+        Args:
+            label (str): 构建标签(如llvm19-m64)
+            dest_bench_dir (str, optional): 目标目录路径。如果为空字符串，
+                                          会自动创建默认目录
+        
+        Returns:
+            list: 返回成功复制的基准测试目录列表
+            
+        Raises:
+            FileNotFoundError: 当源目录不存在时抛出异常
+            OSError: 当复制过程中发生错误时抛出异常
+        """
 
         src_build_bench_dir = self.get_bench_path(label, ActionType.build)
         src_run_bench_dir = self.get_bench_path(label, ActionType.run)
@@ -330,13 +361,16 @@ class PackSPEC:
                 continue
 
             if self.execute_specinvoke(src_run_dir, dest_dir):
-                logger.info(f"Successfully generated run_{self.input_type.name}.sh in {dest_dir}")
+                logger.success(f"Successfully generated run_{self.input_type.name}.sh in {dest_dir}")
             else:
                 logger.error(f"Failed to generate run_test.sh in {dest_dir}")
 
             self.create_test_script(label, bench_name, self.test_core_num, dest_dir)
 
-        logger.info(f"Successfully copied {len(dest_dir_list)} benches.")
+        if dest_dir_list != []:
+            logger.success(f"Successfully copied {len(dest_dir_list)} benches.")
+        else:
+            logger.error(f"No benches to copy.")
         return dest_dir_list
 
     def execute_specinvoke(self, src_dir: str, dest_dir: str) -> bool:
@@ -408,7 +442,7 @@ class PackSPEC:
             # 添加执行权限
             os.chmod(output_file, 0o755)
             
-            logger.info(f"Successfully created {output_file}")
+            logger.success(f"Successfully created {output_file}")
             return True
             
         except subprocess.CalledProcessError as e:
