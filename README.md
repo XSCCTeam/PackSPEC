@@ -54,6 +54,8 @@ packer = PackSPEC(
     iterations=3,
     test_core_num=4
 )
+# SPEC config 中的 ext
+label = "llvm19-m64"
 
 # 打包二进制文件
 packer.pack_binarys("llvm19-m64")

@@ -30,8 +30,11 @@ if __name__ == "__main__":
         # 运行测试绑定的核心编号，在打包二进制文件时无效
     )
 
+    # SPEC config 中的 ext
+    label = "llvm19-m64"
+
     # 打包二进制文件
-    packer.pack_binarys("llvm19-m64")
+    packer.pack_binarys(label)
 
     # 打包完整测试环境
-    packer.pack_benches("llvm19-m64")
+    packer.pack_benches(label)
