@@ -491,7 +491,7 @@ class PackSPEC:
         ]
 
         script_content.extend([
-            f"chomd +x ./{self.spec_bench_map[bench_name]}_{self.tune_type.name}.{label}",
+            f"chmod +x ./{self.spec_bench_map[bench_name]}_{self.tune_type.name}.{label}",
             ""
         ])
 
@@ -574,7 +574,7 @@ class PackSPEC:
                 f"cd {bench_name}"
             ])
             script_content.extend([
-                f"chomd +x ./{self.spec_bench_map[bench_name]}_{self.tune_type.name}.{label}",
+                f"chmod +x ./{self.spec_bench_map[bench_name]}_{self.tune_type.name}.{label}",
                 ""
             ])
             for i in range(iterations):
