@@ -11,14 +11,12 @@ class ActionType(Enum):
     定义SPEC基准测试的不同操作阶段类型
     
     Attributes:
-        none (int): 未定义动作类型，默认值0
         build (int): 构建阶段，对应值1
         run (int): 运行阶段，对应值2
     
     Note:
         用于指定SPEC基准测试的执行阶段，build阶段编译测试程序，run阶段运行测试程序
     """
-    none = 0
     build = 1
     run = 2
 
@@ -95,7 +93,6 @@ class PackSPEC:
     
     Attributes:
         spec_bench (SPECBench): SPEC基准测试类型枚举值
-        action_type (ActionType): 动作类型枚举值(构建/运行)
         tune_type (TuneType): 优化类型枚举值
         input_type (InputType): 输入类型枚举值
         iterations (int): 每个基准测试的运行迭代次数，默认为3
@@ -117,13 +114,11 @@ class PackSPEC:
     """
     def __init__(self,
                  spec_bench: SPECBench, 
-                 action_type: ActionType, 
                  tune_type: TuneType, 
                  input_type: InputType,
                  iterations: int = 3,
                  test_core_num: int = 4):
         self.spec_bench = spec_bench
-        self.action_type = action_type
         self.tune_type = tune_type
         self.input_type = input_type
         self.iterations = iterations
@@ -171,7 +166,7 @@ class PackSPEC:
             self.spec_benches = SPEC2017_FP_BENCHES
             self.spec_build_dir = 'build'
     
-    def get_bench_path(self, label: str, action_type: ActionType = ActionType.none) -> list:
+    def get_bench_path(self, label: str, action_type: ActionType) -> list:
 
         """
         获取指定配置的基准测试路径
@@ -181,8 +176,7 @@ class PackSPEC:
         
         Args:
             label (str): 构建标签(如llvm19-m64)，用于匹配目录名称
-            action_type (ActionType, optional): 指定动作类型，默认为ActionType.none
-                                              None时会使用类初始化时设置的动作类型
+            action_type (ActionType): 指定动作类型
         
         Returns:
             list: 返回匹配的基准测试路径列表，每个元素是一个基准测试的完整路径
@@ -196,24 +190,12 @@ class PackSPEC:
             4. 返回的路径列表顺序与spec_benches列表顺序一致
         """
 
-        if action_type == ActionType.none:
-            # 根据动作类型构建目录前缀
-            if self.action_type == ActionType.build:
-                # 编译目录格式：build_优化类型_标签
-                bench_dir_perfix = f"{self.action_type.name}_{self.tune_type.name}_{label}"
-            elif self.action_type == ActionType.run:
-                # 运行目录格式：run_优化类型_输入类型_标签
-                bench_dir_perfix = f"{self.action_type.name}_{self.tune_type.name}_{self.input_type.name}_{label}"
-            else:
-                logger.error(f"Unknown ActionType: {self.action_type}!")
-                return []
-        else:
-            if action_type == ActionType.build:
-                # 编译目录格式：build_优化类型_标签
-                bench_dir_perfix = f"{action_type.name}_{self.tune_type.name}_{label}"
-            elif action_type == ActionType.run:
-                # 运行目录格式：run_优化类型_输入类型_标签
-                bench_dir_perfix = f"{action_type.name}_{self.tune_type.name}_{self.input_type.name}_{label}"
+        if action_type == ActionType.build:
+            # 编译目录格式：build_优化类型_标签
+            bench_dir_perfix = f"{action_type.name}_{self.tune_type.name}_{label}"
+        elif action_type == ActionType.run:
+            # 运行目录格式：run_优化类型_输入类型_标签
+            bench_dir_perfix = f"{action_type.name}_{self.tune_type.name}_{self.input_type.name}_{label}"
 
         selected_bench_dir = []
         
@@ -281,20 +263,30 @@ class PackSPEC:
             5. 如果目标目录不存在会自动创建
             6. 返回的目标目录路径可用于后续操作
         """
-        src_bench_dir = self.get_bench_path(label)
+        src_bench_dir = self.get_bench_path(label, ActionType.build)
 
         os.makedirs(PACK_PATH, exist_ok=True)
         if dest_binary_dir == "":
             dest_binary_dir = os.path.join(PACK_PATH, f"bin_{label}")
-            os.makedirs(dest_binary_dir, exist_ok=False)
+            if os.path.exists(dest_binary_dir):
+                logger.debug(f"目录 {dest_binary_dir} 已存在，是否要覆盖？(y/n): ")
+                choice = input(f"目录 {dest_binary_dir} 已存在，是否要覆盖？(y/n): ")
+                if choice.lower() == 'y':
+                    logger.debug(f"覆盖目录 {dest_binary_dir} ")
+                    shutil.rmtree(dest_binary_dir)
+                    os.makedirs(dest_binary_dir, exist_ok=False)
+                else:
+                    logger.error("用户取消操作，未覆盖目录。")
+                    return ""
+            else:
+                logger.debug(f"创建目录 {dest_binary_dir} ")
+                os.makedirs(dest_binary_dir, exist_ok=False)
 
         copy_num = 0
         for bench_dir in src_bench_dir:
             # 获取基准测试名称（目录的最后两级：如 500.perlbench_r/run_base_test_llvm19-m64）
             bench_name = os.path.basename(os.path.dirname(os.path.dirname(bench_dir)))
             binary_path = os.path.join(bench_dir, self.spec_bench_map[bench_name])
-            if self.action_type == ActionType.run:
-                binary_path = f"{binary_path}_{self.tune_type.name}.{label}"
             dest_path = os.path.join(dest_binary_dir, bench_name)
             logger.info(f"Copying {bench_name}\n\tFrom {binary_path} -to-> {dest_path}")
 
@@ -338,7 +330,19 @@ class PackSPEC:
         os.makedirs(PACK_PATH, exist_ok=True)
         if dest_bench_dir == "":
             dest_bench_dir = os.path.join(PACK_PATH, f"buildrun_{label}")
-            os.makedirs(dest_bench_dir, exist_ok=False)
+            if os.path.exists(dest_bench_dir):
+                logger.debug(f"目录 {dest_bench_dir} 已存在，是否要覆盖？(y/n): ")
+                choice = input(f"目录 {dest_bench_dir} 已存在，是否要覆盖？(y/n): ")
+                if choice.lower() == 'y':
+                    logger.debug(f"覆盖目录 {dest_bench_dir} ")
+                    shutil.rmtree(dest_bench_dir)
+                    os.makedirs(dest_bench_dir, exist_ok=False)
+                else:
+                    logger.error("用户取消操作，未覆盖目录。")
+                    return []
+            else:
+                logger.debug(f"创建目录 {dest_bench_dir} ")
+                os.makedirs(dest_bench_dir, exist_ok=False)
 
         dest_dir_list = []
         for bench_name in self.spec_benches:
@@ -592,7 +596,7 @@ class PackSPEC:
         
         # 添加执行权限
         os.chmod(run_all_script, 0o755)
-        logger.info(f"Created run_all script at {run_all_script}")
+        logger.success(f"Successfully created run_all script at {run_all_script}")
 
     def pack_binarys(self, label: str):
         self.copy_binarys(label)

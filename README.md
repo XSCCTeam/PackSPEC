@@ -48,7 +48,6 @@ from pack_spec import *
 # 创建SPEC2006整数基准测试打包实例
 packer = PackSPEC(
     spec_bench=SPECBench.spec2006int,
-    action_type=ActionType.run,
     tune_type=TuneType.base,
     input_type=InputType.ref,
     iterations=3,

@@ -11,10 +11,6 @@ if __name__ == "__main__":
         #     spec2017: SPEC2017完整基准套件
         #     spec2017int: SPEC2017整数基准子集
         #     spec2017fp: SPEC2017浮点基准子集
-        action_type=ActionType.run,
-        # SPEC基准测试动作类型，可选包括：
-        #     build: 构建阶段
-        #     run: 运行阶段
         tune_type=TuneType.base,
         # SPEC基准测试优化级别，可选包括：
         #     base: 基础优化级别
