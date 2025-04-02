@@ -293,6 +293,8 @@ class PackSPEC:
             # 获取基准测试名称（目录的最后两级：如 500.perlbench_r/run_base_test_llvm19-m64）
             bench_name = os.path.basename(os.path.dirname(os.path.dirname(bench_dir)))
             binary_path = os.path.join(bench_dir, self.spec_bench_map[bench_name])
+            if self.action_type == ActionType.run:
+                binary_path = f"{binary_path}_{self.tune_type.name}.{label}"
             dest_path = os.path.join(dest_binary_dir, bench_name)
             logger.info(f"Copying {bench_name}\n\tFrom {binary_path} -to-> {dest_path}")
 
@@ -303,7 +305,10 @@ class PackSPEC:
             except Exception as e:
                 logger.error(f"Failed to copy {bench_name}: {str(e)}")
                 continue
-        logger.success(f"Successfully copied {copy_num} files.")
+        if copy_num != 0:
+            logger.success(f"Successfully copied {copy_num} files.")
+        else:
+            logger.error(f"No binary to copy.")
         return dest_binary_dir
 
 
@@ -588,20 +593,5 @@ class PackSPEC:
         # 添加执行权限
         os.chmod(run_all_script, 0o755)
         logger.info(f"Created run_all script at {run_all_script}")
-
-
-if __name__ == "__main__":
-    logger.info("PackSPEC Started")
-    logger.info("Packing Binarys")
-
-    label = "bosc-kmh-llvm-peak"
-
-    pack_spec = PackSPEC(SPECBench.spec2006int, 
-                         ActionType.build,
-                         TuneType.base, 
-                         InputType.ref)
-
-    # pack_spec.copy_binarys(label)
-    buildrun_bench_dir_list = pack_spec.copy_benches(label)
-    pack_spec.create_run_all_script(label, 4, buildrun_bench_dir_list)
+        
 
