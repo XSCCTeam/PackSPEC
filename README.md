@@ -11,7 +11,7 @@ PackSPEC 是一个用于自动化打包和管理SPEC CPU基准测试文件的工
 - 提供便捷的测试脚本生成功能
 - 支持多种输入类型(test/train/ref)
 - 支持多种优化级别(base/peak)
-- 支持多核测试配置
+- 支持配置绑核测试
 - 自动生成测试报告和日志文件
 
 ## 安装步骤
@@ -43,7 +43,7 @@ python pack_spec.py
 
 ## 示例
 ```python
-from pack_spec import PackSPEC, SPECBench, ActionType, TuneType, InputType
+from pack_spec import *
 
 # 创建SPEC2006整数基准测试打包实例
 packer = PackSPEC(
@@ -56,8 +56,8 @@ packer = PackSPEC(
 )
 
 # 打包二进制文件
-packer.copy_binarys("llvm19-m64")
+packer.pack_binarys("llvm19-m64")
 
 # 打包完整测试环境
-packer.copy_benches("llvm19-m64")
+packer.pack_benches("llvm19-m64")
 ```

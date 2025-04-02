@@ -593,5 +593,13 @@ class PackSPEC:
         # 添加执行权限
         os.chmod(run_all_script, 0o755)
         logger.info(f"Created run_all script at {run_all_script}")
+
+    def pack_binarys(self, label: str):
+        self.copy_binarys(label)
+
+    def pack_benches(self, label: str):
+        buildrun_bench_dir_list = self.copy_benches(label)
+        self.create_run_all_script(label, self.test_core_num, buildrun_bench_dir_list)
+
         
 
