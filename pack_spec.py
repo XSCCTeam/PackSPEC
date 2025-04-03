@@ -54,26 +54,14 @@ class InputType(Enum):
     train = 2
     ref = 3
 
-class SPECBench(Enum):
-    """
-    SPEC基准测试套件枚举类
-    
-    定义不同版本的SPEC基准测试套件及其子集
-    
-    Attributes:
-        spec2006 (int): SPEC2006完整基准套件，对应值1
-        spec2006int (int): SPEC2006整数基准子集，对应值2
-        spec2006fp (int): SPEC2006浮点基准子集，对应值3
-        spec2017 (int): SPEC2017完整基准套件，对应值4
-        spec2017int (int): SPEC2017整数基准子集，对应值5
-        spec2017fp (int): SPEC2017浮点基准子集，对应值6
-    """
+class SPECName(Enum):
     spec2006 = 1
-    spec2006int = 2
-    spec2006fp = 3
-    spec2017 = 4
-    spec2017int = 5
-    spec2017fp = 6
+    spec2017 = 2
+
+class SPECSubBench(Enum):
+    all = 1
+    int = 2
+    fp = 3
 
 
 def get_bench_dir(bench_name: str, bench_dirs: list) -> str:
@@ -113,59 +101,143 @@ class PackSPEC:
         set_bench_info: 设置基准测试相关信息
     """
     def __init__(self,
-                 spec_bench: SPECBench, 
+                 spec_name: SPECName, 
+                 spec_benches: str,
                  tune_type: TuneType, 
                  input_type: InputType,
                  iterations: int = 3,
                  test_core_num: int = 4):
-        self.spec_bench = spec_bench
+        self.spec_name = spec_name
         self.tune_type = tune_type
         self.input_type = input_type
         self.iterations = iterations
         self.test_core_num = test_core_num
-        if self.spec_bench in [SPECBench.spec2006, SPECBench.spec2006int, SPECBench.spec2006fp]:
+        if self.spec_name == SPECName.spec2006:
             self.spec_dir = SPEC2006_PATH
+            self.spec_bench_path = SPEC2006_BENCH_PATH
             self.spec_bench_map = SPEC2006_MAP
-        elif self.spec_bench in [SPECBench.spec2017 ,SPECBench.spec2017int, SPECBench.spec2017fp]:
+            self.spec_build_dir = 'run'
+            self.setup_script_path = os.path.join(SCRIPTS_PATH, "setup-spec06.sh")
+        elif self.spec_name == SPECName.spec2017:
             self.spec_dir = SPEC2017_PATH
+            self.spec_bench_path = SPEC2017_BENCH_PATH
             self.spec_bench_map = SPEC2017_MAP
-        else:
-            logger.error(f"Unknown SPECBench Type: {self.spec_bench}")
-            return
-        self.set_bench_info()
+            self.spec_build_dir = 'build'
+            self.setup_script_path = os.path.join(SCRIPTS_PATH, "setup-spec17.sh")
+        self.spec_bench_list = self.get_bench_list(spec_benches)
 
-
-    def set_bench_info(self):
+    def get_bench_list(self, spec_benches: str):
         """
         设置基准测试信息
         
-        根据spec_bench设置基准测试路径、基准测试列表和构建目录
+        根据spec_bench设置基准测试列表
         """
-        if self.spec_bench == SPECBench.spec2006:
-            self.spec_bench_path = SPEC2006_BENCH_PATH
-            self.spec_benches = SPEC2006_BENCHES
-            self.spec_build_dir = 'run'
-        elif self.spec_bench == SPECBench.spec2006int:
-            self.spec_bench_path = SPEC2006_BENCH_PATH
-            self.spec_benches = SPEC2006_INT_BENCHES
-            self.spec_build_dir = 'run'
-        elif self.spec_bench == SPECBench.spec2006fp:
-            self.spec_bench_path = SPEC2006_BENCH_PATH
-            self.spec_benches = SPEC2006_FP_BENCHES
-            self.spec_build_dir = 'run'
-        elif self.spec_bench == SPECBench.spec2017:
-            self.spec_bench_path = SPEC2017_BENCH_PATH
-            self.spec_benches = SPEC2017_BENCHES
-            self.spec_build_dir = 'build'
-        elif self.spec_bench == SPECBench.spec2017int:
-            self.spec_bench_path = SPEC2017_BENCH_PATH
-            self.spec_benches = SPEC2017_INT_BENCHES
-            self.spec_build_dir = 'build'
-        elif self.spec_bench == SPECBench.spec2017fp:
-            self.spec_bench_path = SPEC2017_BENCH_PATH
-            self.spec_benches = SPEC2017_FP_BENCHES
-            self.spec_build_dir = 'build'
-    
+        spec_bench_set = set()
+        spec_bench_list = []
+        if self.spec_name == SPECName.spec2006:
+            for bench in spec_benches.split():
+                if bench == "all":
+                    spec_bench_set.update(SPEC2006_BENCHES) 
+                elif bench == "int":
+                    spec_bench_set.update(SPEC2006_INT_BENCHES)
+                elif bench == "fp":
+                    spec_bench_set.update(SPEC2006_FP_BENCHES)
+                else:
+                    for spec_bench in SPEC2006_BENCHES:
+                        if bench == spec_bench.split('.')[0]:
+                            spec_bench_set.add(spec_bench)
+            spec_bench_list = sorted(spec_bench_set, 
+                key=lambda x: (0 if x in SPEC2006_INT_BENCHES else 1, 
+                    x.split('.')[0]))
+        elif self.spec_name == SPECName.spec2017:
+            for bench in spec_benches.split():
+                if bench == "all":
+                    spec_bench_set.update(SPEC2017_BENCHES) 
+                elif bench == "int":
+                    spec_bench_set.update(SPEC2017_INT_BENCHES)
+                elif bench == "fp":
+                    spec_bench_set.update(SPEC2017_FP_BENCHES)
+                else:
+                    for spec_bench in SPEC2017_BENCHES:
+                        if bench == spec_bench.split('.')[0]:
+                            spec_bench_set.add(spec_bench)
+            spec_bench_list = sorted(spec_bench_set, 
+                key=lambda x: (0 if x in SPEC2017_INT_BENCHES else 1, 
+                    x.split('.')[0]))
+
+        if spec_bench_list == []:
+            logger.error(f"No bench selected from {spec_benches} in {self.spec_name.name}.")
+            exit(0)
+        else:
+            logger.info(f"Selected {len(spec_bench_list)} benches from {spec_benches} in {self.spec_name.name}.")
+            for spec_bench in spec_bench_list:
+                logger.debug(f"Selected {spec_bench}.")
+        return spec_bench_list
+
+    def setup_spec(self, spec_cfg: str):
+        if self.spec_name == SPECName.spec2006:
+            spec_setup_cmd = [
+                self.setup_script_path, 
+                "-p", self.spec_dir,
+                "-c", spec_cfg,
+                "-t", self.tune_type.name,
+                "-i", self.input_type.name,
+                "-s", f"\"{' '.join([x.split('.')[0] for x in self.spec_bench_list])}\"",
+                "-n", str(self.iterations),
+                "-r"]
+        elif self.spec_name == SPECName.spec2017:
+            # TODO: 完善SPEC2017 setup 脚本
+            spec_setup_cmd = f"{self.setup_script_path}"
+            logger.error(f"The SPEC2017 setup script has not been implemented yet.")
+            exit(0)
+
+        try:
+            # 执行setup_spec脚本并实时输出
+            logger.info(f"Setting up spec from config: {spec_cfg}")
+            logger.debug(f"Executing command: {spec_setup_cmd}")
+            
+            process = subprocess.Popen(
+                spec_setup_cmd,
+                cwd=P_PATH,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                bufsize=1  # 行缓冲
+            )
+
+            # 实时读取输出
+            while True:
+                output = process.stdout
+                if output is not None:
+                    output = output.readline()
+                    if output == '' and process.poll() is not None:
+                        break
+                    if output:
+                        logger.info(output.strip())
+            
+            # 检查返回码
+            return_code = process.wait()
+            if return_code != 0:
+                error = process.stderr
+                if error is not None:
+                    error = error.read()
+                    logger.error(f"Command failed with error: {error}")
+                    exit(0)
+                    return False
+
+            logger.success(f"Successfully setup spec from config: {spec_cfg}")
+            return True
+            
+        except subprocess.CalledProcessError as e:
+            logger.error(f"Command failed with error: {e.stderr}")
+            exit(0)
+            return False
+        except Exception as e:
+            logger.error(f"Failed to execute command: {str(e)}")
+            exit(0)
+            return False
+
+
     def get_bench_path(self, label: str, action_type: ActionType) -> list:
 
         """
@@ -202,7 +274,7 @@ class PackSPEC:
         # 遍历SPEC2017基准测试目录
         for bench_dir in os.listdir(self.spec_bench_path):
             # 检查是否为指定的基准测试集合
-            if bench_dir in self.spec_benches:
+            if bench_dir in self.spec_bench_list:
                 # 根据动作类型构建完整路径（build或run目录）
                 bench_run_dir = os.path.join(self.spec_bench_path, bench_dir, self.spec_build_dir)
                 run_dir_path_list = []
@@ -269,17 +341,19 @@ class PackSPEC:
         if dest_binary_dir == "":
             dest_binary_dir = os.path.join(PACK_PATH, f"bin_{label}")
             if os.path.exists(dest_binary_dir):
-                logger.debug(f"目录 {dest_binary_dir} 已存在，是否要覆盖？(y/n): ")
-                choice = input(f"目录 {dest_binary_dir} 已存在，是否要覆盖？(y/n): ")
+                logger.info(f"Directory {dest_binary_dir} already exists.")
+                logger.debug(f"Do you want to overwrite it? (y/n): ")
+                choice = input(f"Do you want to overwrite it? (y/n): ")
                 if choice.lower() == 'y':
-                    logger.debug(f"覆盖目录 {dest_binary_dir} ")
+                    logger.debug(f"Overwriting directory {dest_binary_dir} ")
                     shutil.rmtree(dest_binary_dir)
                     os.makedirs(dest_binary_dir, exist_ok=False)
                 else:
-                    logger.error("用户取消操作，未覆盖目录。")
+                    logger.error("User canceled the operation. Directory not overwritten.")
+                    exit(0)
                     return ""
             else:
-                logger.debug(f"创建目录 {dest_binary_dir} ")
+                logger.debug(f"Creating directory {dest_binary_dir} ")
                 os.makedirs(dest_binary_dir, exist_ok=False)
 
         copy_num = 0
@@ -296,15 +370,17 @@ class PackSPEC:
                 logger.debug(f"Copie {bench_name} binary done.")
             except Exception as e:
                 logger.error(f"Failed to copy {bench_name}: {str(e)}")
+                exit(0)
                 continue
         if copy_num != 0:
             logger.success(f"Successfully copied {copy_num} files.")
         else:
             logger.error(f"No binary to copy.")
+            exit(0)
         return dest_binary_dir
 
 
-    def copy_benches(self, label: str, dest_bench_dir: str = "") -> list:
+    def copy_benches(self, label: str, with_build: bool = False, dest_bench_dir: str = "") -> list:
         """
         复制完整的基准测试目录结构
         
@@ -323,33 +399,36 @@ class PackSPEC:
             FileNotFoundError: 当源目录不存在时抛出异常
             OSError: 当复制过程中发生错误时抛出异常
         """
-
-        src_build_bench_dir = self.get_bench_path(label, ActionType.build)
+        if with_build:
+            src_build_bench_dir = self.get_bench_path(label, ActionType.build)
         src_run_bench_dir = self.get_bench_path(label, ActionType.run)
 
         os.makedirs(PACK_PATH, exist_ok=True)
         if dest_bench_dir == "":
             dest_bench_dir = os.path.join(PACK_PATH, f"buildrun_{label}")
             if os.path.exists(dest_bench_dir):
-                logger.debug(f"目录 {dest_bench_dir} 已存在，是否要覆盖？(y/n): ")
-                choice = input(f"目录 {dest_bench_dir} 已存在，是否要覆盖？(y/n): ")
+                logger.info(f"Directory {dest_bench_dir} already exists.")
+                logger.debug(f"Do you want to overwrite it? (y/n): ")
+                choice = input(f"Do you want to overwrite it? (y/n): ")
                 if choice.lower() == 'y':
-                    logger.debug(f"覆盖目录 {dest_bench_dir} ")
+                    logger.debug(f"Overwriting directory {dest_bench_dir} ")
                     shutil.rmtree(dest_bench_dir)
                     os.makedirs(dest_bench_dir, exist_ok=False)
                 else:
-                    logger.error("用户取消操作，未覆盖目录。")
+                    logger.error("User canceled the operation. Directory not overwritten.")
+                    exit(0)
                     return []
             else:
-                logger.debug(f"创建目录 {dest_bench_dir} ")
+                logger.debug(f"Creating directory {dest_bench_dir} ")
                 os.makedirs(dest_bench_dir, exist_ok=False)
 
         dest_dir_list = []
-        for bench_name in self.spec_benches:
-            src_build_dir = get_bench_dir(bench_name, src_build_bench_dir)
-            if src_build_dir == "":
-                logger.warning(f"Cannot match '{bench_name}' from '{src_build_bench_dir}'")
-                continue
+        for bench_name in self.spec_bench_list:
+            if with_build:
+                src_build_dir = get_bench_dir(bench_name, src_build_bench_dir)
+                if src_build_dir == "":
+                    logger.warning(f"Cannot match '{bench_name}' from '{src_build_bench_dir}'")
+                    continue
             src_run_dir = get_bench_dir(bench_name, src_run_bench_dir)
             if src_run_dir == "":
                 logger.warning(f"Cannot match '{bench_name}' from '{src_run_dir}'")
@@ -358,21 +437,24 @@ class PackSPEC:
 
             logger.info(f"Copying {bench_name}\n")
             try:
-                logger.info(f"\tFrom {src_build_dir} -to-> {dest_dir}")
-                shutil.copytree(src_build_dir, dest_dir, symlinks=True)
-                logger.debug(f"Copie {bench_name} build dir done.")
+                if with_build:
+                    logger.info(f"\tFrom {src_build_dir} -to-> {dest_dir}")
+                    shutil.copytree(src_build_dir, dest_dir, symlinks=True)
+                    logger.debug(f"Copie {bench_name} build dir done.")
                 logger.info(f"\tFrom {src_run_dir} -to-> {dest_dir}")
                 shutil.copytree(src_run_dir, dest_dir, symlinks=True, dirs_exist_ok=True)
                 logger.debug(f"Copie {bench_name} run dir done.")
                 dest_dir_list.append(dest_dir)
             except Exception as e:
                 logger.error(f"Failed to copy {bench_name}: {str(e)}")
+                exit(0)
                 continue
 
             if self.execute_specinvoke(src_run_dir, dest_dir):
                 logger.success(f"Successfully generated run_{self.input_type.name}.sh in {dest_dir}")
             else:
                 logger.error(f"Failed to generate run_test.sh in {dest_dir}")
+                exit(0)
 
             self.create_test_script(label, bench_name, self.test_core_num, dest_dir)
 
@@ -380,6 +462,7 @@ class PackSPEC:
             logger.success(f"Successfully copied {len(dest_dir_list)} benches.")
         else:
             logger.error(f"No benches to copy.")
+            exit(0)
         return dest_dir_list
 
     def execute_specinvoke(self, src_dir: str, dest_dir: str) -> bool:
@@ -456,9 +539,11 @@ class PackSPEC:
             
         except subprocess.CalledProcessError as e:
             logger.error(f"Command failed with error: {e.stderr}")
+            exit(0)
             return False
         except Exception as e:
             logger.error(f"Failed to execute command: {str(e)}")
+            exit(0)
             return False
 
     def create_test_script(self, label: str, bench_name: str, core_num: int, 
@@ -610,9 +695,17 @@ class PackSPEC:
     def pack_binarys(self, label: str):
         self.copy_binarys(label)
 
-    def pack_benches(self, label: str):
-        buildrun_bench_dir_list = self.copy_benches(label)
+    def pack_benches(self, label: str, with_build=False):
+        buildrun_bench_dir_list = self.copy_benches(label, with_build)
         self.create_run_all_script(label, self.test_core_num, buildrun_bench_dir_list)
 
-        
-
+if __name__ == "__main__":
+    packer = PackSPEC(
+        spec_name=SPECName.spec2006,
+        spec_benches="int",
+        tune_type=TuneType.base,
+        input_type=InputType.ref,
+        iterations=3,
+        test_core_num=4
+    )
+    packer.setup_spec("bosc-kmh-llvm-peak.cfg")

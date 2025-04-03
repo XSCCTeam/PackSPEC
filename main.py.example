@@ -3,14 +3,16 @@ from pack_spec import *
 if __name__ == "__main__":
     # 创建SPEC2006整数基准测试打包实例
     packer = PackSPEC(
-        spec_bench=SPECBench.spec2006int,
-        # 打包SPEC类型，可选包括：
-        #     spec2006: SPEC2006完整基准套件
-        #     spec2006int: SPEC2006整数基准子集
-        #     spec2006fp: SPEC2006浮点基准子集
-        #     spec2017: SPEC2017完整基准套件
-        #     spec2017int: SPEC2017整数基准子集
-        #     spec2017fp: SPEC2017浮点基准子集
+        spec_name=SPECName.spec2006,
+        # 打包SPEC名称，可选包括：
+        #     spec2006: SPEC2006基准套件
+        #     spec2017: SPEC2017基准套件
+        spec_benches="int",
+        # 选择SPEC子集，可选多个子项，使用空格分隔
+        # 还可使用以下子集表示方法：
+        #     "all": SPEC完整基准套件
+        #     "int": SPEC整数基准子集
+        #     "fp": SPEC浮点基准子集
         tune_type=TuneType.base,
         # SPEC基准测试优化级别，可选包括：
         #     base: 基础优化级别
@@ -25,6 +27,9 @@ if __name__ == "__main__":
         test_core_num=4
         # 运行测试绑定的核心编号，在打包二进制文件时无效
     )
+
+    # 使用spec进行编译并设置好运行目录
+    packer.setup_spec("bosc-kmh-llvm-peak.cfg")
 
     # SPEC config 中的 ext
     label = "llvm19-m64"
