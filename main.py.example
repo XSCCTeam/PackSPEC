@@ -28,11 +28,15 @@ if __name__ == "__main__":
         # 运行测试绑定的核心编号，在打包二进制文件时无效
     )
 
+    # SPEC config file name
+    spec_config = "bosc-kmh-llvm-peak.cfg"
+
     # 使用spec进行编译并设置好运行目录
-    packer.setup_spec("bosc-kmh-llvm-peak.cfg")
+    packer.setup_spec(spec_config)
 
     # SPEC config 中的 ext
-    label = "llvm19-m64"
+    # label = "bosc-kmh-llvm-peak"
+    label = packer.analyze_spec_config(spec_config)
 
     # 打包二进制文件
     packer.pack_binarys(label)

@@ -174,6 +174,22 @@ class PackSPEC:
                 logger.debug(f"Selected {spec_bench}.")
         return spec_bench_list
 
+    def analyze_spec_config(self, spec_cfg: str):
+        spec_cfg_path = os.path.join(self.spec_dir, "config", spec_cfg)
+        label = ""
+        try:
+            with open(spec_cfg_path, 'r') as file:
+                for line in file:
+                    if line.strip().startswith('ext') and '=' in line:
+                        parts = line.split('=')
+                        if parts[0].strip().startswith('ext'):
+                            label = line.split("=")[1].strip()
+        except FileNotFoundError:
+            logger.error(f"File {spec_cfg_path} not found.")
+            exit(0)
+        assert label != "", f"Ext not found in file {spec_cfg_path}."
+        return label
+
     def setup_spec(self, spec_cfg: str):
         if self.spec_name == SPECName.spec2006:
             spec_setup_cmd = [
@@ -236,7 +252,6 @@ class PackSPEC:
             logger.error(f"Failed to execute command: {str(e)}")
             exit(0)
             return False
-
 
     def get_bench_path(self, label: str, action_type: ActionType) -> list:
 
@@ -708,4 +723,5 @@ if __name__ == "__main__":
         iterations=3,
         test_core_num=4
     )
-    packer.setup_spec("bosc-kmh-llvm-peak.cfg")
+    print(packer.analyze_spec_config("bosc-kmh-llvm-peak.cfg"))
+    # packer.setup_spec("bosc-kmh-llvm-peak.cfg")
