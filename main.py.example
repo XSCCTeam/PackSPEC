@@ -12,16 +12,18 @@ if __name__ == "__main__":
         # 还可使用以下子集表示方法：
         #     "all": SPEC完整基准套件
         #     "int": SPEC整数基准子集
-        #     "fp": SPEC浮点基准子集
+        #     "fp":  SPEC浮点基准子集
         tune_type=TuneType.base,
         # SPEC基准测试优化级别，可选包括：
         #     base: 基础优化级别
         #     peak: 峰值优化级别
+        #     all:  base + peak
         input_type=InputType.ref,
         # SPEC基准测试输入类型
-        #     test: 测试输入数据集
+        #     test:  测试输入数据集
         #     train: 训练输入数据集
-        #     ref: 参考输入数据集
+        #     ref:   参考输入数据集
+        #     all:   test + train + ref
         iterations=3,
         # 运行测试的次数，主要用于生成运行脚本
         test_core_num=4

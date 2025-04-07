@@ -33,7 +33,7 @@ while getopts "p:c:t:i:s:n:rh" opt; do
         c) SPEC_CFG="$OPTARG" ;;
         t) SPEC_TUNE="$OPTARG" ;;
         i) SPEC_INPUT="$OPTARG" ;;
-        s) SPEC_TEST="$OPTARG" ;;
+        s) SPEC_TEST=$OPTARG ;;
         n) SPEC_RUN_NUM="$OPTARG" ;;
         r) SPEC_REBUILD=true ;;
         h) show_help ;;
