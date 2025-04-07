@@ -64,16 +64,23 @@ SPEC2017_MAP = {
     "654.roms_s": "roms_s"
 }
 
-SPEC2006_PATH = os.path.join(HOME_PATH, "<where you SPEC cpu 2006 installed>")
+SPEC2006_PATH = os.getenv('SPEC2006_DIR')
+if SPEC2006_PATH == None:
+    SPEC2006_PATH = os.path.join(HOME_PATH, "<where you SPEC cpu 2006 installed>")
 SPEC2006_BENCH_PATH = os.path.join(SPEC2006_PATH, "benchspec", "CPU2006")
 
-SPEC2017_PATH = os.path.join(HOME_PATH, "<where you SPEC cpu 2017 installed>")
-
+SPEC2017_PATH = os.getenv('SPEC2017_DIR')
+if SPEC2017_PATH == None:
+    SPEC2017_PATH = os.path.join(HOME_PATH, "<where you SPEC cpu 2017 installed>")
 SPEC2017_BENCH_PATH = os.path.join(SPEC2017_PATH, "benchspec", "CPU")
 
 #########################################
 # DingDing rebot Configs
 #########################################
 # 参考：https://thoughts.aliyun.com/workspaces/66597cc824f406001b6ef466/docs/675b9751a7c8ff00016d92a2
-BOSC_API_KEY = "" # <your bosc apt key>
-BOSC_AT_USER = "" # <your phone number>
+BOSC_API_KEY = os.getenv('BOSC_API_KEY') # <your bosc apt key>
+if BOSC_API_KEY == None:
+    BOSC_API_KEY = ""
+BOSC_AT_USER = os.getenv('BOSC_AT_USER') # <your phone number>
+if BOSC_AT_USER == None:
+    BOSC_AT_USER = ""
