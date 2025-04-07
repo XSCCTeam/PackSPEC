@@ -1,33 +1,53 @@
 from pack_spec import *
 
 if __name__ == "__main__":
+    """
+    SPEC基准测试打包工具主程序
+    
+    示例：打包SPEC2006整数基准测试套件
+    """
+    
     # 创建SPEC2006整数基准测试打包实例
     packer = PackSPEC(
+        # SPEC基准测试版本选择
+        # 可选值：
+        #   SPECName.spec2006: SPEC2006基准套件
+        #   SPECName.spec2017: SPEC2017基准套件
         spec_name=SPECName.spec2006,
-        # 打包SPEC名称，可选包括：
-        #     spec2006: SPEC2006基准套件
-        #     spec2017: SPEC2017基准套件
+        
+        # 选择SPEC基准测试子集
+        # 格式：空格分隔的基准测试名称或子集标识
+        # 可用子集标识：
+        #   "all": 完整基准套件
+        #   "int": 仅整数基准测试
+        #   "fp":  仅浮点基准测试
+        # 示例：
+        #   "int" - 打包所有整数基准测试
+        #   "401 403" - 打包指定基准测试
         spec_benches="int",
-        # 选择SPEC子集，可选多个子项，使用空格分隔
-        # 还可使用以下子集表示方法：
-        #     "all": SPEC完整基准套件
-        #     "int": SPEC整数基准子集
-        #     "fp":  SPEC浮点基准子集
-        tune_type=TuneType.base,
-        # SPEC基准测试优化级别，可选包括：
-        #     base: 基础优化级别
-        #     peak: 峰值优化级别
-        #     all:  base + peak
-        input_type=InputType.ref,
-        # SPEC基准测试输入类型
-        #     test:  测试输入数据集
-        #     train: 训练输入数据集
-        #     ref:   参考输入数据集
-        #     all:   test + train + ref
+        
+        # SPEC基准测试优化级别
+        # 可选值：
+        #   TuneType.base: 基础优化级别
+        #   TuneType.peak: 峰值优化级别
+        #   TuneType.all:  同时包含base和peak
+        tune_type=TuneType.all,
+        
+        # SPEC基准测试输入数据集类型
+        # 可选值：
+        #   InputType.test:  测试输入数据集(最小)
+        #   InputType.train: 训练输入数据集(中等)
+        #   InputType.ref:   参考输入数据集(最大)
+        #   InputType.all:   包含所有输入数据集
+        input_type=InputType.all,
+        
+        # 运行测试的迭代次数
+        # 主要用于生成运行脚本，不影响二进制打包
         iterations=3,
-        # 运行测试的次数，主要用于生成运行脚本
+        
+        # 测试运行绑定的核心编号
+        # 仅在生成运行脚本时生效，不影响二进制打包
         test_core_num=4
-        # 运行测试绑定的核心编号，在打包二进制文件时无效
     )
 
     # SPEC config file name
