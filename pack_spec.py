@@ -570,6 +570,19 @@ class PackSPEC:
             exit(0)
             return False
 
+    def get_ref_time(self, bench_name: str, input_type: InputType):
+        reftime_path = os.path.join(self.spec_bench_path, bench_name, "data", 
+                                    input_type.name, "reftime")
+        try:
+            logger.debug(f"Get reftime {bench_name}.{input_type.name} from {reftime_path}.")
+            with open(reftime_path, 'r') as f:
+                reftime = f.readlines()
+            return reftime[1].strip()
+        except Exception as e:
+            logger.error(f"Failed to get reftime from '{reftime_path}': {str(e)}")
+            exit(0)
+            return False
+
     def create_test_script(self, label: str, bench_name: str, core_num: int, 
                             dest_dir: str, tune_type: TuneType, input_type: InputType, iterations: int = 0):
 
@@ -592,7 +605,7 @@ class PackSPEC:
             "",
             "# 获取脚本所在目录的绝对路径",
             "SCRIPT_DIR=$(pwd)",
-            f"LOG_FILE=test_{input_type.name}.log\"",
+            f"LOG_FILE=\"test_{input_type.name}.log\"",
             f"CORE_NUM={core_num}",
             "",
             "ulimit -s unlimited",
@@ -604,14 +617,19 @@ class PackSPEC:
             ""
         ])
 
+        script_content.extend([
+            f"echo -e '\\nRunning {bench_name}...' | tee -a \"$LOG_FILE\"",
+            f"echo -e 'Reftime: {self.get_ref_time(bench_name, input_type)}' | tee -a \"$LOG_FILE\""
+            ])
+
         for i in range(iterations):
             script_content.extend([
-                f"echo \"Test {bench_name} {i} time:\" | tee -a \"$LOG_FILE\"",
+                f"echo \"Test {bench_name} #{i+1}:\" | tee -a \"$LOG_FILE\"",
                 f"(time -p taskset -c $CORE_NUM bash run_{input_type.name}.sh) 2>&1 | tee -a \"$LOG_FILE\"",
                 f"echo | tee -a \"$LOG_FILE\""
             ])
 
-        if BOSC_API_KEY != "":
+        if BOSC_API_KEY != "" and BOSC_AT_USER != "":
             script_content.extend([
                 f"curl -X POST \"http://172.38.8.102:8848/send-message\" \\",
                 f"     -H \"api-key: {BOSC_API_KEY}\" \\",
@@ -680,6 +698,7 @@ class PackSPEC:
             
             script_content.extend([
                 f"echo -e '\\nRunning {bench_name}...' | tee -a \"$LOG_FILE\"",
+                f"echo -e 'Reftime: {self.get_ref_time(bench_name, input_type)}' | tee -a \"$LOG_FILE\"",
                 f"cd {bench_name}"
             ])
             script_content.extend([
@@ -687,8 +706,10 @@ class PackSPEC:
                 ""
             ])
             for i in range(iterations):
-                script_content.append(
-                    f"(time -p taskset -c $CORE_NUM bash run_{input_type.name}.sh) 2>&1 | tee -a \"$LOG_FILE\"")
+                script_content.extend([
+                    f"echo \"Test {bench_name} #{i+1}:\" | tee -a \"$LOG_FILE\"",
+                    f"(time -p taskset -c $CORE_NUM bash run_{input_type.name}.sh) 2>&1 | tee -a \"$LOG_FILE\""
+                    ])
             script_content.extend([
                 f"echo -e '{bench_name} completed ' | tee -a \"$LOG_FILE\"",
                 "cd \"$SCRIPT_DIR\"",
@@ -707,7 +728,7 @@ class PackSPEC:
                 f"     -H \"Content-Type: application/json\" \\",
                 f"     -d '{{\"content\": \"{label}.{tune_type.name}_{input_type.name} 测试完成喵！\\n【来自李扬的 HUAWEI Pure 70 Pro Max】\", \"at_user_ids\": [\"{BOSC_AT_USER}\"]}}'"
             ])
-        
+
         # 写入脚本文件
         with open(run_all_script, 'w') as f:
             f.write("\n".join(script_content))
@@ -794,9 +815,8 @@ if __name__ == "__main__":
         spec_name=SPECName.spec2006,
         spec_benches="int",
         tune_type=TuneType.base,
-        input_type=InputType.ref,
+        input_type=InputType.test,
         iterations=3,
         test_core_num=4
     )
-    print(packer.analyze_spec_config("bosc-kmh-llvm-peak.cfg"))
-    # packer.run_setup_spec("bosc-kmh-llvm-peak.cfg")
+    packer.get_ref_time("400.perlbench", InputType.test)
