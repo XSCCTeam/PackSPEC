@@ -713,7 +713,7 @@ class PackSPEC:
             f"CORE_NUM={core_num}",
             "",
             "# 运行所有基准测试并记录时间",
-            "echo \"Starting benchmarks run at $(date)\" > \"$LOG_FILE\"",
+            "echo \"Starting benchmarks run at $(date)\" | tee -a \"$LOG_FILE\"",
             "",
             "ulimit -s unlimited",
             "",
@@ -745,7 +745,7 @@ class PackSPEC:
         
         script_content.extend([
             "echo -e '\\nAll benchmarks completed' | tee -a \"$LOG_FILE\"",
-            "echo \"Finished at $(date)\" >> \"$LOG_FILE\""
+            "echo \"Finished at $(date)\" | tee -a \"$LOG_FILE\""
         ])
 
         try:
