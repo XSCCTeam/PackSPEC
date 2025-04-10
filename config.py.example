@@ -21,6 +21,7 @@ logger.add(
     format="{time:YYYY-MM-DD HH:mm:ss} | {level} | {message}",
 )
 PACK_PATH = os.path.join(P_PATH, "packed_files")
+SPEC_LOG_PATH = os.path.join(P_PATH, "spec_logs")
 SCRIPTS_PATH = os.path.join(P_PATH, "scripts")
 
 #########################################

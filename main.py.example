@@ -56,12 +56,18 @@ if __name__ == "__main__":
     # 使用spec进行编译并设置好运行目录
     packer.setup_spec(spec_config)
 
+    # 打包二进制文件、spec cfg文件
+    packer.pack_binarys_cfg(spec_config)
+
+    # 打包完整测试环境、spec cfg文件
+    packer.pack_benches_cfg(spec_config)
+
     # SPEC config 中的 ext
     # label = "bosc-kmh-llvm-peak"
-    label = packer.analyze_spec_config(spec_config)
+    # label = packer.analyze_spec_config(spec_config)
 
     # 打包二进制文件
-    packer.pack_binarys(label)
+    # packer.pack_binarys(label)
 
     # 打包完整测试环境
-    packer.pack_benches(label)
+    # packer.pack_benches(label)

@@ -230,6 +230,7 @@ class PackSPEC:
                 bufsize=1  # 行缓冲
             )
 
+            output_log = []
             # 实时读取输出
             while True:
                 output = process.stdout
@@ -239,6 +240,7 @@ class PackSPEC:
                         break
                     if output:
                         logger.info(output.strip())
+                        output_log.append(output.strip())
             
             # 检查返回码
             return_code = process.wait()
@@ -248,19 +250,33 @@ class PackSPEC:
                     error = error.read()
                     logger.error(f"Command failed with error: {error}")
                     exit(0)
-                    return False
 
             logger.success(f"Successfully setup spec with {tune_type}_{input_type} from config: {spec_cfg}")
-            return True
+            spec_log_file = os.path.join(SPEC_LOG_PATH, f"{spec_cfg.replace('.cfg', '')}.{tune_type.name}_{input_type.name}.log")
+            os.makedirs(SPEC_LOG_PATH, exist_ok=True)
+            with open(spec_log_file, "w") as f:
+                f.write("\n".join(output_log))
+            return spec_log_file
             
         except subprocess.CalledProcessError as e:
             logger.error(f"Command failed with error: {e.stderr}")
             exit(0)
-            return False
         except Exception as e:
             logger.error(f"Failed to execute command: {str(e)}")
             exit(0)
-            return False
+    
+    def get_spec_log(self, spec_log_file):
+        marked_line = f"The log for this run is in {self.spec_dir}"
+        try:
+            with open(spec_log_file, "r") as f:
+                spec_log = f.readlines()
+            for spec_log_line in spec_log:
+                if spec_log_line.startswith(marked_line):
+                    logger.debug(f"Find spec log from '{spec_log_file}'")
+                    return spec_log_line.replace("The log for this run is in ", "").strip()
+        except Exception as e:
+            logger.debug(f"Failed find spec log from '{spec_log_file}': {str(e)}")
+        
 
     def get_bench_path(self, label: str, action_type: ActionType, tune_type: TuneType, input_type: InputType) -> list:
 
@@ -429,7 +445,10 @@ class PackSPEC:
 
         os.makedirs(PACK_PATH, exist_ok=True)
         if dest_bench_dir == "":
-            dest_bench_dir = os.path.join(PACK_PATH, f"buildrun_{label}.{tune_type.name}_{input_type.name}")
+            if with_build:
+                dest_bench_dir = os.path.join(PACK_PATH, f"buildrun_{label}.{tune_type.name}_{input_type.name}")
+            else:
+                dest_bench_dir = os.path.join(PACK_PATH, f"run_{label}.{tune_type.name}_{input_type.name}")
             if os.path.exists(dest_bench_dir):
                 logger.info(f"Directory {dest_bench_dir} already exists.")
                 logger.debug(f"Do you want to overwrite it? (y/n): ")
@@ -788,7 +807,7 @@ class PackSPEC:
         logger.success(f"Successfully created run_all script at {run_all_script}")
 
 
-    def setup_spec(self, spec_cfg:str):
+    def setup_spec(self, spec_cfg: str):
         if self.tune_type == TuneType.all:
             if self.input_type == InputType.all:
                 self.run_setup_spec(spec_cfg, TuneType.base, InputType.test)
@@ -808,57 +827,100 @@ class PackSPEC:
             else:
                 self.run_setup_spec(spec_cfg, self.tune_type, self.input_type)
 
-    def pack_binarys(self, label: str):
+    def pack_binarys(self, label: str) -> list:
+        dest_binarys_dir_list = []
         if self.tune_type == TuneType.all:
             if self.input_type == InputType.all:
-                self.copy_binarys(label, TuneType.base, InputType.test)
-                self.copy_binarys(label, TuneType.base, InputType.train)
-                self.copy_binarys(label, TuneType.base, InputType.ref)
-                self.copy_binarys(label, TuneType.peak, InputType.test)
-                self.copy_binarys(label, TuneType.peak, InputType.train)
-                self.copy_binarys(label, TuneType.peak, InputType.ref)
+                dest_binarys_dir_list.append(
+                    self.copy_binarys(label, TuneType.base, InputType.test))
+                dest_binarys_dir_list.append(
+                    self.copy_binarys(label, TuneType.base, InputType.train))
+                dest_binarys_dir_list.append(
+                    self.copy_binarys(label, TuneType.base, InputType.ref))
+                dest_binarys_dir_list.append(
+                    self.copy_binarys(label, TuneType.peak, InputType.test))
+                dest_binarys_dir_list.append(
+                    self.copy_binarys(label, TuneType.peak, InputType.train))
+                dest_binarys_dir_list.append(
+                    self.copy_binarys(label, TuneType.peak, InputType.ref))
             else:
-                self.copy_binarys(label, TuneType.base, self.input_type)
-                self.copy_binarys(label, TuneType.peak, self.input_type)
+                dest_binarys_dir_list.append(
+                    self.copy_binarys(label, TuneType.base, self.input_type))
+                dest_binarys_dir_list.append(
+                    self.copy_binarys(label, TuneType.peak, self.input_type))
         else:
             if self.input_type == InputType.all:
-                self.copy_binarys(label, self.tune_type, InputType.test)
-                self.copy_binarys(label, self.tune_type, InputType.train)
-                self.copy_binarys(label, self.tune_type, InputType.ref)
+                dest_binarys_dir_list.append(
+                    self.copy_binarys(label, self.tune_type, InputType.test))
+                dest_binarys_dir_list.append(
+                    self.copy_binarys(label, self.tune_type, InputType.train))
+                dest_binarys_dir_list.append(
+                    self.copy_binarys(label, self.tune_type, InputType.ref))
             else:
-                self.copy_binarys(label, self.tune_type, self.input_type)
+                dest_binarys_dir_list.append(
+                    self.copy_binarys(label, self.tune_type, self.input_type))
+        return dest_binarys_dir_list
+    
+    def pack_binarys_cfg(self, spec_cfg: str):
+        label = self.analyze_spec_config(spec_cfg)
+        dest_binarys_dir_list = self.pack_binarys(label)
+        spec_cfg_path = os.path.join(self.spec_dir, "config", spec_cfg)
+        for dest_binarys_dir in dest_binarys_dir_list:
+            shutil.copy2(spec_cfg_path, dest_binarys_dir)
 
-    def pack_benches(self, label: str, with_build=False):
+
+    def pack_benches(self, label: str, with_build=False) -> list:
+        dest_benches_dir_list = []
         if self.tune_type == TuneType.all:
             if self.input_type == InputType.all:
                 buildrun_bench_dir_list = self.copy_benches(label, TuneType.base, InputType.test, with_build)
                 self.create_run_all_script(label, self.test_core_num, buildrun_bench_dir_list, TuneType.base, InputType.test)
+                dest_benches_dir_list.append(os.path.dirname(buildrun_bench_dir_list[0]))
                 buildrun_bench_dir_list = self.copy_benches(label, TuneType.base, InputType.train, with_build)
                 self.create_run_all_script(label, self.test_core_num, buildrun_bench_dir_list, TuneType.base, InputType.train)
+                dest_benches_dir_list.append(os.path.dirname(buildrun_bench_dir_list[0]))
                 buildrun_bench_dir_list = self.copy_benches(label, TuneType.base, InputType.ref, with_build)
                 self.create_run_all_script(label, self.test_core_num, buildrun_bench_dir_list, TuneType.base, InputType.ref)
+                dest_benches_dir_list.append(os.path.dirname(buildrun_bench_dir_list[0]))
                 buildrun_bench_dir_list = self.copy_benches(label, TuneType.peak, InputType.test, with_build)
                 self.create_run_all_script(label, self.test_core_num, buildrun_bench_dir_list, TuneType.peak, InputType.test)
+                dest_benches_dir_list.append(os.path.dirname(buildrun_bench_dir_list[0]))
                 buildrun_bench_dir_list = self.copy_benches(label, TuneType.peak, InputType.train, with_build)
                 self.create_run_all_script(label, self.test_core_num, buildrun_bench_dir_list, TuneType.peak, InputType.train)
+                dest_benches_dir_list.append(os.path.dirname(buildrun_bench_dir_list[0]))
                 buildrun_bench_dir_list = self.copy_benches(label, TuneType.peak, InputType.ref, with_build)
                 self.create_run_all_script(label, self.test_core_num, buildrun_bench_dir_list, TuneType.peak, InputType.ref)
+                dest_benches_dir_list.append(os.path.dirname(buildrun_bench_dir_list[0]))
             else:
                 buildrun_bench_dir_list = self.copy_benches(label, TuneType.base, self.input_type, with_build)
                 self.create_run_all_script(label, self.test_core_num, buildrun_bench_dir_list, TuneType.base, self.input_type)
+                dest_benches_dir_list.append(os.path.dirname(buildrun_bench_dir_list[0]))
                 buildrun_bench_dir_list = self.copy_benches(label, TuneType.peak, self.input_type, with_build)
                 self.create_run_all_script(label, self.test_core_num, buildrun_bench_dir_list, TuneType.peak, self.input_type)
+                dest_benches_dir_list.append(os.path.dirname(buildrun_bench_dir_list[0]))
         else:
             if self.input_type == InputType.all:
                 buildrun_bench_dir_list = self.copy_benches(label, self.tune_type, InputType.test, with_build)
                 self.create_run_all_script(label, self.test_core_num, buildrun_bench_dir_list, self.tune_type, InputType.test)
+                dest_benches_dir_list.append(os.path.dirname(buildrun_bench_dir_list[0]))
                 buildrun_bench_dir_list = self.copy_benches(label, self.tune_type, InputType.train, with_build)
                 self.create_run_all_script(label, self.test_core_num, buildrun_bench_dir_list, self.tune_type, InputType.train)
+                dest_benches_dir_list.append(os.path.dirname(buildrun_bench_dir_list[0]))
                 buildrun_bench_dir_list = self.copy_benches(label, self.tune_type, InputType.ref, with_build)
                 self.create_run_all_script(label, self.test_core_num, buildrun_bench_dir_list, self.tune_type, InputType.ref)
+                dest_benches_dir_list.append(os.path.dirname(buildrun_bench_dir_list[0]))
             else:
                 buildrun_bench_dir_list = self.copy_benches(label, self.tune_type, self.input_type, with_build)
                 self.create_run_all_script(label, self.test_core_num, buildrun_bench_dir_list, self.tune_type, self.input_type)
+                dest_benches_dir_list.append(os.path.dirname(buildrun_bench_dir_list[0]))
+        return dest_benches_dir_list
+
+    def pack_benches_cfg(self, spec_cfg: str, with_build=False):
+        label = self.analyze_spec_config(spec_cfg)
+        buildrun_bench_dir_list = self.pack_benches(label, with_build)
+        spec_cfg_path = os.path.join(self.spec_dir, "config", spec_cfg)
+        for buildrun_bench_dir in buildrun_bench_dir_list:
+            shutil.copy2(spec_cfg_path, buildrun_bench_dir)
 
 if __name__ == "__main__":
     packer = PackSPEC(
@@ -869,4 +931,5 @@ if __name__ == "__main__":
         iterations=3,
         test_core_num=4
     )
-    packer.get_ref_time("400.perlbench", InputType.test)
+    # packer.get_ref_time("400.perlbench", InputType.test)
+    packer.get_spec_log("/home/wll/PackSPEC/spec_logs/x86_llvm19_novec_wll.TuneType.base_InputType.ref.log")
