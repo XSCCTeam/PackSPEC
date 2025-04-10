@@ -639,7 +639,7 @@ class PackSPEC:
             logger.error(f"Failed to cal_score.py to {dest_dir}: {str(e)}")
             exit(0)
 
-        if BOSC_API_KEY != "" and BOSC_AT_USER != "":
+        if BOSC_API_KEY != None and BOSC_AT_USER != None:
             script_content.extend([
                 f"curl -X POST \"http://172.38.8.102:8848/send-message\" \\",
                 f"     -H \"api-key: {BOSC_API_KEY}\" \\",
@@ -755,7 +755,7 @@ class PackSPEC:
             logger.error(f"Failed to cal_score.py to {parent_dir}: {str(e)}")
             exit(0)
 
-        if BOSC_API_KEY != "" and BOSC_AT_USER != "":
+        if BOSC_API_KEY != None and BOSC_AT_USER != None:
             script_content.extend([
                 f"curl -X POST \"http://172.38.8.102:8848/send-message\" \\",
                 f"     -H \"api-key: {BOSC_API_KEY}\" \\",
