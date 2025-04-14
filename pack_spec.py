@@ -252,7 +252,7 @@ class PackSPEC:
                     exit(0)
 
             logger.success(f"Successfully setup spec with {tune_type}_{input_type} from config: {spec_cfg}")
-            spec_log_file = os.path.join(SPEC_LOG_PATH, f"{spec_cfg.replace('.cfg', '')}.{tune_type.name}_{input_type.name}.log")
+            spec_log_file = os.path.join(SPEC_LOG_PATH, f"{spec_cfg.replace('.cfg', '')}.{tune_type.name}_{input_type.name}.setuplog")
             os.makedirs(SPEC_LOG_PATH, exist_ok=True)
             with open(spec_log_file, "w") as f:
                 f.write("\n".join(output_log))
@@ -276,6 +276,7 @@ class PackSPEC:
                     return spec_log_line.replace("The log for this run is in ", "").strip()
         except Exception as e:
             logger.debug(f"Failed find spec log from '{spec_log_file}': {str(e)}")
+            return ""
         
 
     def get_bench_path(self, label: str, action_type: ActionType, tune_type: TuneType, input_type: InputType) -> list:
@@ -866,7 +867,31 @@ class PackSPEC:
         dest_binarys_dir_list = self.pack_binarys(label)
         spec_cfg_path = os.path.join(self.spec_dir, "config", spec_cfg)
         for dest_binarys_dir in dest_binarys_dir_list:
-            shutil.copy2(spec_cfg_path, dest_binarys_dir)
+            try:
+                logger.info(f"Copy spec config from {spec_cfg_path} to {dest_binarys_dir}.")
+                shutil.copy2(spec_cfg_path, dest_binarys_dir)
+            except Exception as e:
+                logger.error(f"Failed to copy spec config from {spec_cfg_path} to {dest_binarys_dir}: {str(e)}")
+                exit(0)
+            spec_cfg_name = spec_cfg.replace(".cfg", "")
+            spec_log_name = f"{spec_cfg_name}.{self.tune_type.name}_{self.input_type.name}.setuplog"
+            spec_log_path = os.path.join(SPEC_LOG_PATH, spec_log_name)
+            try:
+                logger.info(f"Copy spec_setup log from {spec_log_path} to {dest_binarys_dir}.")
+                shutil.copy2(spec_log_path, dest_binarys_dir)
+            except Exception as e:
+                logger.debug(f"Failed to copy spec_setup log from {spec_log_path} to {dest_binarys_dir}: {str(e)}")
+                exit(0)
+            spec_log = self.get_spec_log(spec_log_path)
+            if spec_log != "":
+                try:
+                    logger.info(f"Copy spec log from {spec_log} to {dest_binarys_dir}.")
+                    shutil.copy2(spec_log, dest_binarys_dir)
+                except Exception as e:
+                    logger.debug(f"Failed to copy spec log from {spec_log} to {dest_binarys_dir}: {str(e)}")
+                    exit(0)
+            else:
+                logger.debug(f"Not find spec log from {spec_log}.")
 
 
     def pack_benches(self, label: str, with_build=False) -> list:
@@ -920,7 +945,31 @@ class PackSPEC:
         buildrun_bench_dir_list = self.pack_benches(label, with_build)
         spec_cfg_path = os.path.join(self.spec_dir, "config", spec_cfg)
         for buildrun_bench_dir in buildrun_bench_dir_list:
-            shutil.copy2(spec_cfg_path, buildrun_bench_dir)
+            try:
+                logger.info(f"Copy spec config from {spec_cfg_path} to {buildrun_bench_dir}.")
+                shutil.copy2(spec_cfg_path, buildrun_bench_dir)
+            except Exception as e:
+                logger.error(f"Failed to copy spec config from {spec_cfg_path} to {buildrun_bench_dir}: {str(e)}")
+                exit(0)
+            spec_cfg_name = spec_cfg.replace(".cfg", "")
+            spec_log_name = f"{spec_cfg_name}.{self.tune_type.name}_{self.input_type.name}.setuplog"
+            spec_log_path = os.path.join(SPEC_LOG_PATH, spec_log_name)
+            try:
+                logger.info(f"Copy spec_setup log from {spec_log_path} to {buildrun_bench_dir}.")
+                shutil.copy2(spec_log_path, buildrun_bench_dir)
+            except Exception as e:
+                logger.debug(f"Failed to copy spec_setup log from {spec_log_path} to {buildrun_bench_dir}: {str(e)}")
+                exit(0)
+            spec_log = self.get_spec_log(spec_log_path)
+            if spec_log != "":
+                try:
+                    logger.info(f"Copy spec log from {spec_log} to {buildrun_bench_dir}.")
+                    shutil.copy2(spec_log, buildrun_bench_dir)
+                except Exception as e:
+                    logger.debug(f"Failed to copy spec log from {spec_log} to {buildrun_bench_dir}: {str(e)}")
+                    exit(0)
+            else:
+                logger.debug(f"Not find spec log from {spec_log}.")
 
 if __name__ == "__main__":
     packer = PackSPEC(
@@ -932,4 +981,4 @@ if __name__ == "__main__":
         test_core_num=4
     )
     # packer.get_ref_time("400.perlbench", InputType.test)
-    packer.get_spec_log("/home/wll/PackSPEC/spec_logs/x86_llvm19_novec_wll.TuneType.base_InputType.ref.log")
+    packer.get_spec_log("/home/wll/PackSPEC/spec_logs/x86_llvm19_novec_wll.base_ref")
