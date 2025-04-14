@@ -689,7 +689,7 @@ class PackSPEC:
             f.write("\n".join(script_content))
         
         # 添加执行权限
-        os.chmod(run_test_script, 0o755)
+        os.chmod(run_test_script, 0o700)
         logger.info(f"Created test_{input_type.name}.sh script at {run_test_script}")
         
 
@@ -804,7 +804,7 @@ class PackSPEC:
             f.write("\n".join(script_content))
         
         # 添加执行权限
-        os.chmod(run_all_script, 0o755)
+        os.chmod(run_all_script, 0o700)
         logger.success(f"Successfully created run_all script at {run_all_script}")
 
 
