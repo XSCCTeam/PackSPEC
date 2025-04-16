@@ -679,9 +679,10 @@ class PackSPEC:
                 send_message_cmds.split("\n")
             )
         else:
-            script_content.append(
+            script_content.extend([
+                f"chmod +x cal_score.py",
                 f"./cal_score.py $LOG_FILE"
-            )
+            ])
 
 
         # 写入脚本文件
@@ -795,9 +796,10 @@ class PackSPEC:
                 send_message_cmds.split("\n")
             )
         else:
-            script_content.append(
+            script_content.extend([
+                f"chmod +x cal_score.py",
                 f"./cal_score.py $LOG_FILE"
-            )
+            ])
 
         # 写入脚本文件
         with open(run_all_script, 'w') as f:

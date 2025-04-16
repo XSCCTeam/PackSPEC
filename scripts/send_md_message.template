@@ -1,3 +1,4 @@
+chmod +x cal_score.py
 SCORE=$(./cal_score.py $LOG_FILE)
 # echo $SCORE
 
