@@ -2,6 +2,7 @@ from config import *
 from enum import Enum
 import shutil
 import os
+import re
 import subprocess
 
 class ActionType(Enum):
@@ -319,10 +320,12 @@ class PackSPEC:
                 # 根据动作类型构建完整路径（build或run目录）
                 bench_run_dir = os.path.join(self.spec_bench_path, bench_dir, self.spec_build_dir)
                 run_dir_path_list = []
+
+                pattern = re.compile(rf"^{re.escape(bench_dir_perfix)}\.\d{{4}}$")
                 
                 # 查找符合前缀的目录
                 for run_dir in os.listdir(bench_run_dir):
-                    if run_dir.startswith(bench_dir_perfix):
+                    if pattern.match(run_dir):
                         run_dir_path_list.append(os.path.join(bench_run_dir, run_dir))
                         
                 # 处理查找结果
@@ -332,6 +335,8 @@ class PackSPEC:
                 elif len(run_dir_path_list) > 1:
                     # 找到多个符合条件的目录，选择编号最大的那个（最新的）
                     logger.warning(f"Bench {os.path.basename(bench_dir)} found in more than one {bench_dir_perfix}.")
+                    for run_dir_path in run_dir_path_list:
+                        logger.debug(f"Found {run_dir_path}")
                     max = 0
                     selected = run_dir_path_list[0]
                     for run_dir_perfix in run_dir_path_list:
