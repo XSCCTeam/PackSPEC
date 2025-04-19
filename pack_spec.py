@@ -888,7 +888,6 @@ class PackSPEC:
                 shutil.copy2(spec_log_path, dest_binarys_dir)
             except Exception as e:
                 logger.debug(f"Failed to copy spec_setup log from {spec_log_path} to {dest_binarys_dir}: {str(e)}")
-                exit(0)
             spec_log = self.get_spec_log(spec_log_path)
             if spec_log != "":
                 try:
@@ -896,7 +895,6 @@ class PackSPEC:
                     shutil.copy2(spec_log, dest_binarys_dir)
                 except Exception as e:
                     logger.debug(f"Failed to copy spec log from {spec_log} to {dest_binarys_dir}: {str(e)}")
-                    exit(0)
             else:
                 logger.debug(f"Not find spec log from {spec_log}.")
 
@@ -966,7 +964,6 @@ class PackSPEC:
                 shutil.copy2(spec_log_path, buildrun_bench_dir)
             except Exception as e:
                 logger.debug(f"Failed to copy spec_setup log from {spec_log_path} to {buildrun_bench_dir}: {str(e)}")
-                exit(0)
             spec_log = self.get_spec_log(spec_log_path)
             if spec_log != "":
                 try:
@@ -974,7 +971,6 @@ class PackSPEC:
                     shutil.copy2(spec_log, buildrun_bench_dir)
                 except Exception as e:
                     logger.debug(f"Failed to copy spec log from {spec_log} to {buildrun_bench_dir}: {str(e)}")
-                    exit(0)
             else:
                 logger.debug(f"Not find spec log from {spec_log}.")
 
