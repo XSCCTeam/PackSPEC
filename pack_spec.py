@@ -110,7 +110,7 @@ class PackSPEC:
                  input_type: InputType,
                  iterations: int = 3,
                  rebuild: bool = True,
-                 test_core_num: int = 4,
+                 test_core_num: int = -1,
                  test_clock_rate: float = 1):
         self.spec_name = spec_name
         self.tune_type = tune_type
@@ -631,12 +631,17 @@ class PackSPEC:
             "",
             "# 获取脚本所在目录的绝对路径",
             "SCRIPT_DIR=$(pwd)",
-            f"LOG_FILE=\"test_{input_type.name}.log\"",
-            f"CORE_NUM={core_num}",
+            f"LOG_FILE=\"test_{input_type.name}.log\""
+        ]
+        if core_num != -1:
+            script_content.append(
+                f"CORE_NUM={core_num}"
+            )
+        script_content.extend([
             "",
             "ulimit -s unlimited",
             "",
-        ]
+        ])
 
         script_content.extend([
             f"chmod +x ./{self.spec_bench_map[bench_name]}_{tune_type.name}.{label}",
@@ -647,12 +652,18 @@ class PackSPEC:
             f"echo -e '\\nRunning {bench_name}...' | tee -a \"$LOG_FILE\"",
             f"echo -e 'Reftime: {self.get_ref_time(bench_name, input_type)}' | tee -a \"$LOG_FILE\""
             ])
-
-        for i in range(iterations):
-            script_content.extend([
-                f"echo \"Test {bench_name} #{i+1}:\" | tee -a \"$LOG_FILE\"",
-                f"(time -p taskset -c $CORE_NUM bash run_{input_type.name}.sh) 2>&1 | tee -a \"$LOG_FILE\""
-            ])
+        if core_num != -1:
+            for i in range(iterations):
+                script_content.extend([
+                    f"echo \"Test {bench_name} #{i+1}:\" | tee -a \"$LOG_FILE\"",
+                    f"(time -p taskset -c $CORE_NUM bash run_{input_type.name}.sh) 2>&1 | tee -a \"$LOG_FILE\""
+                ])
+        else:
+            for i in range(iterations):
+                script_content.extend([
+                    f"echo \"Test {bench_name} #{i+1}:\" | tee -a \"$LOG_FILE\"",
+                    f"(time -p bash run_{input_type.name}.sh) 2>&1 | tee -a \"$LOG_FILE\""
+                ])
         script_content.extend([
             f"echo -e '{bench_name} completed ' | tee -a \"$LOG_FILE\"",
             ""
@@ -735,8 +746,13 @@ class PackSPEC:
             "",
             "# 获取脚本所在目录的绝对路径",
             "SCRIPT_DIR=$(pwd)",
-            "LOG_FILE=\"$SCRIPT_DIR/run_all.log\"",
-            f"CORE_NUM={core_num}",
+            "LOG_FILE=\"$SCRIPT_DIR/run_all.log\""
+        ]
+        if core_num!= -1:
+            script_content.append(
+                f"CORE_NUM={core_num}"
+            )
+        script_content.extend([
             "",
             "# 运行所有基准测试并记录时间",
             "echo \"Starting benchmarks run at $(date)\" | tee -a \"$LOG_FILE\"",
@@ -744,7 +760,7 @@ class PackSPEC:
             "ulimit -s unlimited",
             "",
             "# 运行每个基准测试",
-        ]
+        ])
         
         for bench_dir in buildrun_bench_dir_list:
             bench_name = os.path.basename(bench_dir)
@@ -758,11 +774,18 @@ class PackSPEC:
                 f"chmod +x ./{self.spec_bench_map[bench_name]}_{tune_type.name}.{label}",
                 ""
             ])
-            for i in range(iterations):
-                script_content.extend([
-                    f"echo \"Test {bench_name} #{i+1}:\" | tee -a \"$LOG_FILE\"",
-                    f"(time -p taskset -c $CORE_NUM bash run_{input_type.name}.sh) 2>&1 | tee -a \"$LOG_FILE\""
-                    ])
+            if core_num!= -1:
+                for i in range(iterations):
+                    script_content.extend([
+                        f"echo \"Test {bench_name} #{i+1}:\" | tee -a \"$LOG_FILE\"",
+                        f"(time -p taskset -c $CORE_NUM bash run_{input_type.name}.sh) 2>&1 | tee -a \"$LOG_FILE\""
+                        ])
+            else:
+                for i in range(iterations):
+                    script_content.extend([
+                        f"echo \"Test {bench_name} #{i+1}:\" | tee -a \"$LOG_FILE\"",
+                        f"(time -p bash run_{input_type.name}.sh) 2>&1 | tee -a \"$LOG_FILE\""
+                        ])
             script_content.extend([
                 f"echo -e '{bench_name} completed ' | tee -a \"$LOG_FILE\"",
                 "cd \"$SCRIPT_DIR\"",
