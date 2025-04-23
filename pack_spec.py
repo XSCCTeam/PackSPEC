@@ -1,3 +1,4 @@
+from turtle import speed
 from config import *
 from enum import Enum
 import shutil
@@ -66,6 +67,9 @@ class SPECSubBench(Enum):
     int = 2
     fp = 3
 
+class SPECMode(Enum):
+    speed = 1
+    rate = 2
 
 def get_bench_dir(bench_name: str, bench_dirs: list) -> str:
     for bench_dir in bench_dirs:
