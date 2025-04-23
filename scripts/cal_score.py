@@ -144,28 +144,27 @@ def get_max_benchname_len(benchmarks):
             max_benchname_len = bench_name_len
     return max_benchname_len
 
-def format_lenth(input: str, length: int):
-    return input.ljust(length)
-
-def main(log_path, output_file):
+def main(log_path, output_file, clock_rate):
     benchmarks = parse_benchmark_logs(log_path)
     run_time = get_run_time(benchmarks)
     max_benchname_len = get_max_benchname_len(benchmarks)
 
-    sep_len = max_benchname_len + run_time * 9 + 27
+    sep_len = max_benchname_len + run_time * 9 + 36
 
     csv_buffer = ""
 
     # First Line
     print("=" * sep_len)
-    print("{} ".format(format_lenth("Bench", max_benchname_len)), end="")
+    print("{:^{}}".format("Use clock rate: " + clock_rate + " GHz", sep_len))
+    print("-" * sep_len)
+    print("{:<{}} ".format("Bench", max_benchname_len), end="")
     csv_buffer = csv_buffer + "Bench,"
     print("{:>8} ".format("RefTime"), end="")
     csv_buffer = csv_buffer + "RefTime,"
     for i in range(run_time):
         print("{:>8} ".format(f"#{i+1}Time"), end="")
         csv_buffer = csv_buffer + f"#{i+1}Time,"
-    print("{:>8} {:>8}".format("Median", "Score"))
+    print("{:>8} {:>8} {:>8}".format("Median", "Score", "S/GHz"))
     csv_buffer = csv_buffer + "Median,Score\n"
     print("-" * sep_len)
     
@@ -174,7 +173,7 @@ def main(log_path, output_file):
     scores = []
     for benchmark_block in benchmarks:
         bench_name = get_bench_name(benchmark_block)
-        print("{} ".format(format_lenth(bench_name, max_benchname_len)), end="")
+        print("{:<{}} ".format(bench_name, max_benchname_len), end="")
         csv_buffer = csv_buffer + f"{bench_name},"
         ref_time = get_ref_time(benchmark_block)
         print("{:>8.2f} ".format(ref_time), end="")
@@ -187,13 +186,14 @@ def main(log_path, output_file):
             csv_buffer = csv_buffer + f"{real_time},"
         median_time = median(real_times)
         score = ref_time/median_time
-        print("{:>8.2f} {:>8.2f}".format(median_time, score))
+        score_ghz = score/float(clock_rate)
+        print("{:>8.2f} {:>8.2f} {:>8.2f}".format(median_time, score, score_ghz))
         csv_buffer = csv_buffer + f"{median_time},{score}\n"
         scores.append(score)
     
     # End Line
     print("-" * sep_len)
-    print("{} ".format(format_lenth("GEOMEAN", max_benchname_len)), end="")
+    print("{:<{}} ".format("GEOMEAN", max_benchname_len), end="")
     csv_buffer = csv_buffer + f"GEOMEAN,"
     print("{:>8} ".format("-"), end="")
     csv_buffer = csv_buffer + f"-,"
@@ -201,7 +201,8 @@ def main(log_path, output_file):
         print("{:>8} ".format(f"-"), end="")
         csv_buffer = csv_buffer + f"-,"
     geomean_score = geomean(scores)
-    print("{:>8} {:>8.2f}".format("-", geomean_score))
+    geomean_score_ghz = geomean_score/float(clock_rate)
+    print("{:>8} {:>8.2f} {:>8.2f}".format("-", geomean_score, geomean_score_ghz))
     csv_buffer = csv_buffer + f"-,{geomean_score}\n"
     print("=" * sep_len)
 
@@ -212,7 +213,8 @@ def main(log_path, output_file):
 if __name__ == "__main__":
     import sys
     if len(sys.argv) < 2:
-        print("Usage: cal_score.py <log_file_path> [output_file]")
+        print("Usage: cal_score.py <log_file_path> [clock_rate] [output_file] ")
         sys.exit(1)
-    output_file = "score.csv" if len(sys.argv) < 3 else sys.argv[2]
-    main(sys.argv[1], output_file)
+    clock_rate = "1" if len(sys.argv) < 3 else sys.argv[2]
+    output_file = "score.csv" if len(sys.argv) < 4 else sys.argv[3]
+    main(sys.argv[1], output_file, clock_rate)

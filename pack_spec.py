@@ -109,14 +109,16 @@ class PackSPEC:
                  tune_type: TuneType, 
                  input_type: InputType,
                  iterations: int = 3,
+                 rebuild: bool = True,
                  test_core_num: int = 4,
-                 rebuild: bool = True):
+                 test_clock_rate: float = 1):
         self.spec_name = spec_name
         self.tune_type = tune_type
         self.input_type = input_type
         self.iterations = iterations
         self.test_core_num = test_core_num
         self.rebuild = rebuild
+        self.test_clock_rate = test_clock_rate
         if self.spec_name == SPECName.spec2006:
             self.spec_dir = SPEC2006_PATH
             self.spec_bench_path = SPEC2006_BENCH_PATH
@@ -685,7 +687,7 @@ class PackSPEC:
         else:
             script_content.extend([
                 f"chmod +x cal_score.py",
-                f"./cal_score.py $LOG_FILE"
+                f"./cal_score.py $LOG_FILE {self.test_clock_rate}"
             ])
 
 
@@ -801,7 +803,7 @@ class PackSPEC:
         else:
             script_content.extend([
                 f"chmod +x cal_score.py",
-                f"./cal_score.py $LOG_FILE"
+                f"./cal_score.py $LOG_FILE  {self.test_clock_rate}"
             ])
 
         # 写入脚本文件

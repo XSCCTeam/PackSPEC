@@ -47,7 +47,11 @@ if __name__ == "__main__":
         
         # 测试运行绑定的核心编号
         # 仅在生成运行脚本时生效，不影响二进制打包
-        test_core_num=4
+        test_core_num=4,
+
+        # 测试运行的 CPU 主频，用于算分，单位 GHz
+        # 仅在生成运行脚本时生效，不影响二进制打包
+        test_clock_rate=1
     )
 
     # SPEC config file name
