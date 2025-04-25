@@ -1,4 +1,3 @@
-from turtle import speed
 from config import *
 from enum import Enum
 import shutil
