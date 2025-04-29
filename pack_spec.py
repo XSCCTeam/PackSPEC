@@ -632,6 +632,9 @@ class PackSPEC:
             "fi",
             "set -e",
             "",
+            "# 生成profile文件避免覆盖",
+            f"export LLVM_PROFILE_FILE=\"profiles/{bench_name}-%m-%p.profraw\"",
+            "",
             "# 获取脚本所在目录的绝对路径",
             "SCRIPT_DIR=$(pwd)",
             f"LOG_FILE=\"test_{input_type.name}.log\""
@@ -747,6 +750,7 @@ class PackSPEC:
             "fi",
             "set -e",
             "",
+            "",
             "# 获取脚本所在目录的绝对路径",
             "SCRIPT_DIR=$(pwd)",
             "LOG_FILE=\"$SCRIPT_DIR/run_all.log\""
@@ -774,6 +778,8 @@ class PackSPEC:
                 f"cd {bench_name}"
             ])
             script_content.extend([
+                "# 生成profile文件避免覆盖",
+                f"export LLVM_PROFILE_FILE=\"profiles/{bench_name}-%m-%p.profraw\"",
                 f"chmod +x ./{self.spec_bench_map[bench_name]}_{tune_type.name}.{label}",
                 ""
             ])
