@@ -1,5 +1,5 @@
 chmod +x cal_score.py
-SCORE=$(./cal_score.py $LOG_FILE)
+SCORE=$(./cal_score.py $LOG_FILE {test_clock_rate})
 # echo $SCORE
 
 send_md_message() {

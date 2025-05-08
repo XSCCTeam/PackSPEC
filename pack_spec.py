@@ -695,6 +695,7 @@ class PackSPEC:
             assert send_message_cmds != "", f"Send Message CMDs not found in file send_md_message.template."
             title_message = f"{bench_name}.{label} 测试结果喵："
             # send_message_cmds.format(BOSC_API_KEY, title_message, BOSC_AT_USER)
+            send_message_cmds = send_message_cmds.replace("{test_clock_rate}", self.test_clock_rate)
             send_message_cmds = send_message_cmds.replace("{BOSC_API_KEY}", BOSC_API_KEY)
             send_message_cmds = send_message_cmds.replace("{title_message}", title_message)
             send_message_cmds = send_message_cmds.replace("{BOSC_AT_USER}", BOSC_AT_USER)
@@ -826,6 +827,7 @@ class PackSPEC:
             assert send_message_cmds != "", f"Send Message CMDs not found in file send_md_message.template."
             title_message = f"{label}.{tune_type.name}_{input_type.name} 测试结果喵："
             # send_message_cmds.format(BOSC_API_KEY, title_message, BOSC_AT_USER)
+            send_message_cmds = send_message_cmds.replace("{test_clock_rate}", self.test_clock_rate)
             send_message_cmds = send_message_cmds.replace("{BOSC_API_KEY}", BOSC_API_KEY)
             send_message_cmds = send_message_cmds.replace("{title_message}", title_message)
             send_message_cmds = send_message_cmds.replace("{BOSC_AT_USER}", BOSC_AT_USER)
@@ -835,7 +837,7 @@ class PackSPEC:
         else:
             script_content.extend([
                 f"chmod +x cal_score.py",
-                f"./cal_score.py $LOG_FILE  {self.test_clock_rate}"
+                f"./cal_score.py $LOG_FILE {self.test_clock_rate}"
             ])
 
         # 写入脚本文件
