@@ -417,7 +417,10 @@ class PackSPEC:
 
         os.makedirs(PACK_PATH, exist_ok=True)
         if dest_binary_dir == "":
-            dest_binary_dir = os.path.join(PACK_PATH, f"bin_{label}.{tune_type.name}_{input_type.name}")
+            if self.profile_gen:
+                dest_binary_dir = os.path.join(PACK_PATH, f"bin_{label}.{tune_type.name}_{input_type.name}_profilegen")
+            else:
+                dest_binary_dir = os.path.join(PACK_PATH, f"bin_{label}.{tune_type.name}_{input_type.name}")
             if os.path.exists(dest_binary_dir):
                 logger.info(f"Directory {dest_binary_dir} already exists.")
                 if self.overwrite_check:
@@ -483,9 +486,15 @@ class PackSPEC:
         os.makedirs(PACK_PATH, exist_ok=True)
         if dest_bench_dir == "":
             if with_build:
-                dest_bench_dir = os.path.join(PACK_PATH, f"buildrun_{label}.{tune_type.name}_{input_type.name}")
+                if self.profile_gen:
+                    dest_bench_dir = os.path.join(PACK_PATH, f"buildrun_{label}.{tune_type.name}_{input_type.name}_profilegen")
+                else:
+                    dest_bench_dir = os.path.join(PACK_PATH, f"buildrun_{label}.{tune_type.name}_{input_type.name}")
             else:
-                dest_bench_dir = os.path.join(PACK_PATH, f"run_{label}.{tune_type.name}_{input_type.name}")
+                if self.profile_gen:
+                    dest_bench_dir = os.path.join(PACK_PATH, f"run_{label}.{tune_type.name}_{input_type.name}_profilegen")
+                else:
+                    dest_bench_dir = os.path.join(PACK_PATH, f"run_{label}.{tune_type.name}_{input_type.name}")
             if os.path.exists(dest_bench_dir):
                 logger.info(f"Directory {dest_bench_dir} already exists.")
                 if self.overwrite_check:
