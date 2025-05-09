@@ -662,6 +662,7 @@ class PackSPEC:
             script_content.extend([
                 "# 生成profile文件避免覆盖",
                 f"export LLVM_PROFILE_FILE=\"profiles/{bench_name}-%m-%p.profraw\"",
+                ""
             ])
         script_content.extend([
             "# 获取脚本所在目录的绝对路径",
@@ -690,12 +691,14 @@ class PackSPEC:
         if core_num != -1:
             for i in range(iterations):
                 script_content.extend([
+                    f"# 执行第 {i+1} 次测试",
                     f"echo \"Test {bench_name} #{i+1}:\" | tee -a \"$LOG_FILE\"",
                     f"(time -p taskset -c $CORE_NUM bash run_{input_type.name}.sh) 2>&1 | tee -a \"$LOG_FILE\""
                 ])
         else:
             for i in range(iterations):
                 script_content.extend([
+                    f"# 执行第 {i+1} 次测试",
                     f"echo \"Test {bench_name} #{i+1}:\" | tee -a \"$LOG_FILE\"",
                     f"(time -p bash run_{input_type.name}.sh) 2>&1 | tee -a \"$LOG_FILE\""
                 ])
@@ -709,6 +712,13 @@ class PackSPEC:
             logger.debug(f"Copie cal_score.py to {dest_dir}.")
         except Exception as e:
             logger.error(f"Failed to cal_score.py to {dest_dir}: {str(e)}")
+            exit(1)
+        
+        try:
+            shutil.copy2(os.path.join(SCRIPTS_PATH, "send_md_message.py"), dest_dir)
+            logger.debug(f"Copie send_md_message.py to {dest_dir}.")
+        except Exception as e:
+            logger.error(f"Failed to send_md_message.py to {dest_dir}: {str(e)}")
             exit(1)
 
         if self.profile_gen:
@@ -728,7 +738,7 @@ class PackSPEC:
                     f"curl -X POST \"http://172.38.8.102:8848/send-message\" \\",
                     f"     -H \"api-key: {BOSC_API_KEY}\" \\",
                     f"     -H \"Content-Type: application/json\" \\",
-                    f"     -d \"{{\\\"content\\\": \\\"在 $HOST_NAME 上的 {bench_name}.{label} Profile 生成完成喵！\\\\n【来自李扬的 HUAWEI Pure 70 Pro Max】\\\", \\\"at_user_ids\\\": [\\\"{BOSC_AT_USER}\\\"]}}\""
+                    f"     -d \"{{\\\"content\\\": \\\"在 $HOST_NAME 上的 {bench_name}.{label}.{tune_type.name}_{input_type.name} Profile 生成完成喵！\\\\n【来自李扬的 HUAWEI Pure 70 Pro Max】\\\", \\\"at_user_ids\\\": [\\\"{BOSC_AT_USER}\\\"]}}\""
                 ])
             else:
                 script_content.extend([
@@ -736,20 +746,22 @@ class PackSPEC:
                     f"curl -X POST \"http://172.38.8.102:8848/send-message\" \\",
                     f"     -H \"api-key: {BOSC_API_KEY}\" \\",
                     f"     -H \"Content-Type: application/json\" \\",
-                    f"     -d \"{{\\\"content\\\": \\\"在 $HOST_NAME 上的 {bench_name}.{label} 测试完成喵！\\\\n【来自李扬的 HUAWEI Pure 70 Pro Max】\\\", \\\"at_user_ids\\\": [\\\"{BOSC_AT_USER}\\\"]}}\""
+                    f"     -d \"{{\\\"content\\\": \\\"在 $HOST_NAME 上的 {bench_name}.{label}.{tune_type.name}_{input_type.name} 测试完成喵！\\\\n【来自李扬的 HUAWEI Pure 70 Pro Max】\\\", \\\"at_user_ids\\\": [\\\"{BOSC_AT_USER}\\\"]}}\"",
+                    "",
+                    f"chmod +x cal_score.py",
+                    f"./cal_score.py $LOG_FILE {self.test_clock_rate} | tee score.txt",
+                    f""
                 ])
-                send_message_cmds = ""
-                with open(os.path.join(SCRIPTS_PATH, "send_md_message.template"), "r") as f:
-                    send_message_cmds = f.read()
-                assert send_message_cmds != "", f"Send Message CMDs not found in file send_md_message.template."
-                title_message = f"在 $HOST_NAME 上的 {bench_name}.{label} 测试结果喵："
-                send_message_cmds = send_message_cmds.replace("{test_clock_rate}", str(self.test_clock_rate))
-                send_message_cmds = send_message_cmds.replace("{BOSC_API_KEY}", BOSC_API_KEY)
-                send_message_cmds = send_message_cmds.replace("{title_message}", title_message)
-                send_message_cmds = send_message_cmds.replace("{BOSC_AT_USER}", BOSC_AT_USER)
-                script_content.extend(
-                    send_message_cmds.split("\n")
-                )
+                title_message = f"{bench_name}.{label}.{tune_type.name}_{input_type.name} 测试结果"
+                text_message = f"在 $HOST_NAME 上的 {bench_name}.{label}.{tune_type.name}_{input_type.name} 测试结果喵："
+                script_content.extend([
+                    f"chmod +x send_md_message.py",
+                    f"./send_md_message.py --api_key {BOSC_API_KEY} \\",
+                    f"     --title \"{title_message}\" \\",
+                    f"     --text \"{text_message}\" \\",
+                    f"     --md_path \"score.txt\" \\",
+                    f"     --at_mobiles \"{BOSC_AT_USER}\"",
+                ])
         else:
             script_content.extend([
                 f"chmod +x cal_score.py",
@@ -830,18 +842,21 @@ class PackSPEC:
                 script_content.extend([
                     "# 生成profile文件避免覆盖",
                     f"export LLVM_PROFILE_FILE=\"profiles/{bench_name}-%m-%p.profraw\"",
-                    f"chmod +x ./{self.spec_bench_map[bench_name]}_{tune_type.name}.{label}",
-                    ""
                 ])
+            script_content.extend([
+                f"chmod +x ./{self.spec_bench_map[bench_name]}_{tune_type.name}.{label}",
+            ])
             if core_num!= -1:
                 for i in range(iterations):
                     script_content.extend([
+                        f"# 执行第{i+1}次测试",
                         f"echo \"Test {bench_name} #{i+1}:\" | tee -a \"$LOG_FILE\"",
                         f"(time -p taskset -c $CORE_NUM bash run_{input_type.name}.sh) 2>&1 | tee -a \"$LOG_FILE\""
                         ])
             else:
                 for i in range(iterations):
                     script_content.extend([
+                        f"# 执行第{i+1}次测试",
                         f"echo \"Test {bench_name} #{i+1}:\" | tee -a \"$LOG_FILE\"",
                         f"(time -p bash run_{input_type.name}.sh) 2>&1 | tee -a \"$LOG_FILE\""
                         ])
@@ -861,6 +876,13 @@ class PackSPEC:
             logger.debug(f"Copie cal_score.py to {parent_dir}.")
         except Exception as e:
             logger.error(f"Failed to cal_score.py to {parent_dir}: {str(e)}")
+            exit(1)
+
+        try:
+            shutil.copy2(os.path.join(SCRIPTS_PATH, "send_md_message.py"), parent_dir)
+            logger.debug(f"Copie send_md_message.py to {parent_dir}.")
+        except Exception as e:
+            logger.error(f"Failed to send_md_message.py to {parent_dir}: {str(e)}")
             exit(1)
 
         if self.profile_gen:
@@ -893,20 +915,22 @@ class PackSPEC:
                     f"curl -X POST \"http://172.38.8.102:8848/send-message\" \\",
                     f"     -H \"api-key: {BOSC_API_KEY}\" \\",
                     f"     -H \"Content-Type: application/json\" \\",
-                    f"     -d \"{{\\\"content\\\": \\\"在 $HOST_NAME 上的 {label}.{tune_type.name}_{input_type.name} 测试完成喵！\\\\n【来自李扬的 HUAWEI Pure 70 Pro Max】\\\", \\\"at_user_ids\\\": [\\\"{BOSC_AT_USER}\\\"]}}\""
+                    f"     -d \"{{\\\"content\\\": \\\"在 $HOST_NAME 上的 {label}.{tune_type.name}_{input_type.name} 测试完成喵！\\\\n【来自李扬的 HUAWEI Pure 70 Pro Max】\\\", \\\"at_user_ids\\\": [\\\"{BOSC_AT_USER}\\\"]}}\"",
+                    "",
+                    f"chmod +x cal_score.py",
+                    f"./cal_score.py $LOG_FILE {self.test_clock_rate} | tee score.txt",
+                    f""
                 ])
-                send_message_cmds = ""
-                with open(os.path.join(SCRIPTS_PATH, "send_md_message.template"), "r") as f:
-                    send_message_cmds = f.read()
-                assert send_message_cmds != "", f"Send Message CMDs not found in file send_md_message.template."
-                title_message = f"在 $HOST_NAME 上的 {label}.{tune_type.name}_{input_type.name} 测试结果喵："
-                send_message_cmds = send_message_cmds.replace("{test_clock_rate}", str(self.test_clock_rate))
-                send_message_cmds = send_message_cmds.replace("{BOSC_API_KEY}", BOSC_API_KEY)
-                send_message_cmds = send_message_cmds.replace("{title_message}", title_message)
-                send_message_cmds = send_message_cmds.replace("{BOSC_AT_USER}", BOSC_AT_USER)
-                script_content.extend(
-                    send_message_cmds.split("\n")
-                )
+                title_message = f"{label}.{tune_type.name}_{input_type.name} 测试结果"
+                text_message = f"在 $HOST_NAME 上的 {label}.{tune_type.name}_{input_type.name} 测试结果喵："
+                script_content.extend([
+                    f"chmod +x send_md_message.py",
+                    f"./send_md_message.py --api_key {BOSC_API_KEY} \\",
+                    f"     --title \"{title_message}\" \\",
+                    f"     --text \"{text_message}\" \\",
+                    f"     --md_path \"score.txt\" \\",
+                    f"     --at_mobiles \"{BOSC_AT_USER}\"",
+                ])
         else:
             if self.profile_gen:
                 script_content.extend([
