@@ -112,13 +112,17 @@ class PackSPEC:
                  tune_type: TuneType, 
                  input_type: InputType,
                  iterations: int = 3,
-                 rebuild: bool = True,
                  test_core_num: int = -1,
-                 test_clock_rate: float = 1):
+                 test_clock_rate: float = 1,
+                 rebuild: bool = True,
+                 profile_gen: bool = False,
+                 overwrite_check: bool = True,
+                 ):
         self.spec_name = spec_name
         self.tune_type = tune_type
         self.input_type = input_type
         self.iterations = iterations
+        self.overwrite_check = overwrite_check
         self.test_core_num = test_core_num
         self.rebuild = rebuild
         self.test_clock_rate = test_clock_rate
@@ -135,6 +139,9 @@ class PackSPEC:
             self.spec_build_dir = 'build'
             self.setup_script_path = os.path.join(SCRIPTS_PATH, "setup-spec17.sh")
         self.spec_bench_list = self.get_bench_list(spec_benches)
+        self.profile_gen = profile_gen
+        if self.profile_gen: # profile 生成模式只跑一次程序
+            self.iterations = 1
 
     def get_bench_list(self, spec_benches: str):
         """
@@ -177,7 +184,7 @@ class PackSPEC:
 
         if spec_bench_list == []:
             logger.error(f"No bench selected from {spec_benches} in {self.spec_name.name}.")
-            exit(0)
+            exit(1)
         else:
             logger.info(f"Selected {len(spec_bench_list)} benches from {spec_benches} in {self.spec_name.name}.")
             for spec_bench in spec_bench_list:
@@ -194,9 +201,29 @@ class PackSPEC:
                         parts = line.split('=')
                         if parts[0].strip().startswith('ext'):
                             label = line.split("=")[1].strip()
+                    if line.strip().startswith('basepeak') and 'yes' in line:
+                        logger.warning(f"'basepeak' is set to yes in {spec_cfg_path}.")
+                        logger.warning(f"Set 'basepeak' to yes means:")
+                        logger.warning(
+                            "\tUse base binary and/or base result for peak. "
+                            "If applied to the whole suite (in the header section), "
+                            "then only base is run, and its results are reported "
+                            "for both the base and peak metrics. If applied to a "
+                            "single benchmark, the same binary will be used for "
+                            "both base and peak runs, and the median of the base "
+                            "run will be reported for both. ———— SPEC2006 Docs"
+                            "(https://www.spec.org/cpu2006/Docs/config.html#basepeak)"
+                        )
+                        choice = input(f"Are you sure you use it right? (y/n): ")
+                        if choice.lower() == 'y':
+                            logger.warning("Process continue with 'basepeak' setting.")
+                        else:
+                            logger.error("Aborted by user.")
+                            exit(1)
+                        
         except FileNotFoundError:
             logger.error(f"File {spec_cfg_path} not found.")
-            exit(0)
+            exit(1)
         assert label != "", f"Ext not found in file {spec_cfg_path}."
         return label
 
@@ -220,7 +247,7 @@ class PackSPEC:
             # TODO: 完善SPEC2017 setup 脚本
             spec_setup_cmd = f"{self.setup_script_path}"
             logger.error(f"The SPEC2017 setup script has not been implemented yet.")
-            exit(0)
+            exit(1)
 
         try:
             # 执行run_setup_spec脚本并实时输出
@@ -255,7 +282,7 @@ class PackSPEC:
                 if error is not None:
                     error = error.read()
                     logger.error(f"Command failed with error: {error}")
-                    exit(0)
+                    exit(1)
 
             logger.success(f"Successfully setup spec with {tune_type}_{input_type} from config: {spec_cfg}")
             spec_log_file = os.path.join(SPEC_LOG_PATH, f"{spec_cfg.replace('.cfg', '')}.{tune_type.name}_{input_type.name}.setuplog")
@@ -266,10 +293,10 @@ class PackSPEC:
             
         except subprocess.CalledProcessError as e:
             logger.error(f"Command failed with error: {e.stderr}")
-            exit(0)
+            exit(1)
         except Exception as e:
             logger.error(f"Failed to execute command: {str(e)}")
-            exit(0)
+            exit(1)
     
     def get_spec_log(self, spec_log_file):
         marked_line = f"The log for this run is in {self.spec_dir}"
@@ -393,16 +420,16 @@ class PackSPEC:
             dest_binary_dir = os.path.join(PACK_PATH, f"bin_{label}.{tune_type.name}_{input_type.name}")
             if os.path.exists(dest_binary_dir):
                 logger.info(f"Directory {dest_binary_dir} already exists.")
-                logger.debug(f"Do you want to overwrite it? (y/n): ")
-                choice = input(f"Do you want to overwrite it? (y/n): ")
-                if choice.lower() == 'y':
+                if self.overwrite_check:
+                    logger.debug(f"Do you want to overwrite it? (y/n): ")
+                    choice = input(f"Do you want to overwrite it? (y/n): ")
+                if self.overwrite_check == False or choice.lower() == 'y':
                     logger.debug(f"Overwriting directory {dest_binary_dir} ")
                     shutil.rmtree(dest_binary_dir)
                     os.makedirs(dest_binary_dir, exist_ok=False)
                 else:
                     logger.error("User canceled the operation. Directory not overwritten.")
-                    exit(0)
-                    return ""
+                    exit(1)
             else:
                 logger.debug(f"Creating directory {dest_binary_dir} ")
                 os.makedirs(dest_binary_dir, exist_ok=False)
@@ -421,13 +448,12 @@ class PackSPEC:
                 logger.debug(f"Copie {bench_name} binary done.")
             except Exception as e:
                 logger.error(f"Failed to copy {bench_name}: {str(e)}")
-                exit(0)
-                continue
+                exit(1)
         if copy_num != 0:
             logger.success(f"Successfully copied {copy_num} files.")
         else:
             logger.error(f"No binary to copy.")
-            exit(0)
+            exit(1)
         return dest_binary_dir
 
 
@@ -462,16 +488,16 @@ class PackSPEC:
                 dest_bench_dir = os.path.join(PACK_PATH, f"run_{label}.{tune_type.name}_{input_type.name}")
             if os.path.exists(dest_bench_dir):
                 logger.info(f"Directory {dest_bench_dir} already exists.")
-                logger.debug(f"Do you want to overwrite it? (y/n): ")
-                choice = input(f"Do you want to overwrite it? (y/n): ")
-                if choice.lower() == 'y':
+                if self.overwrite_check:
+                    logger.debug(f"Do you want to overwrite it? (y/n): ")
+                    choice = input(f"Do you want to overwrite it? (y/n): ")
+                if self.overwrite_check == False or choice.lower() == 'y':
                     logger.debug(f"Overwriting directory {dest_bench_dir} ")
                     shutil.rmtree(dest_bench_dir)
                     os.makedirs(dest_bench_dir, exist_ok=False)
                 else:
                     logger.error("User canceled the operation. Directory not overwritten.")
-                    exit(0)
-                    return []
+                    exit(1)
             else:
                 logger.debug(f"Creating directory {dest_bench_dir} ")
                 os.makedirs(dest_bench_dir, exist_ok=False)
@@ -501,14 +527,13 @@ class PackSPEC:
                 dest_dir_list.append(dest_dir)
             except Exception as e:
                 logger.error(f"Failed to copy {bench_name}: {str(e)}")
-                exit(0)
-                continue
+                exit(1)
 
             if self.execute_specinvoke(src_run_dir, dest_dir, input_type):
                 logger.success(f"Successfully generated run_{input_type.name}.sh in {dest_dir}")
             else:
                 logger.error(f"Failed to generate run_test.sh in {dest_dir}")
-                exit(0)
+                exit(1)
 
             self.create_test_script(label, bench_name, self.test_core_num, dest_dir, tune_type, input_type)
 
@@ -516,7 +541,7 @@ class PackSPEC:
             logger.success(f"Successfully copied {len(dest_dir_list)} benches.")
         else:
             logger.error(f"No benches to copy.")
-            exit(0)
+            exit(1)
         return dest_dir_list
 
     def execute_specinvoke(self, src_dir: str, dest_dir: str, input_type: InputType) -> bool:
@@ -593,12 +618,12 @@ class PackSPEC:
             
         except subprocess.CalledProcessError as e:
             logger.error(f"Command failed with error: {e.stderr}")
-            exit(0)
-            return False
+            exit(1)
+
         except Exception as e:
             logger.error(f"Failed to execute command: {str(e)}")
-            exit(0)
-            return False
+            exit(1)
+
 
     def get_ref_time(self, bench_name: str, input_type: InputType):
         reftime_path = os.path.join(self.spec_bench_path, bench_name, "data", 
@@ -610,8 +635,8 @@ class PackSPEC:
             return reftime[1].strip()
         except Exception as e:
             logger.error(f"Failed to get reftime from '{reftime_path}': {str(e)}")
-            exit(0)
-            return False
+            exit(1)
+
 
     def create_test_script(self, label: str, bench_name: str, core_num: int, 
                             dest_dir: str, tune_type: TuneType, input_type: InputType, iterations: int = 0):
@@ -632,13 +657,17 @@ class PackSPEC:
             "fi",
             "set -e",
             "",
-            "# 生成profile文件避免覆盖",
-            f"export LLVM_PROFILE_FILE=\"profiles/{bench_name}-%m-%p.profraw\"",
-            "",
+        ]
+        if self.profile_gen:
+            script_content.extend([
+                "# 生成profile文件避免覆盖",
+                f"export LLVM_PROFILE_FILE=\"profiles/{bench_name}-%m-%p.profraw\"",
+            ])
+        script_content.extend([
             "# 获取脚本所在目录的绝对路径",
             "SCRIPT_DIR=$(pwd)",
             f"LOG_FILE=\"test_{input_type.name}.log\""
-        ]
+        ])
         if core_num != -1:
             script_content.append(
                 f"CORE_NUM={core_num}"
@@ -680,29 +709,47 @@ class PackSPEC:
             logger.debug(f"Copie cal_score.py to {dest_dir}.")
         except Exception as e:
             logger.error(f"Failed to cal_score.py to {dest_dir}: {str(e)}")
-            exit(0)
+            exit(1)
+
+        if self.profile_gen:
+            merge_profile_template = ""
+            with open(os.path.join(SCRIPTS_PATH, "merge_profile.sh.template"), "r") as f:
+                merge_profile_template = f.read()
+            if DEFAULT_LLVM_PROFDATA_PATH != "":
+                merge_profile_template = merge_profile_template.replace("<your llvm-profdata abspath>", DEFAULT_LLVM_PROFDATA_PATH)
+            with open(os.path.join(dest_dir, "merge_profile.sh"), 'w') as f:
+                f.write(merge_profile_template)
+            os.chmod(os.path.join(dest_dir, "merge_profile.sh"), 0o700)
 
         if BOSC_API_KEY != None and BOSC_AT_USER != None:
-            script_content.extend([
-                f"HOST_NAME=$(hostname)",
-                f"curl -X POST \"http://172.38.8.102:8848/send-message\" \\",
-                f"     -H \"api-key: {BOSC_API_KEY}\" \\",
-                f"     -H \"Content-Type: application/json\" \\",
-                f"     -d \"{{\\\"content\\\": \\\"在 $HOST_NAME 上的 {bench_name}.{label} 测试完成喵！\\\\n【来自李扬的 HUAWEI Pure 70 Pro Max】\\\", \\\"at_user_ids\\\": [\\\"{BOSC_AT_USER}\\\"]}}\""
-            ])
-            send_message_cmds = ""
-            with open(os.path.join(SCRIPTS_PATH, "send_md_message.template"), "r") as f:
-                send_message_cmds = f.read()
-            assert send_message_cmds != "", f"Send Message CMDs not found in file send_md_message.template."
-            title_message = f"在 $HOST_NAME 上的 {bench_name}.{label} 测试结果喵："
-            # send_message_cmds.format(BOSC_API_KEY, title_message, BOSC_AT_USER)
-            send_message_cmds = send_message_cmds.replace("{test_clock_rate}", str(self.test_clock_rate))
-            send_message_cmds = send_message_cmds.replace("{BOSC_API_KEY}", BOSC_API_KEY)
-            send_message_cmds = send_message_cmds.replace("{title_message}", title_message)
-            send_message_cmds = send_message_cmds.replace("{BOSC_AT_USER}", BOSC_AT_USER)
-            script_content.extend(
-                send_message_cmds.split("\n")
-            )
+            if self.profile_gen:
+                script_content.extend([
+                    f"HOST_NAME=$(hostname)",
+                    f"curl -X POST \"http://172.38.8.102:8848/send-message\" \\",
+                    f"     -H \"api-key: {BOSC_API_KEY}\" \\",
+                    f"     -H \"Content-Type: application/json\" \\",
+                    f"     -d \"{{\\\"content\\\": \\\"在 $HOST_NAME 上的 {bench_name}.{label} Profile 生成完成喵！\\\\n【来自李扬的 HUAWEI Pure 70 Pro Max】\\\", \\\"at_user_ids\\\": [\\\"{BOSC_AT_USER}\\\"]}}\""
+                ])
+            else:
+                script_content.extend([
+                    f"HOST_NAME=$(hostname)",
+                    f"curl -X POST \"http://172.38.8.102:8848/send-message\" \\",
+                    f"     -H \"api-key: {BOSC_API_KEY}\" \\",
+                    f"     -H \"Content-Type: application/json\" \\",
+                    f"     -d \"{{\\\"content\\\": \\\"在 $HOST_NAME 上的 {bench_name}.{label} 测试完成喵！\\\\n【来自李扬的 HUAWEI Pure 70 Pro Max】\\\", \\\"at_user_ids\\\": [\\\"{BOSC_AT_USER}\\\"]}}\""
+                ])
+                send_message_cmds = ""
+                with open(os.path.join(SCRIPTS_PATH, "send_md_message.template"), "r") as f:
+                    send_message_cmds = f.read()
+                assert send_message_cmds != "", f"Send Message CMDs not found in file send_md_message.template."
+                title_message = f"在 $HOST_NAME 上的 {bench_name}.{label} 测试结果喵："
+                send_message_cmds = send_message_cmds.replace("{test_clock_rate}", str(self.test_clock_rate))
+                send_message_cmds = send_message_cmds.replace("{BOSC_API_KEY}", BOSC_API_KEY)
+                send_message_cmds = send_message_cmds.replace("{title_message}", title_message)
+                send_message_cmds = send_message_cmds.replace("{BOSC_AT_USER}", BOSC_AT_USER)
+                script_content.extend(
+                    send_message_cmds.split("\n")
+                )
         else:
             script_content.extend([
                 f"chmod +x cal_score.py",
@@ -779,12 +826,13 @@ class PackSPEC:
                 f"echo -e 'Reftime: {self.get_ref_time(bench_name, input_type)}' | tee -a \"$LOG_FILE\"",
                 f"cd {bench_name}"
             ])
-            script_content.extend([
-                "# 生成profile文件避免覆盖",
-                f"export LLVM_PROFILE_FILE=\"profiles/{bench_name}-%m-%p.profraw\"",
-                f"chmod +x ./{self.spec_bench_map[bench_name]}_{tune_type.name}.{label}",
-                ""
-            ])
+            if self.profile_gen:
+                script_content.extend([
+                    "# 生成profile文件避免覆盖",
+                    f"export LLVM_PROFILE_FILE=\"profiles/{bench_name}-%m-%p.profraw\"",
+                    f"chmod +x ./{self.spec_bench_map[bench_name]}_{tune_type.name}.{label}",
+                    ""
+                ])
             if core_num!= -1:
                 for i in range(iterations):
                     script_content.extend([
@@ -813,30 +861,59 @@ class PackSPEC:
             logger.debug(f"Copie cal_score.py to {parent_dir}.")
         except Exception as e:
             logger.error(f"Failed to cal_score.py to {parent_dir}: {str(e)}")
-            exit(0)
+            exit(1)
+
+        if self.profile_gen:
+            collect_profiles_template = ""
+            with open(os.path.join(SCRIPTS_PATH, "collect_profiles.sh.template"), "r") as f:
+                collect_profiles_template = f.read()
+            if DEFAULT_LLVM_PROFDATA_PATH != "":
+                collect_profiles_template = collect_profiles_template.replace("<your llvm-profdata abspath>", DEFAULT_LLVM_PROFDATA_PATH)
+            with open(os.path.join(parent_dir, "collect_profiles.sh"), 'w') as f:
+                f.write(collect_profiles_template)
+            os.chmod(os.path.join(parent_dir, "collect_profiles.sh"), 0o700)
 
         if BOSC_API_KEY != None and BOSC_AT_USER != None:
-            script_content.extend([
-                f"HOST_NAME=$(hostname)",
-                f"curl -X POST \"http://172.38.8.102:8848/send-message\" \\",
-                f"     -H \"api-key: {BOSC_API_KEY}\" \\",
-                f"     -H \"Content-Type: application/json\" \\",
-                f"     -d \"{{\\\"content\\\": \\\"在 $HOST_NAME 上的 {label}.{tune_type.name}_{input_type.name} 测试完成喵！\\\\n【来自李扬的 HUAWEI Pure 70 Pro Max】\\\", \\\"at_user_ids\\\": [\\\"{BOSC_AT_USER}\\\"]}}\""
-            ])
-            send_message_cmds = ""
-            with open(os.path.join(SCRIPTS_PATH, "send_md_message.template"), "r") as f:
-                send_message_cmds = f.read()
-            assert send_message_cmds != "", f"Send Message CMDs not found in file send_md_message.template."
-            title_message = f"在 $HOST_NAME 上的 {label}.{tune_type.name}_{input_type.name} 测试结果喵："
-            # send_message_cmds.format(BOSC_API_KEY, title_message, BOSC_AT_USER)
-            send_message_cmds = send_message_cmds.replace("{test_clock_rate}", str(self.test_clock_rate))
-            send_message_cmds = send_message_cmds.replace("{BOSC_API_KEY}", BOSC_API_KEY)
-            send_message_cmds = send_message_cmds.replace("{title_message}", title_message)
-            send_message_cmds = send_message_cmds.replace("{BOSC_AT_USER}", BOSC_AT_USER)
-            script_content.extend(
-                send_message_cmds.split("\n")
-            )
+            if self.profile_gen:
+                script_content.extend([
+                    f"chmod +x collect_profiles.sh",
+                    f"./collect_profiles.sh",
+                    f""
+                ])
+                script_content.extend([
+                    f"HOST_NAME=$(hostname)",
+                    f"curl -X POST \"http://172.38.8.102:8848/send-message\" \\",
+                    f"     -H \"api-key: {BOSC_API_KEY}\" \\",
+                    f"     -H \"Content-Type: application/json\" \\",
+                    f"     -d \"{{\\\"content\\\": \\\"在 $HOST_NAME 上的 {label}.{tune_type.name}_{input_type.name} Profile 生成完成喵！\\\\n【来自李扬的 HUAWEI Pure 70 Pro Max】\\\", \\\"at_user_ids\\\": [\\\"{BOSC_AT_USER}\\\"]}}\""
+                ])
+            else:
+                script_content.extend([
+                    f"HOST_NAME=$(hostname)",
+                    f"curl -X POST \"http://172.38.8.102:8848/send-message\" \\",
+                    f"     -H \"api-key: {BOSC_API_KEY}\" \\",
+                    f"     -H \"Content-Type: application/json\" \\",
+                    f"     -d \"{{\\\"content\\\": \\\"在 $HOST_NAME 上的 {label}.{tune_type.name}_{input_type.name} 测试完成喵！\\\\n【来自李扬的 HUAWEI Pure 70 Pro Max】\\\", \\\"at_user_ids\\\": [\\\"{BOSC_AT_USER}\\\"]}}\""
+                ])
+                send_message_cmds = ""
+                with open(os.path.join(SCRIPTS_PATH, "send_md_message.template"), "r") as f:
+                    send_message_cmds = f.read()
+                assert send_message_cmds != "", f"Send Message CMDs not found in file send_md_message.template."
+                title_message = f"在 $HOST_NAME 上的 {label}.{tune_type.name}_{input_type.name} 测试结果喵："
+                send_message_cmds = send_message_cmds.replace("{test_clock_rate}", str(self.test_clock_rate))
+                send_message_cmds = send_message_cmds.replace("{BOSC_API_KEY}", BOSC_API_KEY)
+                send_message_cmds = send_message_cmds.replace("{title_message}", title_message)
+                send_message_cmds = send_message_cmds.replace("{BOSC_AT_USER}", BOSC_AT_USER)
+                script_content.extend(
+                    send_message_cmds.split("\n")
+                )
         else:
+            if self.profile_gen:
+                script_content.extend([
+                    f"chmod +x collect_profiles.sh",
+                    f"./collect_profiles.sh",
+                    ""
+                ])
             script_content.extend([
                 f"chmod +x cal_score.py",
                 f"./cal_score.py $LOG_FILE {self.test_clock_rate}"
@@ -850,26 +927,25 @@ class PackSPEC:
         os.chmod(run_all_script, 0o700)
         logger.success(f"Successfully created run_all script at {run_all_script}")
 
-
     def setup_spec(self, spec_cfg: str):
         if self.tune_type == TuneType.all:
             if self.input_type == InputType.all:
-                self.run_setup_spec(spec_cfg, TuneType.base, InputType.test)
+                self.run_setup_spec(spec_cfg, TuneType.base, InputType.test, rebuild=self.rebuild)
                 self.run_setup_spec(spec_cfg, TuneType.base, InputType.train, rebuild=False)
                 self.run_setup_spec(spec_cfg, TuneType.base, InputType.ref, rebuild=False)
-                self.run_setup_spec(spec_cfg, TuneType.peak, InputType.test)
+                self.run_setup_spec(spec_cfg, TuneType.peak, InputType.test, rebuild=self.rebuild)
                 self.run_setup_spec(spec_cfg, TuneType.peak, InputType.train, rebuild=False)
                 self.run_setup_spec(spec_cfg, TuneType.peak, InputType.ref, rebuild=False)
             else:
-                self.run_setup_spec(spec_cfg, TuneType.base, self.input_type)
-                self.run_setup_spec(spec_cfg, TuneType.peak, self.input_type)
+                self.run_setup_spec(spec_cfg, TuneType.base, self.input_type, rebuild=self.rebuild)
+                self.run_setup_spec(spec_cfg, TuneType.peak, self.input_type, rebuild=self.rebuild)
         else:
             if self.input_type == InputType.all:
-                self.run_setup_spec(spec_cfg, self.tune_type, InputType.test)
+                self.run_setup_spec(spec_cfg, self.tune_type, InputType.test, rebuild=self.rebuild)
                 self.run_setup_spec(spec_cfg, self.tune_type, InputType.train, rebuild=False)
                 self.run_setup_spec(spec_cfg, self.tune_type, InputType.ref, rebuild=False)
             else:
-                self.run_setup_spec(spec_cfg, self.tune_type, self.input_type)
+                self.run_setup_spec(spec_cfg, self.tune_type, self.input_type, rebuild=self.rebuild)
 
     def pack_binarys(self, label: str) -> list:
         dest_binarys_dir_list = []
@@ -915,7 +991,7 @@ class PackSPEC:
                 shutil.copy2(spec_cfg_path, dest_binarys_dir)
             except Exception as e:
                 logger.error(f"Failed to copy spec config from {spec_cfg_path} to {dest_binarys_dir}: {str(e)}")
-                exit(0)
+                exit(1)
             spec_cfg_name = spec_cfg.replace(".cfg", "")
             spec_log_name = f"{spec_cfg_name}.{self.tune_type.name}_{self.input_type.name}.setuplog"
             spec_log_path = os.path.join(SPEC_LOG_PATH, spec_log_name)
@@ -991,7 +1067,7 @@ class PackSPEC:
                 shutil.copy2(spec_cfg_path, buildrun_bench_dir)
             except Exception as e:
                 logger.error(f"Failed to copy spec config from {spec_cfg_path} to {buildrun_bench_dir}: {str(e)}")
-                exit(0)
+                exit(1)
             spec_cfg_name = spec_cfg.replace(".cfg", "")
             spec_log_name = f"{spec_cfg_name}.{self.tune_type.name}_{self.input_type.name}.setuplog"
             spec_log_path = os.path.join(SPEC_LOG_PATH, spec_log_name)

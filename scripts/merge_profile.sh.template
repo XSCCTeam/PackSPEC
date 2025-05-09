@@ -1,0 +1,18 @@
+#!/bin/bash
+
+set -e
+
+CURRENT_DIR=$(pwd)
+LLVM_PROFDATA=<your llvm-profdata abspath>
+
+if [ ! -x "$LLVM_PROFDATA" ]; then
+    echo "Error: llvm-profdata not found or not executable."
+    echo "Error: please check your configure on merge_profile.sh."
+    exit 1
+fi
+
+if [ -d "$CURRENT_DIR/profiles" ]; then
+    dir_name=$(basename "$CURRENT_DIR")
+    echo -e "Merging $CURRENT_DIR/profiles/*.profraw to $CURRENT_DIR/profiles/$dir_name.profdata"
+    $LLVM_PROFDATA merge -sparse $CURRENT_DIR/profiles/*.profraw -o $CURRENT_DIR/profiles/$dir_name.profdata
+fi

@@ -1,0 +1,46 @@
+#!/bin/bash
+
+set -e
+
+CURRENT_DIR=$(pwd)
+# Create a directory to store the profiles
+mkdir -p $CURRENT_DIR/collected_profiles
+# Iterate over each directory in the current directory
+for dir in $CURRENT_DIR/*; do
+    if [ -d "$dir" ]; then
+        # Get directory name
+        dir_name=$(basename "$dir")
+        # Check if the directory contains a profile Directory
+        if [ -d "$dir/profiles" ]; then
+            # Copy the profile Directory to the collected_profiles directory
+            echo -e "Copying $dir/profiles to $CURRENT_DIR/collected_profiles/$dir_name"
+            cp -r "$dir/profiles" $CURRENT_DIR/collected_profiles/$dir_name
+        fi
+    fi
+done
+
+# 创建merge_profiles.sh文件
+echo -e "Creating merge_profiles.sh on $CURRENT_DIR/collected_profiles..."
+cat > "$CURRENT_DIR/collected_profiles/merge_profiles.sh" << 'EOF'
+#!/bin/bash
+
+CURRENT_DIR=$(pwd)
+LLVM_PROFDATA=<your llvm-profdata abspath>
+
+if [ ! -x "$LLVM_PROFDATA" ]; then
+    echo "Error: llvm-profdata not found or not executable."
+    echo "Error: please check your configure on merge_profiles.sh."
+    exit 1
+fi
+
+for dir in $CURRENT_DIR/*; do
+    if [ -d "$dir" ]; then
+        dir_name=$(basename "$dir")
+        echo -e "Merging $dir/*.profraw to $CURRENT_DIR/$dir_name.profdata"
+        $LLVM_PROFDATA merge -sparse $dir/*.profraw -o $CURRENT_DIR/$dir_name.profdata
+    fi
+done
+EOF
+
+# 设置执行权限
+chmod +x "$CURRENT_DIR/collected_profiles/merge_profiles.sh"

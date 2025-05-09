@@ -49,9 +49,21 @@ if __name__ == "__main__":
         # 仅在生成运行脚本时生效，不影响二进制打包
         test_core_num=4,
 
-        # 测试运行的 CPU 主频，用于算分，单位 GHz
+        # 测试运行的 CPU 主频，用于算分，单位 GHz，默认为 1
         # 仅在生成运行脚本时生效，不影响二进制打包
-        test_clock_rate=1
+        test_clock_rate=1,
+
+        # 在使用 spec 命令进行 setup 过程中是否强制 rebuild，默认为 True
+        # 仅在 setup_spec 过程中有效
+        # rebuild=True,
+
+        # 是否以生成 profile 模式运行，默认为 False
+        # profile 生成模式只跑一次程序，iterations 将强制设置为 1
+        # profile_gen=False,
+
+        # 在打包文件的目标目录已存在的情况下，是否要求用户确认覆盖, 默认为 True
+        # 如果为 False，程序将自动覆盖已存在的文件，无需用户确认
+        # overwrite_check=True,
     )
 
     # SPEC config file name
