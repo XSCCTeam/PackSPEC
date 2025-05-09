@@ -684,18 +684,19 @@ class PackSPEC:
 
         if BOSC_API_KEY != None and BOSC_AT_USER != None:
             script_content.extend([
+                f"HOST_NAME=$(hostname)",
                 f"curl -X POST \"http://172.38.8.102:8848/send-message\" \\",
                 f"     -H \"api-key: {BOSC_API_KEY}\" \\",
                 f"     -H \"Content-Type: application/json\" \\",
-                f"     -d '{{\"content\": \"{bench_name}.{label} 测试完成喵！\\n【来自李扬的 HUAWEI Pure 70 Pro Max】\", \"at_user_ids\": [\"{BOSC_AT_USER}\"]}}'"
+                f"     -d \"{{\\\"content\\\": \\\"在 $HOST_NAME 上的 {bench_name}.{label} 测试完成喵！\\\\n【来自李扬的 HUAWEI Pure 70 Pro Max】\\\", \\\"at_user_ids\\\": [\\\"{BOSC_AT_USER}\\\"]}}\""
             ])
             send_message_cmds = ""
             with open(os.path.join(SCRIPTS_PATH, "send_md_message.template"), "r") as f:
                 send_message_cmds = f.read()
             assert send_message_cmds != "", f"Send Message CMDs not found in file send_md_message.template."
-            title_message = f"{bench_name}.{label} 测试结果喵："
+            title_message = f"在 $HOST_NAME 上的 {bench_name}.{label} 测试结果喵："
             # send_message_cmds.format(BOSC_API_KEY, title_message, BOSC_AT_USER)
-            send_message_cmds = send_message_cmds.replace("{test_clock_rate}", self.test_clock_rate)
+            send_message_cmds = send_message_cmds.replace("{test_clock_rate}", str(self.test_clock_rate))
             send_message_cmds = send_message_cmds.replace("{BOSC_API_KEY}", BOSC_API_KEY)
             send_message_cmds = send_message_cmds.replace("{title_message}", title_message)
             send_message_cmds = send_message_cmds.replace("{BOSC_AT_USER}", BOSC_AT_USER)
@@ -816,18 +817,19 @@ class PackSPEC:
 
         if BOSC_API_KEY != None and BOSC_AT_USER != None:
             script_content.extend([
+                f"HOST_NAME=$(hostname)",
                 f"curl -X POST \"http://172.38.8.102:8848/send-message\" \\",
                 f"     -H \"api-key: {BOSC_API_KEY}\" \\",
                 f"     -H \"Content-Type: application/json\" \\",
-                f"     -d '{{\"content\": \"{label}.{tune_type.name}_{input_type.name} 测试完成喵！\\n【来自李扬的 HUAWEI Pure 70 Pro Max】\", \"at_user_ids\": [\"{BOSC_AT_USER}\"]}}'"
+                f"     -d \"{{\\\"content\\\": \\\"在 $HOST_NAME 上的 {label}.{tune_type.name}_{input_type.name} 测试完成喵！\\\\n【来自李扬的 HUAWEI Pure 70 Pro Max】\\\", \\\"at_user_ids\\\": [\\\"{BOSC_AT_USER}\\\"]}}\""
             ])
             send_message_cmds = ""
             with open(os.path.join(SCRIPTS_PATH, "send_md_message.template"), "r") as f:
                 send_message_cmds = f.read()
             assert send_message_cmds != "", f"Send Message CMDs not found in file send_md_message.template."
-            title_message = f"{label}.{tune_type.name}_{input_type.name} 测试结果喵："
+            title_message = f"在 $HOST_NAME 上的 {label}.{tune_type.name}_{input_type.name} 测试结果喵："
             # send_message_cmds.format(BOSC_API_KEY, title_message, BOSC_AT_USER)
-            send_message_cmds = send_message_cmds.replace("{test_clock_rate}", self.test_clock_rate)
+            send_message_cmds = send_message_cmds.replace("{test_clock_rate}", str(self.test_clock_rate))
             send_message_cmds = send_message_cmds.replace("{BOSC_API_KEY}", BOSC_API_KEY)
             send_message_cmds = send_message_cmds.replace("{title_message}", title_message)
             send_message_cmds = send_message_cmds.replace("{BOSC_AT_USER}", BOSC_AT_USER)
