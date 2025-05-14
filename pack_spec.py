@@ -111,6 +111,7 @@ class PackSPEC:
                  spec_benches: str,
                  tune_type: TuneType, 
                  input_type: InputType,
+                 spec_mode: SPECMode,
                  iterations: int = 3,
                  test_core_num: int = -1,
                  test_clock_rate: float = 1,
@@ -121,6 +122,7 @@ class PackSPEC:
         self.spec_name = spec_name
         self.tune_type = tune_type
         self.input_type = input_type
+        self.spec_mode = spec_mode
         self.iterations = iterations
         self.overwrite_check = overwrite_check
         self.test_core_num = test_core_num
@@ -129,14 +131,16 @@ class PackSPEC:
         if self.spec_name == SPECName.spec2006:
             self.spec_dir = SPEC2006_PATH
             self.spec_bench_path = SPEC2006_BENCH_PATH
-            self.spec_bench_map = SPEC2006_MAP
+            self.spec_bench_map = SPEC2006_BIN_MAP
             self.spec_build_dir = 'run'
+            self.spec_run_dir = 'run'
             self.setup_script_path = os.path.join(SCRIPTS_PATH, "setup-spec06.sh")
         elif self.spec_name == SPECName.spec2017:
             self.spec_dir = SPEC2017_PATH
             self.spec_bench_path = SPEC2017_BENCH_PATH
-            self.spec_bench_map = SPEC2017_MAP
+            self.spec_bench_map = SPEC2017_BIN_MAP
             self.spec_build_dir = 'build'
+            self.spec_run_dir = 'run'
             self.setup_script_path = os.path.join(SCRIPTS_PATH, "setup-spec17.sh")
         self.spec_bench_list = self.get_bench_list(spec_benches)
         self.profile_gen = profile_gen
@@ -191,16 +195,162 @@ class PackSPEC:
                 logger.debug(f"Selected {spec_bench}.")
         return spec_bench_list
 
+    def get_ref_time(self, bench_name: str, input_type: InputType):
+        reftime_result = ""
+        if self.spec_name == SPECName.spec2006:
+            reftime_path = os.path.join(self.spec_bench_path, bench_name, "data", 
+                                        input_type.name, "reftime")
+            try:
+                logger.debug(f"Get reftime {bench_name}.{input_type.name} from {reftime_path}.")
+                with open(reftime_path, 'r') as f:
+                    reftime = f.readlines()
+                reftime_result = reftime[1].strip()
+            except Exception as e:
+                logger.error(f"Failed to get reftime from '{reftime_path}': {str(e)}")
+                exit(1)
+        elif self.spec_name == SPECName.spec2017:
+            reftime_path = os.path.join(
+                self.spec_bench_path, 
+                os.path.sep.join(SPEC2017_REFTIME_MAP[bench_name][input_type.name]),
+                "reftime")
+            try:
+                logger.debug(f"Get reftime {bench_name}.{input_type.name} from {reftime_path}.")
+                with open(reftime_path, 'r') as f:
+                    reftime = f.readlines()
+                    for reftime_line in reftime:
+                        if reftime_line.startswith(f"{input_type.name}{self.spec_mode.name}"):
+                            reftime_result = reftime_line.split(" ")[2].strip()
+                            break
+                if reftime_result == "":
+                    logger.error(f"Failed to get reftime from '{reftime_path}'")
+                    exit(1)
+            except Exception as e:
+                logger.error(f"Failed to get reftime from '{reftime_path}': {str(e)}")
+                exit(1)
+        assert reftime_result.isnumeric(), f"Failed to get reftime from '{reftime_path}': Expect a numeric but get '{reftime_result}'"
+        return reftime_result
+
+    def get_spec_log(self, spec_log_file):
+        marked_line = f"The log for this run is in {self.spec_dir}"
+        try:
+            with open(spec_log_file, "r") as f:
+                spec_log = f.readlines()
+            for spec_log_line in spec_log:
+                if spec_log_line.startswith(marked_line):
+                    logger.debug(f"Find spec log from '{spec_log_file}'")
+                    return spec_log_line.replace("The log for this run is in ", "").strip()
+        except Exception as e:
+            logger.debug(f"Failed find spec log from '{spec_log_file}': {str(e)}")
+            return ""
+
+    def get_bench_path(self, label: str, action_type: ActionType, tune_type: TuneType, input_type: InputType, spec_mode: SPECMode) -> list:
+
+        """
+        获取指定配置的基准测试路径
+        
+        根据构建标签和动作类型查找匹配的基准测试目录路径。对于SPEC2017，
+        会查找build目录；对于SPEC2006，会查找run目录。
+        
+        Args:
+            label (str): 构建标签(如llvm19-m64)，用于匹配目录名称
+            action_type (ActionType): 指定动作类型
+        
+        Returns:
+            list: 返回匹配的基准测试路径列表，每个元素是一个基准测试的完整路径
+            
+        Note:
+            1. 目录名称格式:
+               - 构建目录: build_{优化类型}_{标签}
+               - 运行目录: run_{优化类型}_{输入类型}_{标签}
+            2. 对于多个匹配目录(如多次构建)，会选择编号最大的那个(最新的)
+            3. 找不到匹配目录时会记录警告日志
+            4. 返回的路径列表顺序与spec_benches列表顺序一致
+        """
+
+        if action_type == ActionType.build:
+            bench_parent_dir = self.spec_build_dir
+            # 构建目录格式：build_优化类型_标签
+            bench_dir_perfix = f"{action_type.name}_{tune_type.name}_{label}"
+        elif action_type == ActionType.run:
+            bench_parent_dir = self.spec_run_dir
+            if self.spec_name == SPECName.spec2006:
+                # 运行目录格式：run_优化类型_输入类型_标签
+                bench_dir_perfix = f"{action_type.name}_{tune_type.name}_{input_type.name}_{label}"
+            elif self.spec_name == SPECName.spec2017:
+                # 运行目录格式：run_优化类型_输入类型+模式_标签
+                bench_dir_perfix = f"{action_type.name}_{tune_type.name}_{input_type.name}{spec_mode.name}_{label}"
+
+        selected_bench_dir = []
+        
+        # 遍历SPEC2017基准测试目录
+        for bench_dir in os.listdir(self.spec_bench_path):
+            # 检查是否为指定的基准测试集合
+            if bench_dir in self.spec_bench_list:
+                # 根据动作类型构建完整路径（build或run目录）
+                bench_run_dir = os.path.join(self.spec_bench_path, bench_dir, bench_parent_dir)
+                run_dir_path_list = []
+
+                pattern = re.compile(rf"^{re.escape(bench_dir_perfix)}\.\d{{4}}$")
+                
+                # 查找符合前缀的目录
+                for run_dir in os.listdir(bench_run_dir):
+                    if pattern.match(run_dir):
+                        run_dir_path_list.append(os.path.join(bench_run_dir, run_dir))
+                        
+                # 处理查找结果
+                if len(run_dir_path_list) == 0:
+                    # 未找到符合条件的目录
+                    logger.warning(f"Bench {os.path.basename(bench_dir)} not found in {bench_dir_perfix}.")
+                elif len(run_dir_path_list) > 1:
+                    # 找到多个符合条件的目录，选择编号最大的那个（最新的）
+                    logger.warning(f"Bench {os.path.basename(bench_dir)} found in more than one {bench_dir_perfix}.")
+                    for run_dir_path in run_dir_path_list:
+                        logger.debug(f"Found {run_dir_path}")
+                    max = 0
+                    selected = run_dir_path_list[0]
+                    for run_dir_perfix in run_dir_path_list:
+                        # 检查目录名末尾是否为数字，如果是则比较大小
+                        if run_dir_perfix.split(".")[-1].isnumeric():
+                            if int(run_dir_perfix.split(".")[-1]) > max:
+                                max = int(run_dir_perfix.split(".")[-1])
+                                selected = run_dir_perfix
+                    selected_bench_dir.append(selected)
+                    logger.warning(f"Bench {os.path.basename(bench_dir)} using {selected}")
+                else:
+                    # 只找到一个符合条件的目录
+                    selected_bench_dir.append(run_dir_path_list[0])
+                    logger.debug(f"Bench {os.path.basename(bench_dir)} using {run_dir_path_list[0]}")
+            else:
+                # 不在指定的基准测试集合中，跳过
+                logger.debug(f"bench_dir: {bench_dir} not included.")
+
+        return selected_bench_dir
+
     def analyze_spec_config(self, spec_cfg: str):
         spec_cfg_path = os.path.join(self.spec_dir, "config", spec_cfg)
         label = ""
         try:
             with open(spec_cfg_path, 'r') as file:
                 for line in file:
-                    if line.strip().startswith('ext') and '=' in line:
+                    index = line.find('#')
+                    if index != -1:
+                        line = line[:index].strip()
+                    if self.spec_name == SPECName.spec2006 and \
+                            line.strip().startswith('ext') and \
+                            '=' in line:
                         parts = line.split('=')
                         if parts[0].strip().startswith('ext'):
                             label = line.split("=")[1].strip()
+                            break
+                    elif self.spec_name == SPECName.spec2017 and \
+                            line.strip().startswith('label') and \
+                            '=' in line:
+                        parts = line.split('=')
+                        if parts[0].strip().startswith('label'):
+                            label = line.split("=")[1].strip()
+                            break
+
+                for line in file:
                     if line.strip().startswith('basepeak') and 'yes' in line:
                         logger.warning(f"'basepeak' is set to yes in {spec_cfg_path}.")
                         logger.warning(f"Set 'basepeak' to yes means:")
@@ -224,7 +374,10 @@ class PackSPEC:
         except FileNotFoundError:
             logger.error(f"File {spec_cfg_path} not found.")
             exit(1)
-        assert label != "", f"Ext not found in file {spec_cfg_path}."
+        if self.spec_name == SPECName.spec2006:
+            assert label != "", f"Ext not found in file {spec_cfg_path}."
+        elif self.spec_name == SPECName.spec2017:
+            assert label!= "", f"Label not found in file {spec_cfg_path}."
         return label
 
     def run_setup_spec(self, spec_cfg: str, tune_type: TuneType, input_type: InputType, rebuild: bool = True):
@@ -297,100 +450,8 @@ class PackSPEC:
         except Exception as e:
             logger.error(f"Failed to execute command: {str(e)}")
             exit(1)
-    
-    def get_spec_log(self, spec_log_file):
-        marked_line = f"The log for this run is in {self.spec_dir}"
-        try:
-            with open(spec_log_file, "r") as f:
-                spec_log = f.readlines()
-            for spec_log_line in spec_log:
-                if spec_log_line.startswith(marked_line):
-                    logger.debug(f"Find spec log from '{spec_log_file}'")
-                    return spec_log_line.replace("The log for this run is in ", "").strip()
-        except Exception as e:
-            logger.debug(f"Failed find spec log from '{spec_log_file}': {str(e)}")
-            return ""
-        
 
-    def get_bench_path(self, label: str, action_type: ActionType, tune_type: TuneType, input_type: InputType) -> list:
-
-        """
-        获取指定配置的基准测试路径
-        
-        根据构建标签和动作类型查找匹配的基准测试目录路径。对于SPEC2017，
-        会查找build目录；对于SPEC2006，会查找run目录。
-        
-        Args:
-            label (str): 构建标签(如llvm19-m64)，用于匹配目录名称
-            action_type (ActionType): 指定动作类型
-        
-        Returns:
-            list: 返回匹配的基准测试路径列表，每个元素是一个基准测试的完整路径
-            
-        Note:
-            1. 目录名称格式:
-               - 构建目录: build_{优化类型}_{标签}
-               - 运行目录: run_{优化类型}_{输入类型}_{标签}
-            2. 对于多个匹配目录(如多次构建)，会选择编号最大的那个(最新的)
-            3. 找不到匹配目录时会记录警告日志
-            4. 返回的路径列表顺序与spec_benches列表顺序一致
-        """
-
-        if action_type == ActionType.build:
-            # 编译目录格式：build_优化类型_标签
-            bench_dir_perfix = f"{action_type.name}_{tune_type.name}_{label}"
-        elif action_type == ActionType.run:
-            # 运行目录格式：run_优化类型_输入类型_标签
-            bench_dir_perfix = f"{action_type.name}_{tune_type.name}_{input_type.name}_{label}"
-
-        selected_bench_dir = []
-        
-        # 遍历SPEC2017基准测试目录
-        for bench_dir in os.listdir(self.spec_bench_path):
-            # 检查是否为指定的基准测试集合
-            if bench_dir in self.spec_bench_list:
-                # 根据动作类型构建完整路径（build或run目录）
-                bench_run_dir = os.path.join(self.spec_bench_path, bench_dir, self.spec_build_dir)
-                run_dir_path_list = []
-
-                pattern = re.compile(rf"^{re.escape(bench_dir_perfix)}\.\d{{4}}$")
-                
-                # 查找符合前缀的目录
-                for run_dir in os.listdir(bench_run_dir):
-                    if pattern.match(run_dir):
-                        run_dir_path_list.append(os.path.join(bench_run_dir, run_dir))
-                        
-                # 处理查找结果
-                if len(run_dir_path_list) == 0:
-                    # 未找到符合条件的目录
-                    logger.warning(f"Bench {os.path.basename(bench_dir)} not found in {bench_dir_perfix}.")
-                elif len(run_dir_path_list) > 1:
-                    # 找到多个符合条件的目录，选择编号最大的那个（最新的）
-                    logger.warning(f"Bench {os.path.basename(bench_dir)} found in more than one {bench_dir_perfix}.")
-                    for run_dir_path in run_dir_path_list:
-                        logger.debug(f"Found {run_dir_path}")
-                    max = 0
-                    selected = run_dir_path_list[0]
-                    for run_dir_perfix in run_dir_path_list:
-                        # 检查目录名末尾是否为数字，如果是则比较大小
-                        if run_dir_perfix.split(".")[-1].isnumeric():
-                            if int(run_dir_perfix.split(".")[-1]) > max:
-                                max = int(run_dir_perfix.split(".")[-1])
-                                selected = run_dir_perfix
-                    selected_bench_dir.append(selected)
-                    logger.warning(f"Bench {os.path.basename(bench_dir)} using {selected}")
-                else:
-                    # 只找到一个符合条件的目录
-                    selected_bench_dir.append(run_dir_path_list[0])
-                    logger.debug(f"Bench {os.path.basename(bench_dir)} using {run_dir_path_list[0]}")
-            else:
-                # 不在指定的基准测试集合中，跳过
-                logger.debug(f"bench_dir: {bench_dir} not included.")
-
-        return selected_bench_dir
-
-
-    def copy_binarys(self, label: str, tune_type: TuneType, input_type: InputType, dest_binary_dir: str = "") -> str:
+    def copy_binarys(self, label: str, tune_type: TuneType, input_type: InputType, spec_mode: SPECMode, dest_binary_dir: str = "") -> str:
         """
         复制二进制文件到目标目录
         
@@ -413,14 +474,14 @@ class PackSPEC:
             5. 如果目标目录不存在会自动创建
             6. 返回的目标目录路径可用于后续操作
         """
-        src_bench_dir = self.get_bench_path(label, ActionType.build, tune_type, input_type)
+        src_bench_dir = self.get_bench_path(label, ActionType.build, tune_type, input_type, spec_mode)
 
         os.makedirs(PACK_PATH, exist_ok=True)
         if dest_binary_dir == "":
             if self.profile_gen:
-                dest_binary_dir = os.path.join(PACK_PATH, f"bin_{label}.{tune_type.name}_{input_type.name}_profilegen")
+                dest_binary_dir = os.path.join(PACK_PATH, f"{self.spec_name.name}_bin_{label}.{tune_type.name}_{input_type.name}_{spec_mode.name}_profilegen")
             else:
-                dest_binary_dir = os.path.join(PACK_PATH, f"bin_{label}.{tune_type.name}_{input_type.name}")
+                dest_binary_dir = os.path.join(PACK_PATH, f"{self.spec_name.name}_bin_{label}.{tune_type.name}_{input_type.name}_{spec_mode.name}")
             if os.path.exists(dest_binary_dir):
                 logger.info(f"Directory {dest_binary_dir} already exists.")
                 if self.overwrite_check:
@@ -460,7 +521,7 @@ class PackSPEC:
         return dest_binary_dir
 
 
-    def copy_benches(self, label: str, tune_type: TuneType, input_type: InputType, with_build: bool = False, dest_bench_dir: str = "") -> list:
+    def copy_benches(self, label: str, tune_type: TuneType, input_type: InputType, spec_mode: SPECMode, with_build: bool = False, dest_bench_dir: str = "") -> list:
         """
         复制完整的基准测试目录结构
         
@@ -480,21 +541,21 @@ class PackSPEC:
             OSError: 当复制过程中发生错误时抛出异常
         """
         if with_build:
-            src_build_bench_dir = self.get_bench_path(label, ActionType.build, tune_type, input_type)
-        src_run_bench_dir = self.get_bench_path(label, ActionType.run, tune_type, input_type)
+            src_build_bench_dir = self.get_bench_path(label, ActionType.build, tune_type, input_type, spec_mode)
+        src_run_bench_dir = self.get_bench_path(label, ActionType.run, tune_type, input_type, spec_mode)
 
         os.makedirs(PACK_PATH, exist_ok=True)
         if dest_bench_dir == "":
             if with_build:
                 if self.profile_gen:
-                    dest_bench_dir = os.path.join(PACK_PATH, f"buildrun_{label}.{tune_type.name}_{input_type.name}_profilegen")
+                    dest_bench_dir = os.path.join(PACK_PATH, f"{self.spec_name.name}_buildrun_{label}.{tune_type.name}_{input_type.name}_{spec_mode.name}_profilegen")
                 else:
-                    dest_bench_dir = os.path.join(PACK_PATH, f"buildrun_{label}.{tune_type.name}_{input_type.name}")
+                    dest_bench_dir = os.path.join(PACK_PATH, f"{self.spec_name.name}_buildrun_{label}.{tune_type.name}_{input_type.name}_{spec_mode.name}")
             else:
                 if self.profile_gen:
-                    dest_bench_dir = os.path.join(PACK_PATH, f"run_{label}.{tune_type.name}_{input_type.name}_profilegen")
+                    dest_bench_dir = os.path.join(PACK_PATH, f"{self.spec_name.name}_run_{label}.{tune_type.name}_{input_type.name}_{spec_mode.name}_profilegen")
                 else:
-                    dest_bench_dir = os.path.join(PACK_PATH, f"run_{label}.{tune_type.name}_{input_type.name}")
+                    dest_bench_dir = os.path.join(PACK_PATH, f"{self.spec_name.name}_run_{label}.{tune_type.name}_{input_type.name}_{spec_mode.name}")
             if os.path.exists(dest_bench_dir):
                 logger.info(f"Directory {dest_bench_dir} already exists.")
                 if self.overwrite_check:
@@ -632,20 +693,6 @@ class PackSPEC:
         except Exception as e:
             logger.error(f"Failed to execute command: {str(e)}")
             exit(1)
-
-
-    def get_ref_time(self, bench_name: str, input_type: InputType):
-        reftime_path = os.path.join(self.spec_bench_path, bench_name, "data", 
-                                    input_type.name, "reftime")
-        try:
-            logger.debug(f"Get reftime {bench_name}.{input_type.name} from {reftime_path}.")
-            with open(reftime_path, 'r') as f:
-                reftime = f.readlines()
-            return reftime[1].strip()
-        except Exception as e:
-            logger.error(f"Failed to get reftime from '{reftime_path}': {str(e)}")
-            exit(1)
-
 
     def create_test_script(self, label: str, bench_name: str, core_num: int, 
                             dest_dir: str, tune_type: TuneType, input_type: InputType, iterations: int = 0):
@@ -985,33 +1032,33 @@ class PackSPEC:
         if self.tune_type == TuneType.all:
             if self.input_type == InputType.all:
                 dest_binarys_dir_list.append(
-                    self.copy_binarys(label, TuneType.base, InputType.test))
+                    self.copy_binarys(label, TuneType.base, InputType.test, self.spec_mode))
                 dest_binarys_dir_list.append(
-                    self.copy_binarys(label, TuneType.base, InputType.train))
+                    self.copy_binarys(label, TuneType.base, InputType.train, self.spec_mode))
                 dest_binarys_dir_list.append(
-                    self.copy_binarys(label, TuneType.base, InputType.ref))
+                    self.copy_binarys(label, TuneType.base, InputType.ref, self.spec_mode))
                 dest_binarys_dir_list.append(
-                    self.copy_binarys(label, TuneType.peak, InputType.test))
+                    self.copy_binarys(label, TuneType.peak, InputType.test, self.spec_mode))
                 dest_binarys_dir_list.append(
-                    self.copy_binarys(label, TuneType.peak, InputType.train))
+                    self.copy_binarys(label, TuneType.peak, InputType.train, self.spec_mode))
                 dest_binarys_dir_list.append(
-                    self.copy_binarys(label, TuneType.peak, InputType.ref))
+                    self.copy_binarys(label, TuneType.peak, InputType.ref, self.spec_mode))
             else:
                 dest_binarys_dir_list.append(
-                    self.copy_binarys(label, TuneType.base, self.input_type))
+                    self.copy_binarys(label, TuneType.base, self.input_type, self.spec_mode))
                 dest_binarys_dir_list.append(
-                    self.copy_binarys(label, TuneType.peak, self.input_type))
+                    self.copy_binarys(label, TuneType.peak, self.input_type, self.spec_mode))
         else:
             if self.input_type == InputType.all:
                 dest_binarys_dir_list.append(
-                    self.copy_binarys(label, self.tune_type, InputType.test))
+                    self.copy_binarys(label, self.tune_type, InputType.test, self.spec_mode))
                 dest_binarys_dir_list.append(
-                    self.copy_binarys(label, self.tune_type, InputType.train))
+                    self.copy_binarys(label, self.tune_type, InputType.train, self.spec_mode))
                 dest_binarys_dir_list.append(
-                    self.copy_binarys(label, self.tune_type, InputType.ref))
+                    self.copy_binarys(label, self.tune_type, InputType.ref, self.spec_mode))
             else:
                 dest_binarys_dir_list.append(
-                    self.copy_binarys(label, self.tune_type, self.input_type))
+                    self.copy_binarys(label, self.tune_type, self.input_type, self.spec_mode))
         return dest_binarys_dir_list
     
     def pack_binarys_cfg(self, spec_cfg: str):
@@ -1048,44 +1095,44 @@ class PackSPEC:
         dest_benches_dir_list = []
         if self.tune_type == TuneType.all:
             if self.input_type == InputType.all:
-                buildrun_bench_dir_list = self.copy_benches(label, TuneType.base, InputType.test, with_build)
+                buildrun_bench_dir_list = self.copy_benches(label, TuneType.base, InputType.test, self.spec_mode, with_build)
                 self.create_run_all_script(label, self.test_core_num, buildrun_bench_dir_list, TuneType.base, InputType.test)
                 dest_benches_dir_list.append(os.path.dirname(buildrun_bench_dir_list[0]))
-                buildrun_bench_dir_list = self.copy_benches(label, TuneType.base, InputType.train, with_build)
+                buildrun_bench_dir_list = self.copy_benches(label, TuneType.base, InputType.train, self.spec_mode, with_build)
                 self.create_run_all_script(label, self.test_core_num, buildrun_bench_dir_list, TuneType.base, InputType.train)
                 dest_benches_dir_list.append(os.path.dirname(buildrun_bench_dir_list[0]))
-                buildrun_bench_dir_list = self.copy_benches(label, TuneType.base, InputType.ref, with_build)
+                buildrun_bench_dir_list = self.copy_benches(label, TuneType.base, InputType.ref, self.spec_mode, with_build)
                 self.create_run_all_script(label, self.test_core_num, buildrun_bench_dir_list, TuneType.base, InputType.ref)
                 dest_benches_dir_list.append(os.path.dirname(buildrun_bench_dir_list[0]))
-                buildrun_bench_dir_list = self.copy_benches(label, TuneType.peak, InputType.test, with_build)
+                buildrun_bench_dir_list = self.copy_benches(label, TuneType.peak, InputType.test, self.spec_mode, with_build)
                 self.create_run_all_script(label, self.test_core_num, buildrun_bench_dir_list, TuneType.peak, InputType.test)
                 dest_benches_dir_list.append(os.path.dirname(buildrun_bench_dir_list[0]))
-                buildrun_bench_dir_list = self.copy_benches(label, TuneType.peak, InputType.train, with_build)
+                buildrun_bench_dir_list = self.copy_benches(label, TuneType.peak, InputType.train, self.spec_mode, with_build)
                 self.create_run_all_script(label, self.test_core_num, buildrun_bench_dir_list, TuneType.peak, InputType.train)
                 dest_benches_dir_list.append(os.path.dirname(buildrun_bench_dir_list[0]))
-                buildrun_bench_dir_list = self.copy_benches(label, TuneType.peak, InputType.ref, with_build)
+                buildrun_bench_dir_list = self.copy_benches(label, TuneType.peak, InputType.ref, self.spec_mode, with_build)
                 self.create_run_all_script(label, self.test_core_num, buildrun_bench_dir_list, TuneType.peak, InputType.ref)
                 dest_benches_dir_list.append(os.path.dirname(buildrun_bench_dir_list[0]))
             else:
-                buildrun_bench_dir_list = self.copy_benches(label, TuneType.base, self.input_type, with_build)
+                buildrun_bench_dir_list = self.copy_benches(label, TuneType.base, self.input_type, self.spec_mode, with_build)
                 self.create_run_all_script(label, self.test_core_num, buildrun_bench_dir_list, TuneType.base, self.input_type)
                 dest_benches_dir_list.append(os.path.dirname(buildrun_bench_dir_list[0]))
-                buildrun_bench_dir_list = self.copy_benches(label, TuneType.peak, self.input_type, with_build)
+                buildrun_bench_dir_list = self.copy_benches(label, TuneType.peak, self.input_type, self.spec_mode, with_build)
                 self.create_run_all_script(label, self.test_core_num, buildrun_bench_dir_list, TuneType.peak, self.input_type)
                 dest_benches_dir_list.append(os.path.dirname(buildrun_bench_dir_list[0]))
         else:
             if self.input_type == InputType.all:
-                buildrun_bench_dir_list = self.copy_benches(label, self.tune_type, InputType.test, with_build)
+                buildrun_bench_dir_list = self.copy_benches(label, self.tune_type, InputType.test, self.spec_mode, with_build)
                 self.create_run_all_script(label, self.test_core_num, buildrun_bench_dir_list, self.tune_type, InputType.test)
                 dest_benches_dir_list.append(os.path.dirname(buildrun_bench_dir_list[0]))
-                buildrun_bench_dir_list = self.copy_benches(label, self.tune_type, InputType.train, with_build)
+                buildrun_bench_dir_list = self.copy_benches(label, self.tune_type, InputType.train, self.spec_mode, with_build)
                 self.create_run_all_script(label, self.test_core_num, buildrun_bench_dir_list, self.tune_type, InputType.train)
                 dest_benches_dir_list.append(os.path.dirname(buildrun_bench_dir_list[0]))
-                buildrun_bench_dir_list = self.copy_benches(label, self.tune_type, InputType.ref, with_build)
+                buildrun_bench_dir_list = self.copy_benches(label, self.tune_type, InputType.ref, self.spec_mode, with_build)
                 self.create_run_all_script(label, self.test_core_num, buildrun_bench_dir_list, self.tune_type, InputType.ref)
                 dest_benches_dir_list.append(os.path.dirname(buildrun_bench_dir_list[0]))
             else:
-                buildrun_bench_dir_list = self.copy_benches(label, self.tune_type, self.input_type, with_build)
+                buildrun_bench_dir_list = self.copy_benches(label, self.tune_type, self.input_type, self.spec_mode, with_build)
                 self.create_run_all_script(label, self.test_core_num, buildrun_bench_dir_list, self.tune_type, self.input_type)
                 dest_benches_dir_list.append(os.path.dirname(buildrun_bench_dir_list[0]))
         return dest_benches_dir_list
@@ -1120,13 +1167,14 @@ class PackSPEC:
                 logger.debug(f"Not find spec log from {spec_log}.")
 
 if __name__ == "__main__":
-    packer = PackSPEC(
-        spec_name=SPECName.spec2006,
-        spec_benches="int",
-        tune_type=TuneType.base,
-        input_type=InputType.test,
-        iterations=3,
-        test_core_num=4
-    )
+    # packer = PackSPEC(
+    #     spec_name=SPECName.spec2006,
+    #     spec_benches="int",
+    #     tune_type=TuneType.base,
+    #     input_type=InputType.test,
+    #     iterations=3,
+    #     test_core_num=4
+    # )
     # packer.get_ref_time("400.perlbench", InputType.test)
-    packer.get_spec_log("/home/wll/PackSPEC/spec_logs/x86_llvm19_novec_wll.base_ref")
+    # packer.get_spec_log("/home/wll/PackSPEC/spec_logs/x86_llvm19_novec_wll.base_ref")
+    print(os.path.join(HOME_PATH, os.path.sep.join(SPEC2017_REFTIME_MAP["600.perlbench_s"]["test"])))

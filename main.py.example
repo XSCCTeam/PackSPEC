@@ -40,6 +40,12 @@ if __name__ == "__main__":
         #   InputType.ref:   参考输入数据集(最大)
         #   InputType.all:   包含所有输入数据集
         input_type=InputType.all,
+
+        # SPEC基准测试运行模式
+        # 可选值：
+        #   SPECMode.speed: 运行速度测试
+        #   SPECMode.rate: 运行吞吐测试
+        spec_mode=SPECMode.speed,
         
         # 运行测试的迭代次数
         # 主要用于生成运行脚本，不影响二进制打包
