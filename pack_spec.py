@@ -177,9 +177,9 @@ class PackSPEC:
             for bench in spec_benches.split():
                 if bench == "all":
                     spec_bench_set.update(SPEC2017_BENCHES) 
-                elif bench == "int":
+                elif bench in ["int", "intspeed"]:
                     spec_bench_set.update(SPEC2017_INT_BENCHES)
-                elif bench == "fp":
+                elif bench in ["fp", "fpspeed"]:
                     spec_bench_set.update(SPEC2017_FP_BENCHES)
                 else:
                     for spec_bench in SPEC2017_BENCHES:
