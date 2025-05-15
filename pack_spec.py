@@ -120,14 +120,14 @@ class PackSPEC:
                  test_clock_rate: float = 1,
                  rebuild: bool = True,
                  profile_gen: bool = False,
-                 overwrite_check: bool = True,
+                 auto_mode: bool = False,
                  ):
         self.spec_name = spec_name
         self.tune_type = tune_type
         self.input_type = input_type
         self.spec_mode = spec_mode
         self.iterations = iterations
-        self.overwrite_check = overwrite_check
+        self.auto_mode = auto_mode
         self.test_core_num = test_core_num
         self.rebuild = rebuild
         self.test_clock_rate = test_clock_rate
@@ -482,17 +482,25 @@ class PackSPEC:
         os.makedirs(PACK_PATH, exist_ok=True)
         if dest_binary_dir == "":
             if self.profile_gen:
-                dest_binary_dir = os.path.join(PACK_PATH, f"{self.spec_name.name}", "bin", 
-                    f"{CURRENT_DATE}_{self.spec_name.name}_bin_{label}.{tune_type.name}_{input_type.name}_{spec_mode.name}_profilegen")
+                if self.auto_mode:
+                    dest_binary_dir = os.path.join(PACK_PATH, 
+                        f"{self.spec_name.name}_bin_{label}.{tune_type.name}_{input_type.name}_{spec_mode.name}_profilegen")
+                else:
+                    dest_binary_dir = os.path.join(PACK_PATH, f"{self.spec_name.name}", "bin", 
+                        f"{CURRENT_DATE}_{self.spec_name.name}_bin_{label}.{tune_type.name}_{input_type.name}_{spec_mode.name}_profilegen")
             else:
-                dest_binary_dir = os.path.join(PACK_PATH, f"{self.spec_name.name}", "bin", 
-                    f"{CURRENT_DATE}_{self.spec_name.name}_bin_{label}.{tune_type.name}_{input_type.name}_{spec_mode.name}")
+                if self.auto_mode:
+                    dest_binary_dir = os.path.join(PACK_PATH,
+                        f"{self.spec_name.name}_bin_{label}.{tune_type.name}_{input_type.name}_{spec_mode.name}")
+                else:
+                    dest_binary_dir = os.path.join(PACK_PATH, f"{self.spec_name.name}", "bin", 
+                        f"{CURRENT_DATE}_{self.spec_name.name}_bin_{label}.{tune_type.name}_{input_type.name}_{spec_mode.name}")
             if os.path.exists(dest_binary_dir):
                 logger.info(f"Directory {dest_binary_dir} already exists.")
-                if self.overwrite_check:
+                if not self.auto_mode:
                     logger.debug(f"Do you want to overwrite it? (y/n): ")
                     choice = input(f"Do you want to overwrite it? (y/n): ")
-                if self.overwrite_check == False or choice.lower() == 'y':
+                if self.auto_mode == True or choice.lower() == 'y':
                     logger.debug(f"Overwriting directory {dest_binary_dir} ")
                     shutil.rmtree(dest_binary_dir)
                     os.makedirs(dest_binary_dir, exist_ok=False)
@@ -553,24 +561,41 @@ class PackSPEC:
         if dest_bench_dir == "":
             if with_build:
                 if self.profile_gen:
-                    dest_bench_dir = os.path.join(PACK_PATH, f"{self.spec_name.name}", "buildrun", 
-                        f"{CURRENT_DATE}_{self.spec_name.name}_buildrun_{label}.{tune_type.name}_{input_type.name}_{spec_mode.name}_profilegen")
+                    if self.auto_mode:
+                        dest_bench_dir = os.path.join(PACK_PATH, 
+                            f"{self.spec_name.name}_buildrun_{label}.{tune_type.name}_{input_type.name}_{spec_mode.name}_profilegen")
+                    else:
+                        dest_bench_dir = os.path.join(PACK_PATH, f"{self.spec_name.name}", "buildrun", 
+                            f"{CURRENT_DATE}_{self.spec_name.name}_buildrun_{label}.{tune_type.name}_{input_type.name}_{spec_mode.name}_profilegen")
                 else:
-                    dest_bench_dir = os.path.join(PACK_PATH, f"{self.spec_name.name}", "buildrun", 
-                        f"{CURRENT_DATE}_{self.spec_name.name}_buildrun_{label}.{tune_type.name}_{input_type.name}_{spec_mode.name}")
+                    if self.auto_mode:
+                        dest_bench_dir = os.path.join(PACK_PATH,
+                            f"{self.spec_name.name}_buildrun_{label}.{tune_type.name}_{input_type.name}_{spec_mode.name}")
+                    else:
+                        dest_bench_dir = os.path.join(PACK_PATH, f"{self.spec_name.name}", "buildrun", 
+                            f"{CURRENT_DATE}_{self.spec_name.name}_buildrun_{label}.{tune_type.name}_{input_type.name}_{spec_mode.name}")
             else:
                 if self.profile_gen:
-                    dest_bench_dir = os.path.join(PACK_PATH, f"{self.spec_name.name}", "run", 
-                        f"{CURRENT_DATE}_{self.spec_name.name}_run_{label}.{tune_type.name}_{input_type.name}_{spec_mode.name}_profilegen")
+                    if self.auto_mode:
+                        dest_bench_dir = os.path.join(PACK_PATH,
+                            f"{self.spec_name.name}_run_{label}.{tune_type.name}_{input_type.name}_{spec_mode.name}_profilegen")
+                    else:
+                        dest_bench_dir = os.path.join(PACK_PATH, f"{self.spec_name.name}", "run", 
+                            f"{CURRENT_DATE}_{self.spec_name.name}_run_{label}.{tune_type.name}_{input_type.name}_{spec_mode.name}_profilegen")
                 else:
-                    dest_bench_dir = os.path.join(PACK_PATH, f"{self.spec_name.name}", "run", 
-                        f"{CURRENT_DATE}_{self.spec_name.name}_run_{label}.{tune_type.name}_{input_type.name}_{spec_mode.name}")
+                    if self.auto_mode:
+                        dest_bench_dir = os.path.join(PACK_PATH,
+                            f"{self.spec_name.name}_run_{label}.{tune_type.name}_{input_type.name}_{spec_mode.name}")
+                    else:
+                        dest_bench_dir = os.path.join(PACK_PATH, f"{self.spec_name.name}", "run", 
+                            f"{CURRENT_DATE}_{self.spec_name.name}_run_{label}.{tune_type.name}_{input_type.name}_{spec_mode.name}")
+
             if os.path.exists(dest_bench_dir):
                 logger.info(f"Directory {dest_bench_dir} already exists.")
-                if self.overwrite_check:
+                if not self.auto_mode:
                     logger.debug(f"Do you want to overwrite it? (y/n): ")
                     choice = input(f"Do you want to overwrite it? (y/n): ")
-                if self.overwrite_check == False or choice.lower() == 'y':
+                if self.auto_mode == True or choice.lower() == 'y':
                     logger.debug(f"Overwriting directory {dest_bench_dir} ")
                     shutil.rmtree(dest_bench_dir)
                     os.makedirs(dest_bench_dir, exist_ok=False)

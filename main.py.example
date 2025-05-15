@@ -67,9 +67,10 @@ if __name__ == "__main__":
         # profile 生成模式只跑一次程序，iterations 将强制设置为 1
         # profile_gen=False,
 
-        # 在打包文件的目标目录已存在的情况下，是否要求用户确认覆盖, 默认为 True
-        # 如果为 False，程序将自动覆盖已存在的文件，无需用户确认
-        # overwrite_check=True,
+        # 是否以自动模式运行, 用于配合其他脚本执行, 默认为 False
+        # 如果为 True, 程序将自动覆盖已存在的文件，无需用户确认
+        # 且生成的打包目录会以极简目录形式生成，且不包含日期
+        # auto_mode=False,
     )
 
     # SPEC config file name
