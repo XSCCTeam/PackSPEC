@@ -4,6 +4,9 @@ import shutil
 import os
 import re
 import subprocess
+import datetime
+
+CURRENT_DATE = datetime.datetime.now().strftime("%y%m%d")
 
 class ActionType(Enum):
     """
@@ -479,9 +482,11 @@ class PackSPEC:
         os.makedirs(PACK_PATH, exist_ok=True)
         if dest_binary_dir == "":
             if self.profile_gen:
-                dest_binary_dir = os.path.join(PACK_PATH, f"{self.spec_name.name}_bin_{label}.{tune_type.name}_{input_type.name}_{spec_mode.name}_profilegen")
+                dest_binary_dir = os.path.join(PACK_PATH, f"{self.spec_name.name}", "bin", 
+                    f"{CURRENT_DATE}_{self.spec_name.name}_bin_{label}.{tune_type.name}_{input_type.name}_{spec_mode.name}_profilegen")
             else:
-                dest_binary_dir = os.path.join(PACK_PATH, f"{self.spec_name.name}_bin_{label}.{tune_type.name}_{input_type.name}_{spec_mode.name}")
+                dest_binary_dir = os.path.join(PACK_PATH, f"{self.spec_name.name}", "bin", 
+                    f"{CURRENT_DATE}_{self.spec_name.name}_bin_{label}.{tune_type.name}_{input_type.name}_{spec_mode.name}")
             if os.path.exists(dest_binary_dir):
                 logger.info(f"Directory {dest_binary_dir} already exists.")
                 if self.overwrite_check:
@@ -548,14 +553,18 @@ class PackSPEC:
         if dest_bench_dir == "":
             if with_build:
                 if self.profile_gen:
-                    dest_bench_dir = os.path.join(PACK_PATH, f"{self.spec_name.name}_buildrun_{label}.{tune_type.name}_{input_type.name}_{spec_mode.name}_profilegen")
+                    dest_bench_dir = os.path.join(PACK_PATH, f"{self.spec_name.name}", "buildrun", 
+                        f"{CURRENT_DATE}_{self.spec_name.name}_buildrun_{label}.{tune_type.name}_{input_type.name}_{spec_mode.name}_profilegen")
                 else:
-                    dest_bench_dir = os.path.join(PACK_PATH, f"{self.spec_name.name}_buildrun_{label}.{tune_type.name}_{input_type.name}_{spec_mode.name}")
+                    dest_bench_dir = os.path.join(PACK_PATH, f"{self.spec_name.name}", "buildrun", 
+                        f"{CURRENT_DATE}_{self.spec_name.name}_buildrun_{label}.{tune_type.name}_{input_type.name}_{spec_mode.name}")
             else:
                 if self.profile_gen:
-                    dest_bench_dir = os.path.join(PACK_PATH, f"{self.spec_name.name}_run_{label}.{tune_type.name}_{input_type.name}_{spec_mode.name}_profilegen")
+                    dest_bench_dir = os.path.join(PACK_PATH, f"{self.spec_name.name}", "run", 
+                        f"{CURRENT_DATE}_{self.spec_name.name}_run_{label}.{tune_type.name}_{input_type.name}_{spec_mode.name}_profilegen")
                 else:
-                    dest_bench_dir = os.path.join(PACK_PATH, f"{self.spec_name.name}_run_{label}.{tune_type.name}_{input_type.name}_{spec_mode.name}")
+                    dest_bench_dir = os.path.join(PACK_PATH, f"{self.spec_name.name}", "run", 
+                        f"{CURRENT_DATE}_{self.spec_name.name}_run_{label}.{tune_type.name}_{input_type.name}_{spec_mode.name}")
             if os.path.exists(dest_bench_dir):
                 logger.info(f"Directory {dest_bench_dir} already exists.")
                 if self.overwrite_check:
