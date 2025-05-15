@@ -1123,6 +1123,15 @@ class PackSPEC:
                     logger.debug(f"Failed to copy spec log from {spec_log} to {dest_binarys_dir}: {str(e)}")
             else:
                 logger.debug(f"Not find spec log from {spec_log}.")
+            try:
+                logger.info(f"Create compile.env to record compile environment.")
+                with open(os.path.join(dest_binarys_dir, "compile.env"), 'w') as f:
+                    # 将当前环境变量写入文件
+                    for key, value in os.environ.items():
+                        if key not in ["BOSC_API_KEY", "BOSC_AT_USER"]:
+                            f.write(f"{key}={value}\n")
+            except Exception as e:
+                logger.error(f"Failed to create compile.env: {str(e)}")
 
 
     def pack_benches(self, label: str, with_build=False) -> list:
@@ -1199,6 +1208,15 @@ class PackSPEC:
                     logger.debug(f"Failed to copy spec log from {spec_log} to {buildrun_bench_dir}: {str(e)}")
             else:
                 logger.debug(f"Not find spec log from {spec_log}.")
+            try:
+                logger.info(f"Create compile.env to record compile environment.")
+                with open(os.path.join(buildrun_bench_dir, "compile.env"), 'w') as f:
+                    # 将当前环境变量写入文件
+                    for key, value in os.environ.items():
+                        if key not in ["BOSC_API_KEY", "BOSC_AT_USER"]:
+                            f.write(f"{key}={value}\n")
+            except Exception as e:
+                logger.error(f"Failed to create compile.env: {str(e)}")
 
 if __name__ == "__main__":
     # packer = PackSPEC(
