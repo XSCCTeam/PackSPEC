@@ -34,7 +34,7 @@ SPEC2006_FP_BENCHES = ["410.bwaves", "416.gamess", "433.milc", "434.zeusmp", "43
                   "437.leslie3d", "444.namd", "447.dealII", "450.soplex", "453.povray", "454.calculix",
                   "459.GemsFDTD", "465.tonto", "470.lbm", "481.wrf", "482.sphinx3"]
 SPEC2006_BENCHES = SPEC2006_INT_BENCHES + SPEC2006_FP_BENCHES
-SPEC2006_MAP = {
+SPEC2006_BIN_MAP = {
     # INT
     "400.perlbench": "perlbench", "401.bzip2": "bzip2", "403.gcc": "gcc", "429.mcf": "mcf", 
     "445.gobmk": "gobmk", "456.hmmer": "hmmer", "458.sjeng": "sjeng", "462.libquantum": "libquantum", 
@@ -52,7 +52,7 @@ SPEC2017_INT_BENCHES = ["600.perlbench_s", "602.gcc_s", "605.mcf_s", "620.omnetp
 SPEC2017_FP_BENCHES = ["603.bwaves_s", "607.cactuBSSN_s", "619.lbm_s", "621.wrf_s", "627.cam4_s",
                   "628.pop2_s", "638.imagick_s", "644.nab_s", "649.fotonik3d_s", "654.roms_s"]
 SPEC2017_BENCHES = SPEC2017_INT_BENCHES + SPEC2017_FP_BENCHES
-SPEC2017_MAP = {
+SPEC2017_BIN_MAP = {
     # INT
     "600.perlbench_s": "perlbench_s", "602.gcc_s": "sgcc", "605.mcf_s": "mcf_s", 
     "620.omnetpp_s": "omnetpp_s", "623.xalancbmk_s": "xalancbmk_s", "625.x264_s": "x264_s", 
