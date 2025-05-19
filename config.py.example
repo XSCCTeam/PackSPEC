@@ -43,7 +43,7 @@ SPEC2006_BIN_MAP = {
     "410.bwaves": "bwaves", "416.gamess": "gamess", "433.milc": "milc", "434.zeusmp": "zeusmp", 
     "435.gromacs": "gromacs", "436.cactusADM": "cactusADM", "437.leslie3d": "leslie3d", "444.namd": "namd", 
     "447.dealII": "dealII", "450.soplex": "soplex", "453.povray": "povray", "454.calculix": "calculix", 
-    "459.GemsFDTD": "GemsFDTD", "465.tonto": "tonto", "470.lbm": "lbm", "481.wrf": "wrf", "482.sphinx3": "sphinx3"
+    "459.GemsFDTD": "GemsFDTD", "465.tonto": "tonto", "470.lbm": "lbm", "481.wrf": "wrf", "482.sphinx3": "sphinx_livepretend"
 }
 
 SPEC2017_INT_BENCHES = ["600.perlbench_s", "602.gcc_s", "605.mcf_s", "620.omnetpp_s", 
@@ -59,10 +59,10 @@ SPEC2017_BIN_MAP = {
     "631.deepsjeng_s": "deepsjeng_s", "641.leela_s": "leela_s", "648.exchange2_s": "exchange2_s", 
     "657.xz_s": "xz_s",
     # FP
-    "603.bwaves_s": "bwaves_s", "607.cactuBSSN_s": "cactuBSSN_s", "619.lbm_s": "lbm_s", 
-    "621.wrf_s": "wrf_s", "627.cam4_s": "cam4_s", "628.pop2_s": "pop2_s", 
+    "603.bwaves_s": "speed_bwaves", "607.cactuBSSN_s": "cactuBSSN_s", "619.lbm_s": "lbm_s", 
+    "621.wrf_s": "wrf_s", "627.cam4_s": "cam4_s", "628.pop2_s": "speed_pop2", 
     "638.imagick_s": "imagick_s", "644.nab_s": "nab_s", "649.fotonik3d_s": "fotonik3d_s", 
-    "654.roms_s": "roms_s"
+    "654.roms_s": "sroms"
 }
 SPEC2017_REFTIME_MAP = {
     # INT SPEED
