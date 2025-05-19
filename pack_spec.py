@@ -230,7 +230,13 @@ class PackSPEC:
             except Exception as e:
                 logger.error(f"Failed to get reftime from '{reftime_path}': {str(e)}")
                 exit(1)
-        assert reftime_result.isnumeric(), f"Failed to get reftime from '{reftime_path}': Expect a numeric but get '{reftime_result}'"
+        def is_number(s):
+            try:
+                float(s)
+                return True
+            except ValueError:
+                return False
+        assert is_number(reftime_result), f"Failed to get reftime from '{reftime_path}': Expect a numeric but get '{reftime_result}'"
         return reftime_result
 
     def get_spec_log(self, spec_log_file):
@@ -764,6 +770,7 @@ class PackSPEC:
                 f"CORE_NUM={core_num}"
             )
         script_content.extend([
+            f"TEST_TIMES={iterations}",
             "",
             "ulimit -s unlimited",
             "",
@@ -776,23 +783,20 @@ class PackSPEC:
 
         script_content.extend([
             f"echo -e '\\nRunning {bench_name}...' | tee -a \"$LOG_FILE\"",
-            f"echo -e 'Reftime: {self.get_ref_time(bench_name, input_type)}' | tee -a \"$LOG_FILE\""
-            ])
+            f"echo -e 'Reftime: {self.get_ref_time(bench_name, input_type)}' | tee -a \"$LOG_FILE\"",
+            f"for i in $(seq 1 $TEST_TIMES); do",
+            f"    echo \"Test {bench_name} #$i:\" | tee -a \"$LOG_FILE\"",
+        ])
         if core_num != -1:
-            for i in range(iterations):
-                script_content.extend([
-                    f"# 执行第 {i+1} 次测试",
-                    f"echo \"Test {bench_name} #{i+1}:\" | tee -a \"$LOG_FILE\"",
-                    f"(time -p taskset -c $CORE_NUM bash run_{input_type.name}.sh) 2>&1 | tee -a \"$LOG_FILE\""
-                ])
+            script_content.append(
+                f"    (time -p taskset -c $CORE_NUM bash run_{input_type.name}.sh) 2>&1 | tee -a \"$LOG_FILE\""
+            )
         else:
-            for i in range(iterations):
-                script_content.extend([
-                    f"# 执行第 {i+1} 次测试",
-                    f"echo \"Test {bench_name} #{i+1}:\" | tee -a \"$LOG_FILE\"",
-                    f"(time -p bash run_{input_type.name}.sh) 2>&1 | tee -a \"$LOG_FILE\""
-                ])
+            script_content.append(
+                f"    (time -p bash run_{input_type.name}.sh) 2>&1 | tee -a \"$LOG_FILE\""
+            )
         script_content.extend([
+            f"done",
             f"echo -e '{bench_name} completed ' | tee -a \"$LOG_FILE\"",
             ""
         ])
@@ -911,6 +915,7 @@ class PackSPEC:
                 f"CORE_NUM={core_num}"
             )
         script_content.extend([
+            f"TEST_TIMES={iterations}",
             "",
             "# 运行所有基准测试并记录时间",
             "echo \"Starting benchmarks run at $(date)\" | tee -a \"$LOG_FILE\"",
@@ -935,22 +940,19 @@ class PackSPEC:
                 ])
             script_content.extend([
                 f"chmod +x ./{self.spec_bench_map[bench_name]}_{tune_type.name}.{label}",
+                f"for i in $(seq 1 $TEST_TIMES); do",
+                f"    echo \"Test {bench_name} #$i:\" | tee -a \"$LOG_FILE\""
             ])
             if core_num!= -1:
-                for i in range(iterations):
-                    script_content.extend([
-                        f"# 执行第{i+1}次测试",
-                        f"echo \"Test {bench_name} #{i+1}:\" | tee -a \"$LOG_FILE\"",
-                        f"(time -p taskset -c $CORE_NUM bash run_{input_type.name}.sh) 2>&1 | tee -a \"$LOG_FILE\""
-                        ])
+                script_content.append(
+                    f"    (time -p taskset -c $CORE_NUM bash run_{input_type.name}.sh) 2>&1 | tee -a \"$LOG_FILE\""
+                )
             else:
-                for i in range(iterations):
-                    script_content.extend([
-                        f"# 执行第{i+1}次测试",
-                        f"echo \"Test {bench_name} #{i+1}:\" | tee -a \"$LOG_FILE\"",
-                        f"(time -p bash run_{input_type.name}.sh) 2>&1 | tee -a \"$LOG_FILE\""
-                        ])
+                script_content.append(
+                    f"    (time -p bash run_{input_type.name}.sh) 2>&1 | tee -a \"$LOG_FILE\""
+                )
             script_content.extend([
+                f"done",
                 f"echo -e '{bench_name} completed ' | tee -a \"$LOG_FILE\"",
                 "cd \"$SCRIPT_DIR\"",
                 ""
@@ -958,7 +960,8 @@ class PackSPEC:
         
         script_content.extend([
             "echo -e '\\nAll benchmarks completed' | tee -a \"$LOG_FILE\"",
-            "echo \"Finished at $(date)\" | tee -a \"$LOG_FILE\""
+            "echo \"Finished at $(date)\" | tee -a \"$LOG_FILE\"",
+            ""
         ])
 
         try:
