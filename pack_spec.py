@@ -313,7 +313,7 @@ class PackSPEC:
                 # 判断 bench_run_dir 目录是否存在
                 if not os.path.isdir(bench_run_dir):
                     logger.warning(f"Directory {bench_run_dir} not exist.")
-                    return []
+                    continue
 
                 # 查找符合前缀的目录
                 for run_dir in os.listdir(bench_run_dir):
@@ -498,7 +498,7 @@ class PackSPEC:
         for file in os.listdir(host_run_dir):
             if file.startswith(self.spec_bench_map[bench_name]):
                 os.remove(os.path.join(host_run_dir, file))
-        target_setup_dir = self.get_bench_path(self.spec_bench_list, label, 
+        target_setup_dir = self.get_bench_path([bench_name], label, 
                 ActionType.build, tune_type, input_type, SPECMode.speed)
         target_run_dir = get_bench_dir(bench_name, target_setup_dir)
         build_binary_path = os.path.join(target_run_dir, self.spec_bench_map[bench_name])
