@@ -310,6 +310,11 @@ class PackSPEC:
 
                 pattern = re.compile(rf"^{re.escape(bench_dir_perfix)}\.\d{{4}}$")
                 
+                # 判断 bench_run_dir 目录是否存在
+                if not os.path.isdir(bench_run_dir):
+                    logger.warning(f"Directory {bench_run_dir} not exist.")
+                    return []
+
                 # 查找符合前缀的目录
                 for run_dir in os.listdir(bench_run_dir):
                     if pattern.match(run_dir):
