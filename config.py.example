@@ -82,7 +82,7 @@ SPEC2017_REFTIME_MAP = {
     "619.lbm_s": {"test": ["619.lbm_s", "data", "test"], "train": ["619.lbm_s", "data", "train"], "ref": ["619.lbm_s", "data", "refspeed"]}, 
     "621.wrf_s": {"test": ["521.wrf_r", "data", "test"], "train": ["521.wrf_r", "data", "train"], "ref": ["521.wrf_r", "data", "refspeed"]}, 
     "627.cam4_s": {"test": ["527.cam4_r", "data", "test"], "train": ["527.cam4_r", "data", "train"], "ref": ["527.cam4_r", "data", "refspeed"]}, 
-    "628.pop2_s": {"test": ["628.pop2_r", "data", "test"], "train": ["628.pop2_r", "data", "train"], "ref": ["628.pop2_r", "data", "refspeed"]}, 
+    "628.pop2_s": {"test": ["628.pop2_s", "data", "test"], "train": ["628.pop2_s", "data", "train"], "ref": ["628.pop2_s", "data", "refspeed"]}, 
     "638.imagick_s": {"test": ["538.imagick_r", "data", "test"], "train": ["538.imagick_r", "data", "train"], "ref": ["538.imagick_r", "data", "refspeed"]}, 
     "644.nab_s": {"test": ["544.nab_r", "data", "test"], "train": ["544.nab_r", "data", "train"], "ref": ["544.nab_r", "data", "refspeed"]}, 
     "649.fotonik3d_s": {"test": ["549.fotonik3d_r", "data", "test"], "train": ["549.fotonik3d_r", "data", "train"], "ref": ["549.fotonik3d_r", "data", "refspeed"]}, 
