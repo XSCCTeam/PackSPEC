@@ -483,7 +483,8 @@ class PackSPEC:
             # 复制run目录到host_run_dir
             try:
                 logger.info(f"Cleaning {host_run_dir}")
-                shutil.rmtree(host_run_dir)
+                if os.path.isdir(host_run_dir):
+                    shutil.rmtree(host_run_dir)
                 os.makedirs(host_run_dir)
                 logger.info(f"From {src_run_dir} -to-> {host_run_dir}")
                 shutil.copytree(src_run_dir, host_run_dir, symlinks=True, dirs_exist_ok=True)
