@@ -86,7 +86,7 @@ SPEC2017_REFTIME_MAP = {
     "638.imagick_s": {"test": ["538.imagick_r", "data", "test"], "train": ["538.imagick_r", "data", "train"], "ref": ["538.imagick_r", "data", "refspeed"]}, 
     "644.nab_s": {"test": ["544.nab_r", "data", "test"], "train": ["544.nab_r", "data", "train"], "ref": ["544.nab_r", "data", "refspeed"]}, 
     "649.fotonik3d_s": {"test": ["549.fotonik3d_r", "data", "test"], "train": ["549.fotonik3d_r", "data", "train"], "ref": ["549.fotonik3d_r", "data", "refspeed"]}, 
-    "654.roms_s": {"test": ["654.roms_s", "data", "test"], "train": ["654.roms_s", "data", "train"], "ref": ["654.roms_s", "data", "refspeed"]}
+    "654.roms_s": {"test": ["554.roms_r", "data", "test"], "train": ["554.roms_r", "data", "train"], "ref": ["554.roms_r", "data", "refspeed"]}
 }
 
 SPEC2006_PATH = os.getenv('SPEC2006_DIR')
