@@ -93,11 +93,13 @@ SPEC2006_PATH = os.getenv('SPEC2006_DIR')
 if SPEC2006_PATH == None:
     SPEC2006_PATH = os.path.join(HOME_PATH, "<where you SPEC cpu 2006 installed>")
 SPEC2006_BENCH_PATH = os.path.join(SPEC2006_PATH, "benchspec", "CPU2006")
+SPEC2006_CONFIG_PATH = os.path.join(SPEC2006_PATH, "config")
 
 SPEC2017_PATH = os.getenv('SPEC2017_DIR')
 if SPEC2017_PATH == None:
     SPEC2017_PATH = os.path.join(HOME_PATH, "<where you SPEC cpu 2017 installed>")
 SPEC2017_BENCH_PATH = os.path.join(SPEC2017_PATH, "benchspec", "CPU")
+SPEC2017_CONFIG_PATH = os.path.join(SPEC2017_PATH, "config")
 
 #########################################
 # LLVM Configs

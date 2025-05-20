@@ -2,5 +2,6 @@
 /log/
 /packed_files/
 /spec_logs/
+/scripts/625_inputgen/625_host_run/
 config.py
 main.py

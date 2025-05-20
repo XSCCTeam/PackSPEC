@@ -221,9 +221,14 @@ class PackSPEC:
                 with open(reftime_path, 'r') as f:
                     reftime = f.readlines()
                     for reftime_line in reftime:
-                        if reftime_line.startswith(f"{input_type.name}{self.spec_mode.name}"):
-                            reftime_result = reftime_line.split(" ")[2].strip()
-                            break
+                        if input_type == InputType.ref:
+                            if reftime_line.startswith(f"{input_type.name}{self.spec_mode.name}"):
+                                reftime_result = reftime_line.split(" ")[2].strip()
+                                break
+                        else:
+                            if reftime_line.startswith(f"{input_type.name}"):
+                                reftime_result = reftime_line.split(" ")[2].strip()
+                                break
                 if reftime_result == "":
                     logger.error(f"Failed to get reftime from '{reftime_path}'")
                     exit(1)
@@ -252,7 +257,7 @@ class PackSPEC:
             logger.debug(f"Failed find spec log from '{spec_log_file}': {str(e)}")
             return ""
 
-    def get_bench_path(self, label: str, action_type: ActionType, tune_type: TuneType, input_type: InputType, spec_mode: SPECMode) -> list:
+    def get_bench_path(self, spec_bench_list: list, label: str, action_type: ActionType, tune_type: TuneType, input_type: InputType, spec_mode: SPECMode) -> list:
 
         """
         获取指定配置的基准测试路径
@@ -286,15 +291,19 @@ class PackSPEC:
                 # 运行目录格式：run_优化类型_输入类型_标签
                 bench_dir_perfix = f"{action_type.name}_{tune_type.name}_{input_type.name}_{label}"
             elif self.spec_name == SPECName.spec2017:
-                # 运行目录格式：run_优化类型_输入类型+模式_标签
-                bench_dir_perfix = f"{action_type.name}_{tune_type.name}_{input_type.name}{spec_mode.name}_{label}"
+                if input_type == InputType.ref:
+                    # 运行目录格式：run_优化类型_输入类型+模式_标签
+                    bench_dir_perfix = f"{action_type.name}_{tune_type.name}_{input_type.name}{spec_mode.name}_{label}"
+                else:
+                    # 运行目录格式：run_优化类型_输入类型_标签
+                    bench_dir_perfix = f"{action_type.name}_{tune_type.name}_{input_type.name}_{label}"
 
         selected_bench_dir = []
         
         # 遍历SPEC2017基准测试目录
         for bench_dir in os.listdir(self.spec_bench_path):
             # 检查是否为指定的基准测试集合
-            if bench_dir in self.spec_bench_list:
+            if bench_dir in spec_bench_list:
                 # 根据动作类型构建完整路径（build或run目录）
                 bench_run_dir = os.path.join(self.spec_bench_path, bench_dir, bench_parent_dir)
                 run_dir_path_list = []
@@ -329,9 +338,6 @@ class PackSPEC:
                     # 只找到一个符合条件的目录
                     selected_bench_dir.append(run_dir_path_list[0])
                     logger.debug(f"Bench {os.path.basename(bench_dir)} using {run_dir_path_list[0]}")
-            else:
-                # 不在指定的基准测试集合中，跳过
-                logger.debug(f"bench_dir: {bench_dir} not included.")
 
         return selected_bench_dir
 
@@ -389,7 +395,132 @@ class PackSPEC:
             assert label!= "", f"Label not found in file {spec_cfg_path}."
         return label
 
+    def host_625_inputgen(self, label: str, tune_type: TuneType, input_type: InputType):
+        bench_name = "625.x264_s"
+        logger.info(f"Generating input for {bench_name}")
+
+        inputgen_cfg_path = os.path.join(SCRIPTS_PATH, "625_inputgen", "PackSPEC_625inputgen.cfg")
+        
+        host_run_dir = os.path.join(SCRIPTS_PATH, "625_inputgen", "625_host_run")
+        host_setup_dir = self.get_bench_path([bench_name], "PackSPEC-x86-625_inputgen", 
+                    ActionType.run, tune_type, input_type, SPECMode.speed)
+        src_run_dir = get_bench_dir(bench_name, host_setup_dir)
+        src_bin = f"x264_s_{tune_type.name}.PackSPEC-x86-625_inputgen"
+        dest_bin = f"x264_s_{tune_type.name}.{label}"
+        output_log = []
+        
+        if src_run_dir == "" or not os.path.isdir(host_run_dir) or not os.listdir(host_run_dir):
+            # 复制inputgen.cfg到SPEC2017配置目录
+            try:
+                logger.debug(f"Copie {inputgen_cfg_path} to {SPEC2017_CONFIG_PATH}.")
+                shutil.copy2(inputgen_cfg_path, SPEC2017_CONFIG_PATH)
+            except Exception as e:
+                logger.error(f"Failed to copy {inputgen_cfg_path}: {str(e)}")
+                exit(1)
+
+            spec_setup_cmd = [
+                    self.setup_script_path, 
+                    "-p", self.spec_dir,
+                    "-c", "PackSPEC_625inputgen.cfg",
+                    "-t", tune_type.name,
+                    "-i", input_type.name,
+                    "-s", "625",
+                    "-n", str(self.iterations)
+                ]
+
+            # 执行setup_spec脚本，生成625.x264_s的run目录
+            try:
+                # 执行setup_spec脚本并实时输出
+                logger.info(f"Setup 625 from config: {inputgen_cfg_path}")
+                logger.debug(f"Executing command: {spec_setup_cmd}")
+                process = subprocess.Popen(
+                    spec_setup_cmd,
+                    cwd=P_PATH,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    text=True,
+                    bufsize=1  # 行缓冲
+                )
+
+                # 实时读取输出
+                while True:
+                    output = process.stdout
+                    if output is not None:
+                        output = output.readline()
+                        if output == '' and process.poll() is not None:
+                            break
+                        if output:
+                            logger.info(output.strip())
+                            output_log.append(output.strip())
+                
+                # 检查返回码
+                return_code = process.wait()
+                if return_code != 0:
+                    error = process.stderr
+                    if error is not None:
+                        error = error.read()
+                        logger.error(f"Command failed with error: {error}")
+                        exit(1)
+                
+                logger.success(f"Successfully setup 625 with {tune_type}_{input_type} from config: {inputgen_cfg_path}")
+            
+            except subprocess.CalledProcessError as e:
+                logger.error(f"Command failed with error: {e.stderr}")
+                exit(1)
+            except Exception as e:
+                logger.error(f"Failed to execute command: {str(e)}")
+                exit(1)
+
+            host_setup_dir = self.get_bench_path([bench_name], "PackSPEC-x86-625_inputgen", 
+                    ActionType.run, tune_type, input_type, SPECMode.speed)
+            src_run_dir = get_bench_dir(bench_name, host_setup_dir)
+
+            # 复制run目录到host_run_dir
+            try:
+                logger.info(f"Cleaning {host_run_dir}")
+                shutil.rmtree(host_run_dir)
+                os.makedirs(host_run_dir)
+                logger.info(f"From {src_run_dir} -to-> {host_run_dir}")
+                shutil.copytree(src_run_dir, host_run_dir, symlinks=True, dirs_exist_ok=True)
+                logger.debug(f"Copie {src_run_dir} run dir done.")
+            except Exception as e:
+                logger.error(f"Failed to copy {src_run_dir}: {str(e)}")
+                exit(1)
+
+        # 复制625.x264_s的二进制文件到host_run_dir
+        logger.info(f"Cleaning {bench_name} binary in {host_run_dir}")
+        for file in os.listdir(host_run_dir):
+            if file.startswith(self.spec_bench_map[bench_name]):
+                os.remove(os.path.join(host_run_dir, file))
+        target_setup_dir = self.get_bench_path(self.spec_bench_list, label, 
+                ActionType.build, tune_type, input_type, SPECMode.speed)
+        target_run_dir = get_bench_dir(bench_name, target_setup_dir)
+        build_binary_path = os.path.join(target_run_dir, self.spec_bench_map[bench_name])
+        target_binary_path = os.path.join(host_run_dir, dest_bin)
+        logger.info(f"Copying {bench_name}\n\tFrom {build_binary_path} -to-> {target_binary_path}")
+        try:
+            shutil.copy2(build_binary_path, target_binary_path)
+            logger.debug(f"Copie {bench_name} binary done.")
+        except Exception as e:
+            logger.error(f"Failed to copy {bench_name}: {str(e)}")
+            exit(1)
+        
+        # 生成run_test.sh
+        logger.info(f"Cleaning run_*.sh in {host_run_dir}")
+        for file in os.listdir(host_run_dir):
+            if file.startswith("run_") and file.endswith(".sh"):
+                os.remove(os.path.join(host_run_dir, file))
+        logger.info(f"Generating run_{input_type.name}.sh in {host_run_dir}")
+        if self.execute_specinvoke(src_run_dir, host_run_dir, input_type, (src_bin, dest_bin)):
+            logger.success(f"Successfully generated run_{input_type.name}.sh in {host_run_dir}")
+        else:
+            logger.error(f"Failed to generate run_test.sh in {host_run_dir}")
+            exit(1)
+
+        return output_log
+
     def run_setup_spec(self, spec_cfg: str, tune_type: TuneType, input_type: InputType, rebuild: bool = True):
+        output_log = []
         if self.spec_name == SPECName.spec2006:
             selected_benches = f"{' '.join([x.split('.')[0] for x in self.spec_bench_list])}"
 
@@ -400,19 +531,103 @@ class PackSPEC:
                 "-t", tune_type.name,
                 "-i", input_type.name,
                 "-s", selected_benches,
-                "-n", str(self.iterations)]
+                "-n", str(self.iterations)
+            ]
             if rebuild:
                 spec_setup_cmd.append(
                     "-r"
                 )
         elif self.spec_name == SPECName.spec2017:
-            # TODO: 完善SPEC2017 setup 脚本
-            spec_setup_cmd = f"{self.setup_script_path}"
-            logger.error(f"The SPEC2017 setup script has not been implemented yet.")
-            exit(1)
+            if "625.x264_s" in self.spec_bench_list:
+                logger.debug(f"Bench 625.x264_s in {self.spec_bench_list}, enable 2 stage setup.")
+                build_benches = ["625.x264_s"]
+                logger.info(f"Build {len(build_benches)} benches: {build_benches}")
+                selected_benches = f"{' '.join([x.split('.')[0] for x in build_benches])}"
+                spec_build_cmd = [
+                    self.setup_script_path,
+                    "-p", self.spec_dir,
+                    "-c", spec_cfg,
+                    "-a", "build",
+                    "-t", tune_type.name,
+                    "-i", input_type.name,
+                    "-s", selected_benches,
+                    "-n", str(self.iterations)
+                ]
+                if rebuild:
+                    spec_build_cmd.append(
+                        "-r"
+                    )
+
+                try:
+                    # 执行setup_spec脚本并实时输出
+                    logger.info(f"Build spec from config: {spec_cfg}")
+                    logger.debug(f"Executing command: {spec_build_cmd}")
+                    process = subprocess.Popen(
+                        spec_build_cmd,
+                        cwd=P_PATH,
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.PIPE,
+                        text=True,
+                        bufsize=1  # 行缓冲
+                    )
+
+                    # 实时读取输出
+                    while True:
+                        output = process.stdout
+                        if output is not None:
+                            output = output.readline()
+                            if output == '' and process.poll() is not None:
+                                break
+                            if output:
+                                logger.info(output.strip())
+                                output_log.append(output.strip())
+                    
+                    # 检查返回码
+                    return_code = process.wait()
+                    if return_code != 0:
+                        error = process.stderr
+                        if error is not None:
+                            error = error.read()
+                            logger.error(f"Command failed with error: {error}")
+                            exit(1)
+                    
+                    logger.success(f"Successfully build spec with {tune_type}_{input_type} from config: {spec_cfg}")
+                    spec_log_file = os.path.join(SPEC_LOG_PATH, f"{spec_cfg.replace('.cfg', '')}.{tune_type.name}_{input_type.name}.setuplog")
+                
+                except subprocess.CalledProcessError as e:
+                    logger.error(f"Command failed with error: {e.stderr}")
+                    exit(1)
+                except Exception as e:
+                    logger.error(f"Failed to execute command: {str(e)}")
+                    exit(1)
+
+                label = self.analyze_spec_config(spec_cfg)
+                output_log.extend(self.host_625_inputgen(label, tune_type, input_type))
+                
+                setup_benches = [bench for bench in self.spec_bench_list if bench != "625.x264_s"]
+            else:
+                build_benches = ""
+                setup_benches = self.spec_bench_list
+
+            logger.info(f"Setup {len(setup_benches)} benches: {setup_benches}")
+            selected_benches = f"{' '.join([x.split('.')[0] for x in setup_benches])}"
+
+            spec_setup_cmd = [
+                self.setup_script_path, 
+                "-p", self.spec_dir,
+                "-c", spec_cfg,
+                "-t", tune_type.name,
+                "-i", input_type.name,
+                "-s", selected_benches,
+                "-n", str(self.iterations)
+            ]
+            if rebuild:
+                spec_setup_cmd.append(
+                    "-r"
+                )
 
         try:
-            # 执行run_setup_spec脚本并实时输出
+            # 执行setup_spec脚本并实时输出
             logger.info(f"Setting up spec from config: {spec_cfg}")
             logger.debug(f"Executing command: {spec_setup_cmd}")
             
@@ -425,7 +640,6 @@ class PackSPEC:
                 bufsize=1  # 行缓冲
             )
 
-            output_log = []
             # 实时读取输出
             while True:
                 output = process.stdout
@@ -449,6 +663,7 @@ class PackSPEC:
             logger.success(f"Successfully setup spec with {tune_type}_{input_type} from config: {spec_cfg}")
             spec_log_file = os.path.join(SPEC_LOG_PATH, f"{spec_cfg.replace('.cfg', '')}.{tune_type.name}_{input_type.name}.setuplog")
             os.makedirs(SPEC_LOG_PATH, exist_ok=True)
+        
             with open(spec_log_file, "w") as f:
                 f.write("\n".join(output_log))
             return spec_log_file
@@ -459,6 +674,7 @@ class PackSPEC:
         except Exception as e:
             logger.error(f"Failed to execute command: {str(e)}")
             exit(1)
+
 
     def copy_binarys(self, label: str, tune_type: TuneType, input_type: InputType, spec_mode: SPECMode, dest_binary_dir: str = "") -> str:
         """
@@ -474,7 +690,7 @@ class PackSPEC:
         
         Returns:
             str: 返回最终使用的目标目录路径
-            
+        
         Note:
             1. 使用get_bench_path方法获取源基准测试目录
             2. 根据spec_bench选择不同的基准测试映射(spec_bench_map)
@@ -483,7 +699,7 @@ class PackSPEC:
             5. 如果目标目录不存在会自动创建
             6. 返回的目标目录路径可用于后续操作
         """
-        src_bench_dir = self.get_bench_path(label, ActionType.build, tune_type, input_type, spec_mode)
+        src_bench_dir = self.get_bench_path(self.spec_bench_list, label, ActionType.build, tune_type, input_type, spec_mode)
 
         os.makedirs(PACK_PATH, exist_ok=True)
         if dest_binary_dir == "":
@@ -560,8 +776,8 @@ class PackSPEC:
             OSError: 当复制过程中发生错误时抛出异常
         """
         if with_build:
-            src_build_bench_dir = self.get_bench_path(label, ActionType.build, tune_type, input_type, spec_mode)
-        src_run_bench_dir = self.get_bench_path(label, ActionType.run, tune_type, input_type, spec_mode)
+            src_build_bench_dir = self.get_bench_path(self.spec_bench_list, label, ActionType.build, tune_type, input_type, spec_mode)
+        src_run_bench_dir = self.get_bench_path(self.spec_bench_list, label, ActionType.run, tune_type, input_type, spec_mode)
 
         os.makedirs(PACK_PATH, exist_ok=True)
         if dest_bench_dir == "":
@@ -611,7 +827,7 @@ class PackSPEC:
             else:
                 logger.debug(f"Creating directory {dest_bench_dir} ")
                 os.makedirs(dest_bench_dir, exist_ok=False)
-
+ 
         dest_dir_list = []
         for bench_name in self.spec_bench_list:
             if with_build:
@@ -619,12 +835,18 @@ class PackSPEC:
                 if src_build_dir == "":
                     logger.warning(f"Cannot match '{bench_name}' from '{src_build_bench_dir}'")
                     continue
-            src_run_dir = get_bench_dir(bench_name, src_run_bench_dir)
+            if self.spec_name == SPECName.spec2017 and bench_name == "625.x264_s":
+                # 625.x264_s的run目录在625_inputgen目录下
+                logger.info(f"Bench 625.x264_s in {self.spec_bench_list}, use inputgen dir.")
+                src_run_dir = os.path.join(SCRIPTS_PATH, "625_inputgen", "625_host_run")
+            else:
+                src_run_dir = get_bench_dir(bench_name, src_run_bench_dir)
+
             if src_run_dir == "":
                 logger.warning(f"Cannot match '{bench_name}' from '{src_run_bench_dir}'")
                 continue
-            dest_dir = os.path.join(dest_bench_dir, bench_name)
 
+            dest_dir = os.path.join(dest_bench_dir, bench_name)
             logger.info(f"Copying {bench_name}\n")
             try:
                 if with_build:
@@ -639,11 +861,12 @@ class PackSPEC:
                 logger.error(f"Failed to copy {bench_name}: {str(e)}")
                 exit(1)
 
-            if self.execute_specinvoke(src_run_dir, dest_dir, input_type):
-                logger.success(f"Successfully generated run_{input_type.name}.sh in {dest_dir}")
-            else:
-                logger.error(f"Failed to generate run_test.sh in {dest_dir}")
-                exit(1)
+            if not self.spec_name == SPECName.spec2017 or not bench_name == "625.x264_s":
+                if self.execute_specinvoke(src_run_dir, dest_dir, input_type):
+                    logger.success(f"Successfully generated run_{input_type.name}.sh in {dest_dir}")
+                else:
+                    logger.error(f"Failed to generate run_test.sh in {dest_dir}")
+                    exit(1)
 
             self.create_test_script(label, bench_name, self.test_core_num, dest_dir, tune_type, input_type)
 
@@ -654,7 +877,7 @@ class PackSPEC:
             exit(1)
         return dest_dir_list
 
-    def execute_specinvoke(self, src_dir: str, dest_dir: str, input_type: InputType) -> bool:
+    def execute_specinvoke(self, src_dir: str, dest_dir: str, input_type: InputType, binary_name=("", "")) -> bool:
         """生成基准测试的运行脚本
         
         使用specinvoke命令生成运行脚本，并处理路径替换。
@@ -711,6 +934,9 @@ class PackSPEC:
                 line = line.replace(src_dir, ".")
                 # 替换目录名
                 line = line.replace(f"../{src_dir_name}/", f"./")
+                # 替换二进制文件名
+                if binary_name[0] != "":
+                    line = line.replace(binary_name[0], binary_name[1])
                 if not line.startswith("specinvoke"):
                     processed_commands.append(line)
             
@@ -1222,14 +1448,14 @@ class PackSPEC:
                 logger.error(f"Failed to create compile.env: {str(e)}")
 
 if __name__ == "__main__":
-    # packer = PackSPEC(
-    #     spec_name=SPECName.spec2006,
-    #     spec_benches="int",
-    #     tune_type=TuneType.base,
-    #     input_type=InputType.test,
-    #     iterations=3,
-    #     test_core_num=4
-    # )
-    # packer.get_ref_time("400.perlbench", InputType.test)
-    # packer.get_spec_log("/home/wll/PackSPEC/spec_logs/x86_llvm19_novec_wll.base_ref")
-    print(os.path.join(HOME_PATH, os.path.sep.join(SPEC2017_REFTIME_MAP["600.perlbench_s"]["test"])))
+    packer = PackSPEC(
+        spec_name=SPECName.spec2017,
+        spec_benches="625",
+        tune_type=TuneType.base,
+        input_type=InputType.ref,
+        spec_mode=SPECMode.speed,
+        iterations=3,
+        test_core_num=4,
+    )
+
+    packer.host_625_inputgen("jd-x60-llvm19.1.0-base", TuneType.base, InputType.ref)
