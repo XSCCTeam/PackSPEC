@@ -121,6 +121,7 @@ class PackSPEC:
                  rebuild: bool = True,
                  profile_gen: bool = False,
                  auto_mode: bool = False,
+                 host_mode: bool = False,
                  ):
         self.spec_name = spec_name
         self.tune_type = tune_type
@@ -128,6 +129,7 @@ class PackSPEC:
         self.spec_mode = spec_mode
         self.iterations = iterations
         self.auto_mode = auto_mode
+        self.host_mode = host_mode
         self.test_core_num = test_core_num
         self.rebuild = rebuild
         self.test_clock_rate = test_clock_rate
@@ -544,7 +546,7 @@ class PackSPEC:
                     "-r"
                 )
         elif self.spec_name == SPECName.spec2017:
-            if "625.x264_s" in self.spec_bench_list:
+            if not self.host_mode and "625.x264_s" in self.spec_bench_list:
                 logger.debug(f"Bench 625.x264_s in {self.spec_bench_list}, enable 2 stage setup.")
                 build_benches = ["625.x264_s"]
                 logger.info(f"Build {len(build_benches)} benches: {build_benches}")
@@ -841,7 +843,7 @@ class PackSPEC:
                 if src_build_dir == "":
                     logger.warning(f"Cannot match '{bench_name}' from '{src_build_bench_dir}'")
                     continue
-            if self.spec_name == SPECName.spec2017 and bench_name == "625.x264_s":
+            if not self.host_mode and self.spec_name == SPECName.spec2017 and bench_name == "625.x264_s":
                 # 625.x264_s的run目录在625_inputgen目录下
                 logger.info(f"Bench 625.x264_s in {self.spec_bench_list}, use inputgen dir.")
                 src_run_dir = os.path.join(SCRIPTS_PATH, "625_inputgen", "625_host_run")
@@ -867,7 +869,7 @@ class PackSPEC:
                 logger.error(f"Failed to copy {bench_name}: {str(e)}")
                 exit(1)
 
-            if not self.spec_name == SPECName.spec2017 or not bench_name == "625.x264_s":
+            if self.host_mode or not self.spec_name == SPECName.spec2017 or not bench_name == "625.x264_s":
                 if self.execute_specinvoke(src_run_dir, dest_dir, input_type):
                     logger.success(f"Successfully generated run_{input_type.name}.sh in {dest_dir}")
                 else:

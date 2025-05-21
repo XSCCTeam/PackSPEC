@@ -55,22 +55,27 @@ if __name__ == "__main__":
         # 仅在生成运行脚本时生效，不影响二进制打包
         test_core_num=4,
 
-        # 测试运行的 CPU 主频，用于算分，单位 GHz，默认为 1
-        # 仅在生成运行脚本时生效，不影响二进制打包
-        test_clock_rate=1,
+        # # 测试运行的 CPU 主频，用于算分，单位 GHz，默认为 1
+        # # 仅在生成运行脚本时生效，不影响二进制打包
+        # test_clock_rate=1,
 
-        # 在使用 spec 命令进行 setup 过程中是否强制 rebuild，默认为 True
-        # 仅在 setup_spec 过程中有效
+        # # 在使用 spec 命令进行 setup 过程中是否强制 rebuild，默认为 True
+        # # 仅在 setup_spec 过程中有效
         # rebuild=True,
 
-        # 是否以生成 profile 模式运行，默认为 False
-        # profile 生成模式只跑一次程序，iterations 将强制设置为 1
+        # # 是否以生成 profile 模式运行，默认为 False
+        # # profile 生成模式只跑一次程序，iterations 将强制设置为 1
         # profile_gen=False,
 
-        # 是否以自动模式运行, 用于配合其他脚本执行, 默认为 False
-        # 如果为 True, 程序将自动覆盖已存在的文件，无需用户确认
-        # 且生成的打包目录会以极简目录形式生成，且不包含日期
+        # # 是否以自动模式运行, 用于配合其他脚本执行, 默认为 False
+        # # 如果为 True, 程序将自动覆盖已存在的文件，无需用户确认
+        # # 且生成的打包目录会以极简目录形式生成，且不包含日期
         # auto_mode=False,
+
+        # # 是否以HOST模式运行，默认为 False
+        # # 仅在打包SPEC2017基准测试625.x264_s的时生效
+        # # HOST模式下，打包SPEC2017的625.x264_s的例子将不会单独生成input
+        # host_mode=False,
     )
 
     # SPEC config file name
