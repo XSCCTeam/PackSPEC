@@ -120,19 +120,11 @@ class PackSPEC:
                  test_clock_rate: float = 1,
                  rebuild: bool = True,
                  profile_gen: bool = False,
+                 perf_run: bool = False,
                  auto_mode: bool = False,
                  host_mode: bool = False,
                  ):
         self.spec_name = spec_name
-        self.tune_type = tune_type
-        self.input_type = input_type
-        self.spec_mode = spec_mode
-        self.iterations = iterations
-        self.auto_mode = auto_mode
-        self.host_mode = host_mode
-        self.test_core_num = test_core_num
-        self.rebuild = rebuild
-        self.test_clock_rate = test_clock_rate
         if self.spec_name == SPECName.spec2006:
             self.spec_dir = SPEC2006_PATH
             self.spec_bench_path = SPEC2006_BENCH_PATH
@@ -148,9 +140,25 @@ class PackSPEC:
             self.spec_run_dir = 'run'
             self.setup_script_path = os.path.join(SCRIPTS_PATH, "setup-spec17.sh")
         self.spec_bench_list = self.get_bench_list(spec_benches)
+        self.tune_type = tune_type
+        self.input_type = input_type
+        self.spec_mode = spec_mode
+        self.iterations = iterations
+        self.test_core_num = test_core_num
+        self.rebuild = rebuild
         self.profile_gen = profile_gen
         if self.profile_gen: # profile 生成模式只跑一次程序
             self.iterations = 1
+        self.perf_run = perf_run
+        if self.perf_run: # perf_run 模式只跑一次程序
+            self.iterations = 1
+        self.perf_command_template = [
+            "perf record -g -o {bench_name}.{idx}.perf.data {run_cmd}",
+            "perf report -n --stdio -i {bench_name}.{idx}.perf.data > {bench_name}.{idx}.perf_report.txt"
+            ]
+        self.auto_mode = auto_mode
+        self.host_mode = host_mode
+        self.test_clock_rate = test_clock_rate
 
     def get_bench_list(self, spec_benches: str):
         """
@@ -519,7 +527,7 @@ class PackSPEC:
             if file.startswith("run_") and file.endswith(".sh"):
                 os.remove(os.path.join(host_run_dir, file))
         logger.info(f"Generating run_{input_type.name}.sh in {host_run_dir}")
-        if self.execute_specinvoke(src_run_dir, host_run_dir, input_type, (src_bin, dest_bin)):
+        if self.execute_specinvoke(bench_name, src_run_dir, host_run_dir, input_type, (src_bin, dest_bin)):
             logger.success(f"Successfully generated run_{input_type.name}.sh in {host_run_dir}")
         else:
             logger.error(f"Failed to generate run_test.sh in {host_run_dir}")
@@ -870,7 +878,7 @@ class PackSPEC:
                 exit(1)
 
             if self.host_mode or not self.spec_name == SPECName.spec2017 or not bench_name == "625.x264_s":
-                if self.execute_specinvoke(src_run_dir, dest_dir, input_type):
+                if self.execute_specinvoke(bench_name, src_run_dir, dest_dir, input_type):
                     logger.success(f"Successfully generated run_{input_type.name}.sh in {dest_dir}")
                 else:
                     logger.error(f"Failed to generate run_test.sh in {dest_dir}")
@@ -885,7 +893,7 @@ class PackSPEC:
             exit(1)
         return dest_dir_list
 
-    def execute_specinvoke(self, src_dir: str, dest_dir: str, input_type: InputType, binary_name=("", "")) -> bool:
+    def execute_specinvoke(self, bench_name: str, src_dir: str, dest_dir: str, input_type: InputType, binary_name=("", "")) -> bool:
         """生成基准测试的运行脚本
         
         使用specinvoke命令生成运行脚本，并处理路径替换。
@@ -956,8 +964,31 @@ class PackSPEC:
             
             # 添加执行权限
             os.chmod(output_file, 0o755)
-            
+
             logger.success(f"Successfully created {output_file}")
+
+            if self.perf_run:
+                logger.info(f"Creating perf run script in {dest_dir}")
+                idx = 1
+                perf_commands = []
+                for line in processed_commands:
+                    if line.startswith("./"):
+                        for perf_command_temp in self.perf_command_template:
+                            perf_commands.append(perf_command_temp.format(run_cmd=line, bench_name=bench_name, idx=idx))
+                        idx += 1
+                    else:
+                        perf_commands.append(line)
+                
+                # 将输出写入run.sh文件
+                perf_output_file = os.path.join(dest_dir, f"perfrun_{input_type.name}.sh")
+                with open(perf_output_file, 'w') as f:
+                    f.write("#!/bin/bash\n")
+                    f.write("\n".join(perf_commands))  # 将处理后的命令写入文件
+                
+                # 添加执行权限
+                os.chmod(perf_output_file, 0o755)
+                logger.success(f"Successfully created {perf_output_file}")
+            
             return True
             
         except subprocess.CalledProcessError as e:
@@ -1010,17 +1041,38 @@ class PackSPEC:
             "",
         ])
 
-        script_content.extend([
-            f"chmod +x ./{self.spec_bench_map[bench_name]}_{tune_type.name}.{label}",
-            ""
-        ])
+        if self.perf_run:
+            perf_script_content = script_content.copy()
+            try:
+                shutil.copy2(os.path.join(SCRIPTS_PATH, "perf_report_to_csv.py"), dest_dir)
+                logger.debug(f"Copie perf_report_to_csv.py to {dest_dir}.")
+            except Exception as e:
+                logger.error(f"Failed to copy perf_report_to_csv.py to {dest_dir}: {str(e)}")
+                exit(1)
+            perf_script_content.extend([
+                f"chmod +x ./{self.spec_bench_map[bench_name]}_{tune_type.name}.{label}",
+                "",
+                f"echo -e '\\nPerfRunning {bench_name}...' | tee -a \"$LOG_FILE\"",
+                f"./perfrun_{input_type.name}.sh 2>&1 | tee -a \"$LOG_FILE\"",
+                f"echo -e '{bench_name} completed ' | tee -a \"$LOG_FILE\"",
+                "",
+                "for file in *.perf_report.txt; do",
+                "    if [ -f \"$file\" ]; then",
+                "        python3 perf_report_to_csv.py -i \"$file\" -o \"${file%.perf_report.txt}.perf_report.csv\"",
+                "    fi",
+                "done",
+                ""
+            ])
 
         script_content.extend([
+            f"chmod +x ./{self.spec_bench_map[bench_name]}_{tune_type.name}.{label}",
+            "",
             f"echo -e '\\nRunning {bench_name}...' | tee -a \"$LOG_FILE\"",
             f"echo -e 'Reftime: {self.get_ref_time(bench_name, input_type)}' | tee -a \"$LOG_FILE\"",
             f"for i in $(seq 1 $TEST_TIMES); do",
             f"    echo \"Test {bench_name} #$i:\" | tee -a \"$LOG_FILE\"",
         ])
+
         if core_num != -1:
             script_content.append(
                 f"    (time -p taskset -c $CORE_NUM bash run_{input_type.name}.sh) 2>&1 | tee -a \"$LOG_FILE\""
@@ -1029,12 +1081,13 @@ class PackSPEC:
             script_content.append(
                 f"    (time -p bash run_{input_type.name}.sh) 2>&1 | tee -a \"$LOG_FILE\""
             )
+
         script_content.extend([
             f"done",
             f"echo -e '{bench_name} completed ' | tee -a \"$LOG_FILE\"",
             ""
         ])
-        
+    
         try:
             shutil.copy2(os.path.join(SCRIPTS_PATH, "cal_score.py"), dest_dir)
             logger.debug(f"Copie cal_score.py to {dest_dir}.")
@@ -1090,12 +1143,20 @@ class PackSPEC:
                     f"     --md_path \"score.txt\" \\",
                     f"     --at_mobiles \"{BOSC_AT_USER}\"",
                 ])
+            if self.perf_run:
+                perf_script_content.extend([
+                    f"HOST_NAME=$(hostname)",
+                    f"curl -X POST \"http://172.38.8.102:8848/send-message\" \\",
+                    f"     -H \"api-key: {BOSC_API_KEY}\" \\",
+                    f"     -H \"Content-Type: application/json\" \\",
+                    f"     -d \"{{\\\"content\\\": \\\"在 $HOST_NAME 上的 {bench_name}.{label}.{tune_type.name}_{input_type.name} perf 收集完成喵！\\\\n【来自李扬的 HUAWEI Pure 70 Pro Max】\\\", \\\"at_user_ids\\\": [\\\"{BOSC_AT_USER}\\\"]}}\""
+                ])
         else:
-            script_content.extend([
-                f"chmod +x cal_score.py",
-                f"./cal_score.py $LOG_FILE {self.test_clock_rate}"
-            ])
-
+            if not self.profile_gen: 
+                script_content.extend([
+                    f"chmod +x cal_score.py",
+                    f"./cal_score.py $LOG_FILE {self.test_clock_rate}"
+                ])
 
         # 写入脚本文件
         with open(run_test_script, 'w') as f:
@@ -1104,6 +1165,15 @@ class PackSPEC:
         # 添加执行权限
         os.chmod(run_test_script, 0o700)
         logger.info(f"Created test_{input_type.name}.sh script at {run_test_script}")
+
+        if self.perf_run:
+            perfrun_test_script = os.path.join(dest_dir, f"perftest_{input_type.name}.sh")
+            # 写入脚本文件
+            with open(perfrun_test_script, 'w') as f:
+                f.write("\n".join(perf_script_content))
+                # 添加执行权限
+            os.chmod(perfrun_test_script, 0o700)
+            logger.info(f"Created perftest_{input_type.name}.sh script at {perfrun_test_script}")
         
 
     def create_run_all_script(self, label: str, core_num: int, buildrun_bench_dir_list: list, tune_type: TuneType, input_type: InputType, iterations: int = 0):
@@ -1159,14 +1229,33 @@ class PackSPEC:
             "# 运行每个基准测试",
         ])
         
+        if self.perf_run:
+            perf_script_content = script_content.copy()
+
         for bench_dir in buildrun_bench_dir_list:
             bench_name = os.path.basename(bench_dir)
             
+            if self.perf_run:
+                perf_script_content.extend([
+                    f"echo -e '\\nPerfRunning {bench_name}...' | tee -a \"$LOG_FILE\"",
+                    f"cd {bench_name}",
+                    f"./perfrun_{input_type.name}.sh 2>&1 | tee -a \"$LOG_FILE\"",
+                    "for file in *.perf_report.txt; do",
+                    "    if [ -f \"$file\" ]; then",
+                    "        python3 perf_report_to_csv.py -i \"$file\" -o \"${file%.perf_report.txt}.perf_report.csv\"",
+                    "    fi",
+                    "done",
+                    f"echo -e '{bench_name} completed'| tee -a \"$LOG_FILE\"",
+                    "cd $SCRIPT_DIR",
+                    "",
+                ])
+
             script_content.extend([
                 f"echo -e '\\nRunning {bench_name}...' | tee -a \"$LOG_FILE\"",
                 f"echo -e 'Reftime: {self.get_ref_time(bench_name, input_type)}' | tee -a \"$LOG_FILE\"",
                 f"cd {bench_name}"
             ])
+
             if self.profile_gen:
                 script_content.extend([
                     "# 生成profile文件避免覆盖",
@@ -1188,7 +1277,7 @@ class PackSPEC:
             script_content.extend([
                 f"done",
                 f"echo -e '{bench_name} completed ' | tee -a \"$LOG_FILE\"",
-                "cd \"$SCRIPT_DIR\"",
+                "cd $SCRIPT_DIR",
                 ""
             ])
         
@@ -1197,6 +1286,13 @@ class PackSPEC:
             "echo \"Finished at $(date)\" | tee -a \"$LOG_FILE\"",
             ""
         ])
+
+        if self.perf_run:
+            perf_script_content.extend([
+                "echo -e '\\nAll benchmarks completed' | tee -a \"$LOG_FILE\"",
+                "echo \"Finished at $(date)\" | tee -a \"$LOG_FILE\"",
+                ""
+            ])
 
         try:
             shutil.copy2(os.path.join(SCRIPTS_PATH, "cal_score.py"), parent_dir)
@@ -1221,6 +1317,20 @@ class PackSPEC:
             with open(os.path.join(parent_dir, "collect_profiles.sh"), 'w') as f:
                 f.write(collect_profiles_template)
             os.chmod(os.path.join(parent_dir, "collect_profiles.sh"), 0o700)
+
+        if self.perf_run:
+            try:
+                shutil.copy2(os.path.join(SCRIPTS_PATH, "collect_perf_report.sh"), parent_dir)
+                logger.debug(f"Copie collect_perf_report.sh to {parent_dir}.")
+
+                perf_script_content.extend([
+                    "./collect_perf_report.sh",
+                    ""
+                ])
+
+            except Exception as e:
+                logger.error(f"Failed to collect_perf_report.sh to {parent_dir}: {str(e)}")
+                exit(1)
 
         if BOSC_API_KEY != None and BOSC_AT_USER != None:
             if self.profile_gen:
@@ -1258,6 +1368,15 @@ class PackSPEC:
                     f"     --md_path \"score.txt\" \\",
                     f"     --at_mobiles \"{BOSC_AT_USER}\"",
                 ])
+            if self.perf_run:
+                perf_script_content.extend([
+                    f"HOST_NAME=$(hostname)",
+                    f"curl -X POST \"http://172.38.8.102:8848/send-message\" \\",
+                    f"     -H \"api-key: {BOSC_API_KEY}\" \\",
+                    f"     -H \"Content-Type: application/json\" \\",
+                    f"     -d \"{{\\\"content\\\": \\\"在 $HOST_NAME 上的 {label}.{tune_type.name}_{input_type.name} perf 执行完成喵！\\\\n【来自李扬的 HUAWEI Pure 70 Pro Max】\\\", \\\"at_user_ids\\\": [\\\"{BOSC_AT_USER}\\\"]}}\"",
+                    ""
+                ])
         else:
             if self.profile_gen:
                 script_content.extend([
@@ -1277,6 +1396,15 @@ class PackSPEC:
         # 添加执行权限
         os.chmod(run_all_script, 0o700)
         logger.success(f"Successfully created run_all script at {run_all_script}")
+
+        if self.perf_run:
+            perfrun_all_script = os.path.join(parent_dir, "perfrun_all.sh")
+            # 写入脚本文件
+            with open(perfrun_all_script, 'w') as f:
+                f.write("\n".join(perf_script_content))
+                # 添加执行权限
+            os.chmod(perfrun_all_script, 0o700)
+            logger.info(f"Created perfrun_all_{input_type.name}.sh script at {perfrun_all_script}")
 
     def setup_spec(self, spec_cfg: str):
         if self.tune_type == TuneType.all:
@@ -1445,6 +1573,7 @@ class PackSPEC:
                     logger.debug(f"Failed to copy spec log from {spec_log} to {buildrun_bench_dir}: {str(e)}")
             else:
                 logger.debug(f"Not find spec log from {spec_log}.")
+
             try:
                 logger.info(f"Create compile.env to record compile environment.")
                 with open(os.path.join(buildrun_bench_dir, "compile.env"), 'w') as f:
