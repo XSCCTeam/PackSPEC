@@ -1,6 +1,5 @@
 from config import *
 from pack_utils import *
-from enum import Enum
 import shutil
 import os
 import re
@@ -8,71 +7,6 @@ import subprocess
 import datetime
 
 CURRENT_DATE = datetime.datetime.now().strftime("%y%m%d")
-
-class ActionType(Enum):
-    """
-    SPEC基准测试动作类型枚举类
-    
-    定义SPEC基准测试的不同操作阶段类型
-    
-    Attributes:
-        build (int): 构建阶段，对应值1
-        run (int): 运行阶段，对应值2
-    
-    Note:
-        用于指定SPEC基准测试的执行阶段，build阶段编译测试程序，run阶段运行测试程序
-    """
-    build = 1
-    run = 2
-
-class TuneType(Enum):
-    """
-    SPEC基准测试优化类型枚举类
-    
-    定义SPEC基准测试的不同优化级别
-    
-    Attributes:
-        base (int): 基础优化级别，对应值1
-        peak (int): 峰值优化级别，对应值2
-    
-    Note:
-        base级别使用标准优化，peak级别使用更激进的优化策略
-    """
-    base = 1
-    peak = 2
-    all = 3
-
-class InputType(Enum):
-    """
-    SPEC基准测试输入类型枚举类
-    
-    定义SPEC基准测试的不同输入数据集类型
-    
-    Attributes:
-        test (int): 测试输入数据集，对应值1
-        train (int): 训练输入数据集，对应值2
-        ref (int): 参考输入数据集，对应值3
-    
-    Note:
-        test数据集最小，用于快速验证；train数据集中等大小；ref数据集最大，用于正式测试
-    """
-    test = 1
-    train = 2
-    ref = 3
-    all = 4
-
-class SPECName(Enum):
-    spec2006 = 1
-    spec2017 = 2
-
-class SPECSubBench(Enum):
-    all = 1
-    int = 2
-    fp = 3
-
-class SPECMode(Enum):
-    speed = 1
-    rate = 2
 
 class PackSPEC:
     """
@@ -116,6 +50,7 @@ class PackSPEC:
                  auto_mode: bool = False,
                  host_mode: bool = False,
                  ):
+        self.utils = PackUtils(logger)
         self.spec_name = spec_name
         if self.spec_name == SPECName.spec2006:
             self.spec_dir = SPEC2006_PATH
@@ -415,7 +350,7 @@ class PackSPEC:
         host_run_dir = os.path.join(SCRIPTS_PATH, "625_inputgen", "625_host_run")
         host_setup_dir = self.get_bench_path([bench_name], "PackSPEC-x86-625_inputgen", 
                     ActionType.run, tune_type, input_type, SPECMode.speed)
-        src_run_dir = get_bench_dir(bench_name, host_setup_dir)
+        src_run_dir = self.utils.get_bench_dir(bench_name, host_setup_dir)
         src_bin = f"x264_s_{tune_type.name}.PackSPEC-x86-625_inputgen"
         dest_bin = f"x264_s_{tune_type.name}.{label}"
         output_log = []
@@ -484,7 +419,7 @@ class PackSPEC:
 
             host_setup_dir = self.get_bench_path([bench_name], "PackSPEC-x86-625_inputgen", 
                     ActionType.run, tune_type, input_type, SPECMode.speed)
-            src_run_dir = get_bench_dir(bench_name, host_setup_dir)
+            src_run_dir = self.utils.get_bench_dir(bench_name, host_setup_dir)
 
             # 复制run目录到host_run_dir
             try:
@@ -506,7 +441,7 @@ class PackSPEC:
                 os.remove(os.path.join(host_run_dir, file))
         target_setup_dir = self.get_bench_path([bench_name], label, 
                 ActionType.build, tune_type, input_type, SPECMode.speed)
-        target_run_dir = get_bench_dir(bench_name, target_setup_dir)
+        target_run_dir = self.utils.get_bench_dir(bench_name, target_setup_dir)
         build_binary_path = os.path.join(target_run_dir, self.spec_bench_map[bench_name])
         target_binary_path = os.path.join(host_run_dir, dest_bin)
         logger.info(f"Copying {bench_name}\n\tFrom {build_binary_path} -to-> {target_binary_path}")
@@ -843,7 +778,7 @@ class PackSPEC:
         dest_dir_list = []
         for bench_name in self.spec_bench_list:
             if with_build:
-                src_build_dir = get_bench_dir(bench_name, src_build_bench_dir)
+                src_build_dir = self.utils.get_bench_dir(bench_name, src_build_bench_dir)
                 if src_build_dir == "":
                     logger.warning(f"Cannot match '{bench_name}' from '{src_build_bench_dir}'")
                     continue
@@ -852,7 +787,7 @@ class PackSPEC:
                 logger.info(f"Bench 625.x264_s in {self.spec_bench_list}, use inputgen dir.")
                 src_run_dir = os.path.join(SCRIPTS_PATH, "625_inputgen", "625_host_run")
             else:
-                src_run_dir = get_bench_dir(bench_name, src_run_bench_dir)
+                src_run_dir = self.utils.get_bench_dir(bench_name, src_run_bench_dir)
 
             if src_run_dir == "":
                 logger.warning(f"Cannot match '{bench_name}' from '{src_run_bench_dir}'")
@@ -907,93 +842,71 @@ class PackSPEC:
 
         src_dir_name = os.path.basename(src_dir)
 
-        try:
-            # 切换到目标目录
-            logger.debug(f"Changing directory to {dest_dir}")
-            
-            # 执行specinvoke命令并捕获输出
-            logger.debug(f"Executing command: {specinvoke_cmd}")
-            result = subprocess.run(
-                specinvoke_cmd.split(),
-                cwd=dest_dir,
-                capture_output=True,
-                text=True,
-                check=True
-            )
+        commands = self.utils.execute_commands(specinvoke_cmd, dest_dir)
+        start_index = -1
+        
+        # 查找第一次出现"# Starting run"的行
+        for i, line in enumerate(commands):
+            if line.strip().startswith("# Starting run"):
+                start_index = i
+                break
+        
+        # 如果找到了起始行，只保留该行及其后面的内容
+        if start_index != -1:
+            commands = commands[start_index:]
+        else:
+            logger.warning("No '# Starting run' found in command output")
 
-            # 处理命令输出
-            commands = result.stdout.split("\n")
-            start_index = -1
-            
-            # 查找第一次出现"# Starting run"的行
-            for i, line in enumerate(commands):
-                if line.strip().startswith("# Starting run"):
-                    start_index = i
-                    break
-            
-            # 如果找到了起始行，只保留该行及其后面的内容
-            if start_index != -1:
-                commands = commands[start_index:]
-            else:
-                logger.warning("No '# Starting run' found in command output")
+        # 替换路径和目录名
+        processed_commands = []
+        for line in commands:
+            # 删除cd本目录命令
+            line = line.replace(f"cd {src_dir}", "")
+            # 替换完整路径
+            line = line.replace(src_dir, ".")
+            # 替换目录名
+            line = line.replace(f"../{src_dir_name}/", f"./")
+            # 替换二进制文件名
+            if binary_name[0] != "":
+                line = line.replace(binary_name[0], binary_name[1])
+            if not line.startswith("specinvoke"):
+                processed_commands.append(line)
+        
+        # 将输出写入run.sh文件
+        output_file = os.path.join(dest_dir, f"run_{input_type.name}.sh")
+        with open(output_file, 'w') as f:
+            f.write("#!/bin/bash\n")
+            f.write("\n".join(processed_commands))  # 将处理后的命令写入文件
+        
+        # 添加执行权限
+        os.chmod(output_file, 0o755)
 
-            # 替换路径和目录名
-            processed_commands = []
-            for line in commands:
-                # 删除cd本目录命令
-                line = line.replace(f"cd {src_dir}", "")
-                # 替换完整路径
-                line = line.replace(src_dir, ".")
-                # 替换目录名
-                line = line.replace(f"../{src_dir_name}/", f"./")
-                # 替换二进制文件名
-                if binary_name[0] != "":
-                    line = line.replace(binary_name[0], binary_name[1])
-                if not line.startswith("specinvoke"):
-                    processed_commands.append(line)
+        logger.success(f"Successfully created {output_file}")
+
+        if self.perf_run:
+            logger.info(f"Creating perf run script in {dest_dir}")
+            idx = 1
+            perf_commands = []
+            for line in processed_commands:
+                if line.startswith("./"):
+                    for perf_command_temp in self.perf_command_template:
+                        perf_commands.append(perf_command_temp.format(run_cmd=line, bench_name=bench_name, idx=idx))
+                    idx += 1
+                else:
+                    perf_commands.append(line)
             
             # 将输出写入run.sh文件
-            output_file = os.path.join(dest_dir, f"run_{input_type.name}.sh")
-            with open(output_file, 'w') as f:
+            perf_output_file = os.path.join(dest_dir, f"perfrun_{input_type.name}.sh")
+            with open(perf_output_file, 'w') as f:
                 f.write("#!/bin/bash\n")
-                f.write("\n".join(processed_commands))  # 将处理后的命令写入文件
+                f.write("\n".join(perf_commands))  # 将处理后的命令写入文件
             
             # 添加执行权限
-            os.chmod(output_file, 0o755)
+            os.chmod(perf_output_file, 0o755)
+            logger.success(f"Successfully created {perf_output_file}")
+        
+        return True
 
-            logger.success(f"Successfully created {output_file}")
-
-            if self.perf_run:
-                logger.info(f"Creating perf run script in {dest_dir}")
-                idx = 1
-                perf_commands = []
-                for line in processed_commands:
-                    if line.startswith("./"):
-                        for perf_command_temp in self.perf_command_template:
-                            perf_commands.append(perf_command_temp.format(run_cmd=line, bench_name=bench_name, idx=idx))
-                        idx += 1
-                    else:
-                        perf_commands.append(line)
-                
-                # 将输出写入run.sh文件
-                perf_output_file = os.path.join(dest_dir, f"perfrun_{input_type.name}.sh")
-                with open(perf_output_file, 'w') as f:
-                    f.write("#!/bin/bash\n")
-                    f.write("\n".join(perf_commands))  # 将处理后的命令写入文件
-                
-                # 添加执行权限
-                os.chmod(perf_output_file, 0o755)
-                logger.success(f"Successfully created {perf_output_file}")
-            
-            return True
-            
-        except subprocess.CalledProcessError as e:
-            logger.error(f"Command failed with error: {e.stderr}")
-            exit(1)
-
-        except Exception as e:
-            logger.error(f"Failed to execute command: {str(e)}")
-            exit(1)
 
     def create_test_script(self, label: str, bench_name: str, core_num: int, 
                             dest_dir: str, tune_type: TuneType, input_type: InputType, iterations: int = 0):
@@ -1062,6 +975,7 @@ class PackSPEC:
 
         script_content.extend([
             f"chmod +x ./{self.spec_bench_map[bench_name]}_{tune_type.name}.{label}",
+            f"chmod +x ./run_{input_type.name}.sh",
             "",
             f"echo -e '\\nRunning {bench_name}...' | tee -a \"$LOG_FILE\"",
             f"echo -e 'Reftime: {self.get_ref_time(bench_name, input_type)}' | tee -a \"$LOG_FILE\"",
@@ -1083,76 +997,39 @@ class PackSPEC:
             f"echo -e '{bench_name} completed ' | tee -a \"$LOG_FILE\"",
             ""
         ])
-    
-        try:
-            shutil.copy2(os.path.join(SCRIPTS_PATH, "cal_score.py"), dest_dir)
-            logger.debug(f"Copie cal_score.py to {dest_dir}.")
-        except Exception as e:
-            logger.error(f"Failed to cal_score.py to {dest_dir}: {str(e)}")
-            exit(1)
-        
-        try:
-            shutil.copy2(os.path.join(SCRIPTS_PATH, "send_md_message.py"), dest_dir)
-            logger.debug(f"Copie send_md_message.py to {dest_dir}.")
-        except Exception as e:
-            logger.error(f"Failed to send_md_message.py to {dest_dir}: {str(e)}")
-            exit(1)
 
         if self.profile_gen:
-            merge_profile_template = ""
-            with open(os.path.join(SCRIPTS_PATH, "merge_profile.sh.template"), "r") as f:
-                merge_profile_template = f.read()
-            if DEFAULT_LLVM_PROFDATA_PATH != "":
-                merge_profile_template = merge_profile_template.replace("<your llvm-profdata abspath>", DEFAULT_LLVM_PROFDATA_PATH)
-            with open(os.path.join(dest_dir, "merge_profile.sh"), 'w') as f:
-                f.write(merge_profile_template)
-            os.chmod(os.path.join(dest_dir, "merge_profile.sh"), 0o700)
+            self.utils.use_template_to_create_script(
+                "merge_profile.sh.template", 
+                dest_dir, 
+                {"<your llvm-profdata abspath>": DEFAULT_LLVM_PROFDATA_PATH}
+            )
 
         if BOSC_API_KEY != None and BOSC_AT_USER != None:
             if self.profile_gen:
-                script_content.extend([
-                    f"HOST_NAME=$(hostname)",
-                    f"curl -X POST \"http://172.38.8.102:8848/send-message\" \\",
-                    f"     -H \"api-key: {BOSC_API_KEY}\" \\",
-                    f"     -H \"Content-Type: application/json\" \\",
-                    f"     -d \"{{\\\"content\\\": \\\"在 $HOST_NAME 上的 {bench_name}.{label}.{tune_type.name}_{input_type.name} Profile 生成完成喵！\\\\n【来自李扬的 HUAWEI Pure 70 Pro Max】\\\", \\\"at_user_ids\\\": [\\\"{BOSC_AT_USER}\\\"]}}\""
-                ])
+                # 发送完成消息
+                message = f"在 $HOST_NAME 上的 {bench_name}.{label}.{tune_type.name}_{input_type.name} Profile 生成完成喵！"
+                script_content.append(f"HOST_NAME=$(hostname)")
+                script_content.extend(self.utils.commands_to_send_message(message))
             else:
-                script_content.extend([
-                    f"HOST_NAME=$(hostname)",
-                    f"curl -X POST \"http://172.38.8.102:8848/send-message\" \\",
-                    f"     -H \"api-key: {BOSC_API_KEY}\" \\",
-                    f"     -H \"Content-Type: application/json\" \\",
-                    f"     -d \"{{\\\"content\\\": \\\"在 $HOST_NAME 上的 {bench_name}.{label}.{tune_type.name}_{input_type.name} 测试完成喵！\\\\n【来自李扬的 HUAWEI Pure 70 Pro Max】\\\", \\\"at_user_ids\\\": [\\\"{BOSC_AT_USER}\\\"]}}\"",
-                    "",
-                    f"chmod +x cal_score.py",
-                    f"./cal_score.py $LOG_FILE {self.test_clock_rate} | tee score.txt",
-                    f""
-                ])
+                # 发送完成消息
+                message = f"在 $HOST_NAME 上的 {bench_name}.{label}.{tune_type.name}_{input_type.name} 测试完成喵！"
+                script_content.append(f"HOST_NAME=$(hostname)")
+                script_content.extend(self.utils.commands_to_send_message(message))
+                # 计算分数
+                script_content.extend(self.utils.commands_to_cal_score(dest_dir, self.test_clock_rate, "score.txt"))
+                # 发送分数
                 title_message = f"{bench_name}.{label}.{tune_type.name}_{input_type.name} 测试结果"
                 text_message = f"在 $HOST_NAME 上的 {bench_name}.{label}.{tune_type.name}_{input_type.name} 测试结果喵："
-                script_content.extend([
-                    f"chmod +x send_md_message.py",
-                    f"./send_md_message.py --api_key {BOSC_API_KEY} \\",
-                    f"     --title \"{title_message}\" \\",
-                    f"     --text \"{text_message}\" \\",
-                    f"     --md_path \"score.txt\" \\",
-                    f"     --at_mobiles \"{BOSC_AT_USER}\"",
-                ])
+                script_content.extend(self.utils.commands_to_send_md_message(dest_dir, title_message, text_message, "score.txt"))
             if self.perf_run:
-                perf_script_content.extend([
-                    f"HOST_NAME=$(hostname)",
-                    f"curl -X POST \"http://172.38.8.102:8848/send-message\" \\",
-                    f"     -H \"api-key: {BOSC_API_KEY}\" \\",
-                    f"     -H \"Content-Type: application/json\" \\",
-                    f"     -d \"{{\\\"content\\\": \\\"在 $HOST_NAME 上的 {bench_name}.{label}.{tune_type.name}_{input_type.name} perf 收集完成喵！\\\\n【来自李扬的 HUAWEI Pure 70 Pro Max】\\\", \\\"at_user_ids\\\": [\\\"{BOSC_AT_USER}\\\"]}}\""
-                ])
+                # 发送完成消息
+                message = f"在 $HOST_NAME 上的 {bench_name}.{label}.{tune_type.name}_{input_type.name} perf 收集完成喵！"
+                script_content.append(f"HOST_NAME=$(hostname)")
+                script_content.extend(self.utils.commands_to_send_message(message))
         else:
-            if not self.profile_gen: 
-                script_content.extend([
-                    f"chmod +x cal_score.py",
-                    f"./cal_score.py $LOG_FILE {self.test_clock_rate}"
-                ])
+            # 计算分数
+            script_content.extend(self.utils.commands_to_cal_score(dest_dir, self.test_clock_rate))
 
         # 写入脚本文件
         with open(run_test_script, 'w') as f:
@@ -1197,7 +1074,7 @@ class PackSPEC:
         script_content = [
             "#!/bin/bash",
             "",
-            # 检查 curl 是否安装
+            "# 检查 curl 是否安装",
             "if ! command -v curl &> /dev/null",
             "then",
             "    echo \"ERROR! curl is not installed.\"",
@@ -1208,7 +1085,7 @@ class PackSPEC:
             "",
             "# 获取脚本所在目录的绝对路径",
             "SCRIPT_DIR=$(pwd)",
-            "LOG_FILE=\"$SCRIPT_DIR/run_all.log\""
+            "LOG_FILE=${SCRIPT_DIR}/run_all.log"
         ]
         if core_num!= -1:
             script_content.append(
@@ -1290,30 +1167,6 @@ class PackSPEC:
                 ""
             ])
 
-        try:
-            shutil.copy2(os.path.join(SCRIPTS_PATH, "cal_score.py"), parent_dir)
-            logger.debug(f"Copie cal_score.py to {parent_dir}.")
-        except Exception as e:
-            logger.error(f"Failed to cal_score.py to {parent_dir}: {str(e)}")
-            exit(1)
-
-        try:
-            shutil.copy2(os.path.join(SCRIPTS_PATH, "send_md_message.py"), parent_dir)
-            logger.debug(f"Copie send_md_message.py to {parent_dir}.")
-        except Exception as e:
-            logger.error(f"Failed to send_md_message.py to {parent_dir}: {str(e)}")
-            exit(1)
-
-        if self.profile_gen:
-            collect_profiles_template = ""
-            with open(os.path.join(SCRIPTS_PATH, "collect_profiles.sh.template"), "r") as f:
-                collect_profiles_template = f.read()
-            if DEFAULT_LLVM_PROFDATA_PATH != "":
-                collect_profiles_template = collect_profiles_template.replace("<your llvm-profdata abspath>", DEFAULT_LLVM_PROFDATA_PATH)
-            with open(os.path.join(parent_dir, "collect_profiles.sh"), 'w') as f:
-                f.write(collect_profiles_template)
-            os.chmod(os.path.join(parent_dir, "collect_profiles.sh"), 0o700)
-
         if self.perf_run:
             try:
                 shutil.copy2(os.path.join(SCRIPTS_PATH, "collect_perf_report.sh"), parent_dir)
@@ -1330,60 +1183,34 @@ class PackSPEC:
 
         if BOSC_API_KEY != None and BOSC_AT_USER != None:
             if self.profile_gen:
-                script_content.extend([
-                    f"chmod +x collect_profiles.sh",
-                    f"./collect_profiles.sh",
-                    f""
-                ])
-                script_content.extend([
-                    f"HOST_NAME=$(hostname)",
-                    f"curl -X POST \"http://172.38.8.102:8848/send-message\" \\",
-                    f"     -H \"api-key: {BOSC_API_KEY}\" \\",
-                    f"     -H \"Content-Type: application/json\" \\",
-                    f"     -d \"{{\\\"content\\\": \\\"在 $HOST_NAME 上的 {label}.{tune_type.name}_{input_type.name} Profile 生成完成喵！\\\\n【来自李扬的 HUAWEI Pure 70 Pro Max】\\\", \\\"at_user_ids\\\": [\\\"{BOSC_AT_USER}\\\"]}}\""
-                ])
+                # 收集profile
+                self.utils.commands_to_collect_profiles(parent_dir)
+                # 发送完成消息
+                message = f"在 $HOST_NAME 上的 {label}.{tune_type.name}_{input_type.name} Profile 生成完成喵！"
+                script_content.append(f"HOST_NAME=$(hostname)")
+                script_content.extend(self.utils.commands_to_send_message(message))
             else:
-                script_content.extend([
-                    f"HOST_NAME=$(hostname)",
-                    f"curl -X POST \"http://172.38.8.102:8848/send-message\" \\",
-                    f"     -H \"api-key: {BOSC_API_KEY}\" \\",
-                    f"     -H \"Content-Type: application/json\" \\",
-                    f"     -d \"{{\\\"content\\\": \\\"在 $HOST_NAME 上的 {label}.{tune_type.name}_{input_type.name} 测试完成喵！\\\\n【来自李扬的 HUAWEI Pure 70 Pro Max】\\\", \\\"at_user_ids\\\": [\\\"{BOSC_AT_USER}\\\"]}}\"",
-                    "",
-                    f"chmod +x cal_score.py",
-                    f"./cal_score.py $LOG_FILE {self.test_clock_rate} | tee score.txt",
-                    f""
-                ])
+                # 发送完成消息
+                message = f"在 $HOST_NAME 上的 {label}.{tune_type.name}_{input_type.name} 测试完成喵！"
+                script_content.append(f"HOST_NAME=$(hostname)")
+                script_content.extend(self.utils.commands_to_send_message(message))
+                # 计算分数
+                script_content.extend(self.utils.commands_to_cal_score(parent_dir, self.test_clock_rate, "score.txt"))
+                # 发送分数
                 title_message = f"{label}.{tune_type.name}_{input_type.name} 测试结果"
                 text_message = f"在 $HOST_NAME 上的 {label}.{tune_type.name}_{input_type.name} 测试结果喵："
-                script_content.extend([
-                    f"chmod +x send_md_message.py",
-                    f"./send_md_message.py --api_key {BOSC_API_KEY} \\",
-                    f"     --title \"{title_message}\" \\",
-                    f"     --text \"{text_message}\" \\",
-                    f"     --md_path \"score.txt\" \\",
-                    f"     --at_mobiles \"{BOSC_AT_USER}\"",
-                ])
+                script_content.extend(self.utils.commands_to_send_md_message(parent_dir, title_message, text_message, "score.txt"))
             if self.perf_run:
-                perf_script_content.extend([
-                    f"HOST_NAME=$(hostname)",
-                    f"curl -X POST \"http://172.38.8.102:8848/send-message\" \\",
-                    f"     -H \"api-key: {BOSC_API_KEY}\" \\",
-                    f"     -H \"Content-Type: application/json\" \\",
-                    f"     -d \"{{\\\"content\\\": \\\"在 $HOST_NAME 上的 {label}.{tune_type.name}_{input_type.name} perf 执行完成喵！\\\\n【来自李扬的 HUAWEI Pure 70 Pro Max】\\\", \\\"at_user_ids\\\": [\\\"{BOSC_AT_USER}\\\"]}}\"",
-                    ""
-                ])
+                # 发送完成消息
+                message = f"在 $HOST_NAME 上的 {label}.{tune_type.name}_{input_type.name} perf 执行完成喵！"
+                script_content.append(f"HOST_NAME=$(hostname)")
+                script_content.extend(self.utils.commands_to_send_message(message))
         else:
             if self.profile_gen:
-                script_content.extend([
-                    f"chmod +x collect_profiles.sh",
-                    f"./collect_profiles.sh",
-                    ""
-                ])
-            script_content.extend([
-                f"chmod +x cal_score.py",
-                f"./cal_score.py $LOG_FILE {self.test_clock_rate}"
-            ])
+                # 收集profile
+                self.utils.commands_to_collect_profiles(parent_dir)
+            # 计算分数
+            script_content.extend(self.utils.commands_to_cal_score(parent_dir, self.test_clock_rate))
 
         # 写入脚本文件
         with open(run_all_script, 'w') as f:
