@@ -1,4 +1,5 @@
 from config import *
+from pack_utils import *
 from enum import Enum
 import shutil
 import os
@@ -72,15 +73,6 @@ class SPECSubBench(Enum):
 class SPECMode(Enum):
     speed = 1
     rate = 2
-
-def get_bench_dir(bench_name: str, bench_dirs: list) -> str:
-    for bench_dir in bench_dirs:
-        dir_bench_name = os.path.basename(
-            os.path.dirname(
-                os.path.dirname(bench_dir)))
-        if dir_bench_name == bench_name:
-            return bench_dir
-    return ""
 
 class PackSPEC:
     """
@@ -156,6 +148,10 @@ class PackSPEC:
             "perf record -g -o {bench_name}.{idx}.perf.data {run_cmd}",
             "perf report -n --stdio -i {bench_name}.{idx}.perf.data > {bench_name}.{idx}.perf_report.txt"
             ]
+        # packer.perf_command_template = [
+        #     "vtune -collect hotspots -knob sampling-mode=hw --knob sampling-interval=1000 -result-dir ./{bench_name}.{idx} -- {run_cmd}",
+        #     "vtune -report hotspots -result-dir ./{bench_name}.{idx} -format csv -report-output {bench_name}.{idx}.vtune.csv -csv-delimiter comma"
+        # ]
         self.auto_mode = auto_mode
         self.host_mode = host_mode
         self.test_clock_rate = test_clock_rate
