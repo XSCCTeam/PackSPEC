@@ -2,8 +2,27 @@ import os
 import sys
 from loguru import logger
 from datetime import datetime
+from enum import Enum
 
 P_PATH = os.path.dirname(os.path.abspath(__file__))
+
+#########################################
+# LLVM Configs
+#########################################
+DEFAULT_LLVM_PROFDATA_PATH = "" # <your llvm-profdata abspath>
+if DEFAULT_LLVM_PROFDATA_PATH == "":
+    DEFAULT_LLVM_PROFDATA_PATH = os.getenv('LLVM_PROFDATA_PATH')
+
+#########################################
+# DingDing rebot Configs
+#########################################
+# 参考：https://thoughts.aliyun.com/workspaces/66597cc824f406001b6ef466/docs/675b9751a7c8ff00016d92a2
+BOSC_API_KEY = "" # <Your BOSC_API_KEY>
+if BOSC_API_KEY == "":
+    BOSC_API_KEY = os.getenv('BOSC_API_KEY')
+BOSC_AT_USER = "" # <Your Phone Number>
+if BOSC_AT_USER == "":
+    BOSC_AT_USER = os.getenv('BOSC_AT_USER')
 
 #########################################
 # Local Configs
@@ -18,7 +37,6 @@ logger.add(
     LOGGER_PATH,
     level="DEBUG",
     rotation="8 MB",
-    format="{time:YYYY-MM-DD HH:mm:ss} | {level} | {message}",
 )
 PACK_PATH = os.path.join(P_PATH, "packed_files")
 SPEC_LOG_PATH = os.path.join(P_PATH, "spec_logs")
@@ -59,10 +77,10 @@ SPEC2017_BIN_MAP = {
     "631.deepsjeng_s": "deepsjeng_s", "641.leela_s": "leela_s", "648.exchange2_s": "exchange2_s", 
     "657.xz_s": "xz_s",
     # FP
-    "603.bwaves_s": "speed_bwaves", "607.cactuBSSN_s": "cactuBSSN_s", "619.lbm_s": "lbm_s", 
-    "621.wrf_s": "wrf_s", "627.cam4_s": "cam4_s", "628.pop2_s": "speed_pop2", 
+    "603.bwaves_s": "bwaves_s", "607.cactuBSSN_s": "cactuBSSN_s", "619.lbm_s": "lbm_s", 
+    "621.wrf_s": "wrf_s", "627.cam4_s": "cam4_s", "628.pop2_s": "pop2_s", 
     "638.imagick_s": "imagick_s", "644.nab_s": "nab_s", "649.fotonik3d_s": "fotonik3d_s", 
-    "654.roms_s": "sroms"
+    "654.roms_s": "roms_s"
 }
 SPEC2017_REFTIME_MAP = {
     # INT SPEED
@@ -91,31 +109,82 @@ SPEC2017_REFTIME_MAP = {
 
 SPEC2006_PATH = os.getenv('SPEC2006_DIR')
 if SPEC2006_PATH == None:
-    SPEC2006_PATH = os.path.join(HOME_PATH, "<where you SPEC cpu 2006 installed>")
+    SPEC2006_PATH = os.path.join(HOME_PATH, "BOSC", "speccpu2006-v1.0.1")
 SPEC2006_BENCH_PATH = os.path.join(SPEC2006_PATH, "benchspec", "CPU2006")
 SPEC2006_CONFIG_PATH = os.path.join(SPEC2006_PATH, "config")
 
 SPEC2017_PATH = os.getenv('SPEC2017_DIR')
 if SPEC2017_PATH == None:
-    SPEC2017_PATH = os.path.join(HOME_PATH, "<where you SPEC cpu 2017 installed>")
+    # SPEC2017_PATH = os.path.join(HOME_PATH, "SPECcpu2017")
+    SPEC2017_PATH = os.path.join(HOME_PATH, "optimized-spec17", "SPEC2017-iso", "speccpu2017-v1.0.2")
 SPEC2017_BENCH_PATH = os.path.join(SPEC2017_PATH, "benchspec", "CPU")
 SPEC2017_CONFIG_PATH = os.path.join(SPEC2017_PATH, "config")
 
 #########################################
-# LLVM Configs
+# PackSPEC Configs
 #########################################
-DEFAULT_LLVM_PROFDATA_PATH = os.getenv('LLVM_PROFDATA_PATH')
-if DEFAULT_LLVM_PROFDATA_PATH == None:
-    DEFAULT_LLVM_PROFDATA_PATH = "" # <your llvm-profdata abspath>
 
-#########################################
-# DingDing rebot Configs
-#########################################
-# 参考：https://thoughts.aliyun.com/workspaces/66597cc824f406001b6ef466/docs/675b9751a7c8ff00016d92a2
-BOSC_API_KEY = "" # <Your BOSC_API_KEY>
-if BOSC_API_KEY == "":
-    BOSC_API_KEY = os.getenv('BOSC_API_KEY')
-BOSC_AT_USER = "" # <Your Phone Number>
-if BOSC_AT_USER == "":
-    BOSC_AT_USER = os.getenv('BOSC_AT_USER')
+class ActionType(Enum):
+    """
+    SPEC基准测试动作类型枚举类
     
+    定义SPEC基准测试的不同操作阶段类型
+    
+    Attributes:
+        build (int): 构建阶段，对应值1
+        run (int): 运行阶段，对应值2
+    
+    Note:
+        用于指定SPEC基准测试的执行阶段，build阶段编译测试程序，run阶段运行测试程序
+    """
+    build = 1
+    run = 2
+
+class TuneType(Enum):
+    """
+    SPEC基准测试优化类型枚举类
+    
+    定义SPEC基准测试的不同优化级别
+    
+    Attributes:
+        base (int): 基础优化级别，对应值1
+        peak (int): 峰值优化级别，对应值2
+    
+    Note:
+        base级别使用标准优化，peak级别使用更激进的优化策略
+    """
+    base = 1
+    peak = 2
+    all = 3
+
+class InputType(Enum):
+    """
+    SPEC基准测试输入类型枚举类
+    
+    定义SPEC基准测试的不同输入数据集类型
+    
+    Attributes:
+        test (int): 测试输入数据集，对应值1
+        train (int): 训练输入数据集，对应值2
+        ref (int): 参考输入数据集，对应值3
+    
+    Note:
+        test数据集最小，用于快速验证；train数据集中等大小；ref数据集最大，用于正式测试
+    """
+    test = 1
+    train = 2
+    ref = 3
+    all = 4
+
+class SPECName(Enum):
+    spec2006 = 1
+    spec2017 = 2
+
+class SPECSubBench(Enum):
+    all = 1
+    int = 2
+    fp = 3
+
+class SPECMode(Enum):
+    speed = 1
+    rate = 2
