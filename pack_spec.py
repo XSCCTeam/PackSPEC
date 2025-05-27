@@ -794,7 +794,7 @@ class PackSPEC:
                 continue
 
             dest_dir = os.path.join(dest_bench_dir, bench_name)
-            logger.info(f"Copying {bench_name}\n")
+            logger.info(f"Copying {bench_name}...")
             try:
                 if with_build:
                     logger.info(f"\tFrom {src_build_dir} -to-> {dest_dir}")

@@ -67,7 +67,8 @@ class PackUtils:
             with open(os.path.join(SCRIPTS_PATH, template_name), "r") as f:
                 template = f.read()
             for key, value in replace_dict.items():
-                template = template.replace(key, value)
+                if key != None and value!= None:
+                    template = template.replace(key, value)
             with open(os.path.join(script_target_dir, script_name), "w") as f:
                 f.write(template)
             os.chmod(os.path.join(script_target_dir, script_name), 0o700)
