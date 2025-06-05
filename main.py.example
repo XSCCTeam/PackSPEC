@@ -1,4 +1,4 @@
-from pack_spec import *
+from pack_spec.pack_spec import *
 
 if __name__ == "__main__":
     """

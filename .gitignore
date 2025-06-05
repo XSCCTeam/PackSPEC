@@ -1,4 +1,5 @@
 /__pycache__/
+/pack_spec/__pycache__/
 /log/
 /packed_files/
 /spec_logs/
