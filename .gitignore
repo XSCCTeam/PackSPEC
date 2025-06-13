@@ -2,7 +2,7 @@
 /pack_spec/__pycache__/
 /log/
 /packed_files/
-/spec_logs/
+/spec_setup_logs/
 /scripts/625_inputgen/625_host_run/
 config.py
 main.py

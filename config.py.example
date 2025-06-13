@@ -27,9 +27,9 @@ if BOSC_AT_USER == "":
 #########################################
 # Local Configs
 #########################################
-
+CURRENT_DATE = datetime.datetime.now().strftime("%y%m%d")
 HOME_PATH = os.path.expanduser("~")
-LOGGER_PATH = os.path.join(P_PATH, "log", f"PackSpec_{datetime.now().strftime('%Y%m%d')}.log")
+LOGGER_PATH = os.path.join(P_PATH, "log", f"PackSpec_{CURRENT_DATE}.log")
 # 配置 loguru 日志
 logger.remove()
 logger.add(sys.stderr, level="INFO")
@@ -39,7 +39,7 @@ logger.add(
     rotation="8 MB",
 )
 PACK_PATH = os.path.join(P_PATH, "packed_files")
-SPEC_LOG_PATH = os.path.join(P_PATH, "spec_logs")
+SPEC_LOG_PATH = os.path.join(P_PATH, "spec_setup_logs")
 SCRIPTS_PATH = os.path.join(P_PATH, "scripts")
 
 #########################################
@@ -107,16 +107,15 @@ SPEC2017_REFTIME_MAP = {
     "654.roms_s": {"test": ["554.roms_r", "data", "test"], "train": ["554.roms_r", "data", "train"], "ref": ["554.roms_r", "data", "refspeed"]}
 }
 
-SPEC2006_PATH = os.getenv('SPEC2006_DIR')
-if SPEC2006_PATH == None:
-    SPEC2006_PATH = os.path.join(HOME_PATH, "BOSC", "speccpu2006-v1.0.1")
+SPEC2006_PATH = "" # <Your SPEC2006 Install Path>
+if SPEC2006_PATH == "":
+    SPEC2006_PATH = os.getenv('SPEC2006_DIR')
 SPEC2006_BENCH_PATH = os.path.join(SPEC2006_PATH, "benchspec", "CPU2006")
 SPEC2006_CONFIG_PATH = os.path.join(SPEC2006_PATH, "config")
 
-SPEC2017_PATH = os.getenv('SPEC2017_DIR')
-if SPEC2017_PATH == None:
-    # SPEC2017_PATH = os.path.join(HOME_PATH, "SPECcpu2017")
-    SPEC2017_PATH = os.path.join(HOME_PATH, "optimized-spec17", "SPEC2017-iso", "speccpu2017-v1.0.2")
+SPEC2017_PATH = "" # <Your SPEC2017 Install Path>
+if SPEC2017_PATH == "":
+    SPEC2017_PATH = os.getenv('SPEC2017_DIR')
 SPEC2017_BENCH_PATH = os.path.join(SPEC2017_PATH, "benchspec", "CPU")
 SPEC2017_CONFIG_PATH = os.path.join(SPEC2017_PATH, "config")
 
@@ -188,3 +187,8 @@ class SPECSubBench(Enum):
 class SPECMode(Enum):
     speed = 1
     rate = 2
+
+class PACKMode(Enum):
+    bin = 1
+    run = 2
+    buildrun = 3
