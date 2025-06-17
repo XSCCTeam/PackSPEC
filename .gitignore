@@ -4,5 +4,6 @@
 /packed_files/
 /spec_setup_logs/
 /scripts/625_inputgen/625_host_run/
+/tests/test_space/
 config.py
 main.py

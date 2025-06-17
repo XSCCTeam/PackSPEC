@@ -1,7 +1,7 @@
 import os
 import sys
 from loguru import logger
-from datetime import datetime
+import datetime
 from enum import Enum
 
 P_PATH = os.path.dirname(os.path.abspath(__file__))
@@ -45,6 +45,26 @@ SCRIPTS_PATH = os.path.join(P_PATH, "scripts")
 #########################################
 # SPEC Configs
 #########################################
+
+SPEC2006_PATH = "" # <Your SPEC2006 Install Path>
+if SPEC2006_PATH == "":
+    SPEC2006_PATH = os.getenv('SPEC2006_DIR')
+if SPEC2006_PATH != None:
+    SPEC2006_BENCH_PATH = os.path.join(SPEC2006_PATH, "benchspec", "CPU2006")
+    SPEC2006_CONFIG_PATH = os.path.join(SPEC2006_PATH, "config")
+else:
+    SPEC2006_BENCH_PATH = os.path.join("benchspec", "CPU2006")
+    SPEC2006_CONFIG_PATH = os.path.join("config")
+
+SPEC2017_PATH = "" # <Your SPEC2017 Install Path>
+if SPEC2017_PATH == "":
+    SPEC2017_PATH = os.getenv('SPEC2017_DIR')
+if SPEC2017_PATH != None:
+    SPEC2017_BENCH_PATH = os.path.join("benchspec", "CPU2017")
+    SPEC2017_CONFIG_PATH = os.path.join("config")
+else:
+    SPEC2017_BENCH_PATH = os.path.join("benchspec", "CPU")
+    SPEC2017_CONFIG_PATH = os.path.join("config")
 
 SPEC2006_INT_BENCHES = ["400.perlbench", "401.bzip2", "403.gcc", "429.mcf", "445.gobmk", "456.hmmer",
                   "458.sjeng", "462.libquantum", "464.h264ref", "471.omnetpp", "473.astar", "483.xalancbmk"]
@@ -106,18 +126,6 @@ SPEC2017_REFTIME_MAP = {
     "649.fotonik3d_s": {"test": ["549.fotonik3d_r", "data", "test"], "train": ["549.fotonik3d_r", "data", "train"], "ref": ["549.fotonik3d_r", "data", "refspeed"]}, 
     "654.roms_s": {"test": ["554.roms_r", "data", "test"], "train": ["554.roms_r", "data", "train"], "ref": ["554.roms_r", "data", "refspeed"]}
 }
-
-SPEC2006_PATH = "" # <Your SPEC2006 Install Path>
-if SPEC2006_PATH == "":
-    SPEC2006_PATH = os.getenv('SPEC2006_DIR')
-SPEC2006_BENCH_PATH = os.path.join(SPEC2006_PATH, "benchspec", "CPU2006")
-SPEC2006_CONFIG_PATH = os.path.join(SPEC2006_PATH, "config")
-
-SPEC2017_PATH = "" # <Your SPEC2017 Install Path>
-if SPEC2017_PATH == "":
-    SPEC2017_PATH = os.getenv('SPEC2017_DIR')
-SPEC2017_BENCH_PATH = os.path.join(SPEC2017_PATH, "benchspec", "CPU")
-SPEC2017_CONFIG_PATH = os.path.join(SPEC2017_PATH, "config")
 
 #########################################
 # PackSPEC Configs
