@@ -65,6 +65,16 @@ class PackUtils:
         except Exception as e:
             self.logger.debug(f"Failed find spec log from '{spec_log_file}': {str(e)}")
             return ""
+    
+    def get_run_script_name(self, profile_gen: bool, input_type: InputType, suffix: str = ""):
+        script_name = ""
+        if profile_gen:
+            script_name = f"profile_gen_{input_type.name}"
+        else:
+            script_name = f"test_{input_type.name}"
+        if suffix:
+            script_name = f"{script_name}_{suffix}"
+        return f"{script_name}.sh"
 
     def get_spec_setup_log_path(self, spec_cfg: str, tune_type: TuneType, input_type: InputType):
         if self.debug_mode:

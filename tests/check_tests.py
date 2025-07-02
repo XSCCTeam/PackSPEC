@@ -59,5 +59,7 @@ if __name__ == '__main__':
 
     ct = CheckTests(test_path, test_out_path)
     check_num = ct.check_commands()
-    print(f"All {check_num} Check passed")
+    GREEN = '\033[92m'
+    END = '\033[0m'
+    print(f"{GREEN}[PASS]{END} All {check_num} Check passed")
     exit(0)

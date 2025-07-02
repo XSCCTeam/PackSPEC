@@ -1,4 +1,6 @@
-##PACKSPEC## EXIST: Successfully copied 29 files.
+##PACKSPEC## EXIST*29: Successfully generated run_ref.sh
+##PACKSPEC## EXIST: Successfully copied 29 benches
+##PACKSPEC## EXIST: Successfully created test_ref_all.sh script
 ##PACKSPEC## EXIST: Create compile.env to record compile environment.
 
 from pack_spec.pack_spec import *
@@ -88,10 +90,10 @@ if __name__ == "__main__":
     # label = packer.analyze_spec_config(spec_config)
 
     # 打包二进制文件
-    packer.pack_binarys_cfg(spec_config)
+    # packer.pack_binarys_cfg(spec_config)
 
     # # 打包完整测试环境
-    # packer.pack_benches_cfg(spec_config)
+    packer.pack_benches_cfg(spec_config)
 
     # 打包完整测试环境（附带build目录）
     # packer.pack_benches_cfg(spec_config, with_build=True)

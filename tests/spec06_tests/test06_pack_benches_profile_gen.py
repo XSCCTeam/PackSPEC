@@ -1,4 +1,6 @@
-##PACKSPEC## EXIST: Successfully copied 29 files.
+##PACKSPEC## EXIST*29: Successfully generated run_ref.sh
+##PACKSPEC## EXIST: Successfully copied 29 benches
+##PACKSPEC## EXIST: Successfully created profile_gen_ref_all.sh script
 ##PACKSPEC## EXIST: Create compile.env to record compile environment.
 
 from pack_spec.pack_spec import *
@@ -64,7 +66,7 @@ if __name__ == "__main__":
 
         # # 是否以生成 profile 模式运行，默认为 False
         # # profile 生成模式只跑一次程序，iterations 将强制设置为 1
-        # profile_gen=True,
+        profile_gen=True,
 
         # # 是否以自动模式运行, 用于配合其他脚本执行, 默认为 False
         # # 如果为 True, 程序将自动覆盖已存在的文件，无需用户确认
@@ -88,10 +90,10 @@ if __name__ == "__main__":
     # label = packer.analyze_spec_config(spec_config)
 
     # 打包二进制文件
-    packer.pack_binarys_cfg(spec_config)
+    # packer.pack_binarys_cfg(spec_config)
 
     # # 打包完整测试环境
-    # packer.pack_benches_cfg(spec_config)
+    packer.pack_benches_cfg(spec_config)
 
     # 打包完整测试环境（附带build目录）
     # packer.pack_benches_cfg(spec_config, with_build=True)

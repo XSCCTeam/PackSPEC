@@ -9,9 +9,13 @@ P_PATH = os.path.dirname(os.path.abspath(__file__))
 #########################################
 # LLVM Configs
 #########################################
-DEFAULT_LLVM_PROFDATA_PATH = "" # <your llvm-profdata abspath>
-if DEFAULT_LLVM_PROFDATA_PATH == "":
-    DEFAULT_LLVM_PROFDATA_PATH = os.getenv('LLVM_PROFDATA_PATH')
+DEFAULT_LLVM_PATH = "" # <your llvm install abspath>
+if DEFAULT_LLVM_PATH == "":
+    DEFAULT_LLVM_PATH = os.getenv('LLVM_PATH')
+if DEFAULT_LLVM_PATH != None:
+    DEFAULT_LLVM_PROFDATA_PATH = os.path.join(DEFAULT_LLVM_PATH, "bin", "llvm-profdata")
+else:
+    DEFAULT_LLVM_PROFDATA_PATH = None
 
 #########################################
 # DingDing rebot Configs

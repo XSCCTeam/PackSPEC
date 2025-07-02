@@ -494,8 +494,8 @@ class PackSPEC:
 
         if iterations == 0:
             iterations = self.iterations
-
-        run_test_script = os.path.join(dest_dir, f"test_{input_type.name}.sh")
+        
+        run_test_script = os.path.join(dest_dir, self.utils.get_run_script_name(self.profile_gen, input_type))
 
         script_content = self.utils.commands_to_prepare_run(
             f"test_{input_type.name}.log", core_num, iterations)
@@ -540,7 +540,7 @@ class PackSPEC:
         
         # 添加执行权限
         os.chmod(run_test_script, 0o700)
-        logger.info(f"Created test_{input_type.name}.sh script at {run_test_script}")
+        logger.info(f"Created {self.utils.get_run_script_name(self.profile_gen, input_type)} script at {run_test_script}")
         
 
     def create_run_all_script(self, label: str, core_num: int, buildrun_bench_dir_list: list, 
@@ -554,7 +554,7 @@ class PackSPEC:
 
         # 获取父目录
         parent_dir = os.path.dirname(buildrun_bench_dir_list[0])
-        run_all_script = os.path.join(parent_dir, "run_all.sh")
+        run_all_script = os.path.join(parent_dir, self.utils.get_run_script_name(self.profile_gen, input_type, "all"))
         
         script_content = self.utils.commands_to_prepare_run(
             "run_all.log", core_num, iterations)
@@ -590,7 +590,7 @@ class PackSPEC:
 
         if self.profile_gen:
             # 收集profile
-            self.utils.commands_to_collect_profiles(parent_dir)
+            script_content.extend(self.utils.commands_to_collect_profiles(parent_dir))
 
         if BOSC_API_KEY != None and BOSC_AT_USER != None:
             if self.profile_gen:
@@ -619,7 +619,7 @@ class PackSPEC:
         
         # 添加执行权限
         os.chmod(run_all_script, 0o700)
-        logger.success(f"Successfully created run_all script at {run_all_script}")
+        logger.success(f"Successfully created {self.utils.get_run_script_name(self.profile_gen, input_type, 'all')} script at {run_all_script}")
 
     def setup_spec(self, spec_cfg: str):
         self.run_setup_spec(spec_cfg, self.tune_type, self.input_type, rebuild=self.rebuild)

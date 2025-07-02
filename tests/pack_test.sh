@@ -1,6 +1,6 @@
 #!/bin/bash
 
-set -e
+# set -e
 
 # 定义提示等级label
 # 修改颜色定义部分，使用更兼容的tput命令
@@ -238,6 +238,7 @@ function setup_spec17(){
 }
 
 function test_spec06(){
+    update_pack_spec 2>&1 | tee -a $LOG_FILE
     echo -e "$INFO_LABEL Testing spec06..."
     cd $PACK_SPEC_DIR
     cp $SPEC06_TESTS/* $PACK_SPEC_DIR
@@ -248,6 +249,10 @@ function test_spec06(){
             script_name=$(basename "$script" .py)
             echo -e "$INFO_LABEL Running $script_name.py ..."
             python "$script" > "$SPEC06_TESTS_OUT/${script_name}.log" 2>&1
+            if [ ! $? -eq 0 ]; then
+                echo -e "$ATTENTION_LABEL Run Error on $(basename $script), see '$SPEC06_TESTS_OUT/${script_name}.log'"
+                cat $SPEC06_TESTS_OUT/${script_name}.log
+            fi
             python $CHECK_TEST --test_path $script --test_out_path $SPEC06_TESTS_OUT/${script_name}.log
         fi
     done
