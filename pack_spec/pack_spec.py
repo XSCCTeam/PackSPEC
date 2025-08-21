@@ -498,7 +498,7 @@ class PackSPEC:
         run_test_script = os.path.join(dest_dir, self.utils.get_run_script_name(self.profile_gen, input_type))
 
         script_content = self.utils.commands_to_prepare_run(
-            f"test_{input_type.name}.log", core_num, iterations)
+            f"$SCRIPT_DIR/test_{input_type.name}.log", core_num, iterations)
 
         script_content.extend(
             self.utils.commands_to_run_bench(bench_name, self.profile_gen, self.spec_bench_map,
@@ -557,7 +557,7 @@ class PackSPEC:
         run_all_script = os.path.join(parent_dir, self.utils.get_run_script_name(self.profile_gen, input_type, "all"))
         
         script_content = self.utils.commands_to_prepare_run(
-            "run_all.log", core_num, iterations)
+            "$SCRIPT_DIR/run_all.log", core_num, iterations)
 
         script_content.extend([
             "",

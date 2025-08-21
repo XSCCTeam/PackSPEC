@@ -1,5 +1,16 @@
 #!/bin/python3
 
+SPEC2006_INT_BENCHES = ["400.perlbench", "401.bzip2", "403.gcc", "429.mcf", "445.gobmk", "456.hmmer",
+                  "458.sjeng", "462.libquantum", "464.h264ref", "471.omnetpp", "473.astar", "483.xalancbmk"]
+SPEC2006_FP_BENCHES = ["410.bwaves", "416.gamess", "433.milc", "434.zeusmp", "435.gromacs", "436.cactusADM",
+                  "437.leslie3d", "444.namd", "447.dealII", "450.soplex", "453.povray", "454.calculix",
+                  "459.GemsFDTD", "465.tonto", "470.lbm", "481.wrf", "482.sphinx3"]
+SPEC2017_INT_BENCHES = ["600.perlbench_s", "602.gcc_s", "605.mcf_s", "620.omnetpp_s", 
+                  "623.xalancbmk_s", "625.x264_s", "631.deepsjeng_s", "641.leela_s", 
+                  "648.exchange2_s", "657.xz_s"]
+SPEC2017_FP_BENCHES = ["603.bwaves_s", "607.cactuBSSN_s", "619.lbm_s", "621.wrf_s", "627.cam4_s",
+                  "628.pop2_s", "638.imagick_s", "644.nab_s", "649.fotonik3d_s", "654.roms_s"]
+
 def parse_benchmark_logs(log_file_path):
     """
     解析SPEC基准测试日志文件，提取每个测试块
@@ -93,6 +104,12 @@ def get_real_time(test_block):
         return float(match.group(1))
     return 0.0
 
+def is_int_bench(bench_name):
+    return bench_name in SPEC2006_INT_BENCHES + SPEC2017_INT_BENCHES
+
+def is_fp_bench(bench_name):
+    return bench_name in SPEC2006_FP_BENCHES + SPEC2017_FP_BENCHES
+
 def median(lst):
     """
     计算列表的中位数
@@ -175,50 +192,129 @@ def main(log_path, output_file, clock_rate):
         csv_buffer = csv_buffer + "Median,Score\n"
     print("-" * sep_len)
     
-
-    # Benchmark Lines
     scores = []
+    # int Benchmark Lines
+    int_scores = []
     for benchmark_block in benchmarks:
         bench_name = get_bench_name(benchmark_block)
-        print("{:<{}} ".format(bench_name, max_benchname_len), end="")
-        csv_buffer = csv_buffer + f"{bench_name},"
-        ref_time = get_ref_time(benchmark_block)
-        print("{:>8.2f} ".format(ref_time), end="")
-        csv_buffer = csv_buffer + f"{ref_time},"
-        real_times = []
-        for time_block in get_test_block(benchmark_block):
-            real_time = get_real_time(time_block)
-            real_times.append(real_time)
-            print("{:>8} ".format(real_time), end="")
-            csv_buffer = csv_buffer + f"{real_time},"
-        median_time = median(real_times)
-        score = ref_time/median_time
-        if clock_rate!= "1":
-            score_ghz = score/float(clock_rate)
-            print("{:>8.2f} {:>8.2f} {:>8.2f}".format(median_time, score, score_ghz))
-            csv_buffer = csv_buffer + f"{median_time},{score},{score_ghz},{clock_rate}\n"
-        else:
-            print("{:>8.2f} {:>8.2f}".format(median_time, score))
-            csv_buffer = csv_buffer + f"{median_time},{score}\n"
-        scores.append(score)
-    
-    # End Line
-    print("-" * sep_len)
-    print("{:<{}} ".format("GEOMEAN", max_benchname_len), end="")
-    csv_buffer = csv_buffer + f"GEOMEAN,"
-    print("{:>8} ".format("-"), end="")
-    csv_buffer = csv_buffer + f"-,"
-    for i in range(run_time):
-        print("{:>8} ".format(f"-"), end="")
+        if is_int_bench(bench_name):
+            print("{:<{}} ".format(bench_name, max_benchname_len), end="")
+            csv_buffer = csv_buffer + f"{bench_name},"
+            ref_time = get_ref_time(benchmark_block)
+            print("{:>8.2f} ".format(ref_time), end="")
+            csv_buffer = csv_buffer + f"{ref_time},"
+            real_times = []
+            for time_block in get_test_block(benchmark_block):
+                real_time = get_real_time(time_block)
+                real_times.append(real_time)
+                print("{:>8} ".format(real_time), end="")
+                csv_buffer = csv_buffer + f"{real_time},"
+            median_time = median(real_times)
+            score = ref_time/median_time
+            if clock_rate!= "1":
+                score_ghz = score/float(clock_rate)
+                print("{:>8.2f} {:>8.2f} {:>8.2f}".format(median_time, score, score_ghz))
+                csv_buffer = csv_buffer + f"{median_time},{score},{score_ghz},{clock_rate}\n"
+            else:
+                print("{:>8.2f} {:>8.2f}".format(median_time, score))
+                csv_buffer = csv_buffer + f"{median_time},{score}\n"
+            scores.append(score)
+            int_scores.append(score)
+
+    if int_scores:
+        # int End Line
+        print("-" * sep_len)
+        print("{:<{}} ".format("INT GEOMEAN", max_benchname_len), end="")
+        csv_buffer = csv_buffer + f"INT GEOMEAN,"
+        print("{:>8} ".format("-"), end="")
         csv_buffer = csv_buffer + f"-,"
-    geomean_score = geomean(scores)
-    if clock_rate!= "1":
-        geomean_score_ghz = geomean_score/float(clock_rate)
-        print("{:>8} {:>8.2f} {:>8.2f}".format("-", geomean_score, geomean_score_ghz))
-        csv_buffer = csv_buffer + f"-,{geomean_score},{geomean_score_ghz},{clock_rate}\n"
-    else:
-        print("{:>8} {:>8.2f}".format("-", geomean_score))
-        csv_buffer = csv_buffer + f"-,{geomean_score}\n"
+        for i in range(run_time):
+            print("{:>8} ".format(f"-"), end="")
+            csv_buffer = csv_buffer + f"-,"
+        geomean_score = geomean(int_scores)
+        if clock_rate!= "1":
+            geomean_score_ghz = geomean_score/float(clock_rate)
+            print("{:>8} {:>8.2f} {:>8.2f}".format("-", geomean_score, geomean_score_ghz))
+            csv_buffer = csv_buffer + f"-,{geomean_score},{geomean_score_ghz},{clock_rate}\n"
+        else:
+            print("{:>8} {:>8.2f}".format("-", geomean_score))
+            csv_buffer = csv_buffer + f"-,{geomean_score}\n"
+    
+    bool_fp = False
+    for benchmark_block in benchmarks:
+        bench_name = get_bench_name(benchmark_block)
+        if is_fp_bench(bench_name):
+            bool_fp = True
+            break
+    
+    if int_scores and bool_fp:
+        print("-" * sep_len)
+
+    # fp Benchmark Lines
+    fp_scores = []
+    for benchmark_block in benchmarks:
+        bench_name = get_bench_name(benchmark_block)
+        if is_fp_bench(bench_name):
+            print("{:<{}} ".format(bench_name, max_benchname_len), end="")
+            csv_buffer = csv_buffer + f"{bench_name},"
+            ref_time = get_ref_time(benchmark_block)
+            print("{:>8.2f} ".format(ref_time), end="")
+            csv_buffer = csv_buffer + f"{ref_time},"
+            real_times = []
+            for time_block in get_test_block(benchmark_block):
+                real_time = get_real_time(time_block)
+                real_times.append(real_time)
+                print("{:>8} ".format(real_time), end="")
+                csv_buffer = csv_buffer + f"{real_time},"
+            median_time = median(real_times)
+            score = ref_time/median_time
+            if clock_rate!= "1":
+                score_ghz = score/float(clock_rate)
+                print("{:>8.2f} {:>8.2f} {:>8.2f}".format(median_time, score, score_ghz))
+                csv_buffer = csv_buffer + f"{median_time},{score},{score_ghz},{clock_rate}\n"
+            else:
+                print("{:>8.2f} {:>8.2f}".format(median_time, score))
+                csv_buffer = csv_buffer + f"{median_time},{score}\n"
+            scores.append(score)
+            fp_scores.append(score)
+    
+    if fp_scores:
+        # fp End Line
+        print("-" * sep_len)
+        print("{:<{}} ".format("FP GEOMEAN", max_benchname_len), end="")
+        csv_buffer = csv_buffer + f"FP GEOMEAN,"
+        print("{:>8} ".format("-"), end="")
+        csv_buffer = csv_buffer + f"-,"
+        for i in range(run_time):
+            print("{:>8} ".format(f"-"), end="")
+            csv_buffer = csv_buffer + f"-,"
+        geomean_score = geomean(fp_scores)
+        if clock_rate!= "1":
+            geomean_score_ghz = geomean_score/float(clock_rate)
+            print("{:>8} {:>8.2f} {:>8.2f}".format("-", geomean_score, geomean_score_ghz))
+            csv_buffer = csv_buffer + f"-,{geomean_score},{geomean_score_ghz},{clock_rate}\n"
+        else:
+            print("{:>8} {:>8.2f}".format("-", geomean_score))
+            csv_buffer = csv_buffer + f"-,{geomean_score}\n"
+    
+    if int_scores and fp_scores:
+        print("-" * sep_len)
+        # End Line
+        print("{:<{}} ".format("GEOMEAN", max_benchname_len), end="")
+        csv_buffer = csv_buffer + f"GEOMEAN,"
+        print("{:>8} ".format("-"), end="")
+        csv_buffer = csv_buffer + f"-,"
+        for i in range(run_time):
+            print("{:>8} ".format(f"-"), end="")
+            csv_buffer = csv_buffer + f"-,"
+        geomean_score = geomean(scores)
+        if clock_rate!= "1":
+            geomean_score_ghz = geomean_score/float(clock_rate)
+            print("{:>8} {:>8.2f} {:>8.2f}".format("-", geomean_score, geomean_score_ghz))
+            csv_buffer = csv_buffer + f"-,{geomean_score},{geomean_score_ghz},{clock_rate}\n"
+        else:
+            print("{:>8} {:>8.2f}".format("-", geomean_score))
+            csv_buffer = csv_buffer + f"-,{geomean_score}\n"
     print("=" * sep_len)
 
     with open(output_file, "w") as f:
