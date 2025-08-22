@@ -145,7 +145,7 @@ class PackUtils:
             self.logger.error(f"Failed to create compile.env: {str(e)}")
 
 
-    def execute_commands(self, command: str, work_dir: str) -> list[str]:
+    def execute_commands(self, command: str, work_dir: str):
         try:
             # 执行specinvoke命令并捕获输出
             self.logger.debug(f"Executing command: {command}")
