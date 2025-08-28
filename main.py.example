@@ -12,6 +12,7 @@ if __name__ == "__main__":
         # SPEC基准测试版本选择
         # 可选值：
         #   SPECName.spec2006: SPEC2006基准套件
+        #   SPECName.spec2006_v1_2: SPEC2006_v1.2基准套件
         #   SPECName.spec2017: SPEC2017基准套件
         spec_name=SPECName.spec2006,
         
