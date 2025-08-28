@@ -189,7 +189,8 @@ class InputType(Enum):
 
 class SPECName(Enum):
     spec2006 = 1
-    spec2017 = 2
+    spec2006_v1_2 = 2
+    spec2017 = 3
 
 class SPECSubBench(Enum):
     all = 1

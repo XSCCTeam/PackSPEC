@@ -19,8 +19,10 @@ class PackSPEC:
                  profile_gen: bool = False,
                  auto_mode: bool = False,
                  host_mode: bool = False,
+                 debug_mode: bool = False,
                  ):
-        self.utils = PackUtils(logger)
+        self.debug_mode = debug_mode
+        self.utils = PackUtils(logger, self.debug_mode)
         self.spec_name = spec_name
         if self.spec_name == SPECName.spec2006:
             self.spec_dir = SPEC2006_PATH
@@ -36,6 +38,15 @@ class PackSPEC:
             self.spec_build_dir = 'build'
             self.spec_run_dir = 'run'
             self.setup_script_path = os.path.join(SCRIPTS_PATH, "setup-spec17.sh")
+        elif self.spec_name == SPECName.spec2006_v1_2:
+            # TODO: 目前v1.2版本的SPEC2006打包只是临时解决方案
+            self.spec_name = SPECName.spec2006
+            self.spec_dir = SPEC2006_PATH
+            self.spec_bench_path = SPEC2006_BENCH_PATH
+            self.spec_bench_map = SPEC2006_BIN_MAP
+            self.spec_build_dir = 'build'
+            self.spec_run_dir = 'run'
+            self.setup_script_path = os.path.join(SCRIPTS_PATH, "setup-spec06.sh")
         self.spec_benches = spec_benches
         self.spec_bench_list = self.get_bench_list(spec_benches)
         self.tune_type = tune_type
@@ -50,6 +61,20 @@ class PackSPEC:
         self.auto_mode = auto_mode
         self.host_mode = host_mode
         self.test_clock_rate = test_clock_rate
+        self.print_base_info()
+
+    def print_base_info(self):
+        logger.info(" ")
+        logger.info("="*80)
+        logger.info(f"Start Packing {self.spec_name.name}")
+        logger.info(f"Current Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+        logger.info("-"*80)
+        if self.spec_name == SPECName.spec2006:
+            logger.info(f"SPEC 2006 Path: {SPEC2006_PATH}")
+        elif self.spec_name == SPECName.spec2017:
+            logger.info(f"SPEC 2017 Path: {SPEC2017_PATH}")
+        logger.info("="*80)
+        logger.info(" ")
 
     def get_bench_list(self, spec_benches: str):
         spec_bench_set = set()
@@ -154,6 +179,14 @@ class PackSPEC:
             return ""
 
     def get_bench_path(self, spec_bench_list: list, label: str, action_type: ActionType, tune_type: TuneType, input_type: InputType, spec_mode: SPECMode) -> list:
+        if self.debug_mode:
+            logger.debug(f"Get bench dir with:")
+            logger.debug(f"  spec_bench_list: {spec_bench_list}")
+            logger.debug(f"  label: {label}")
+            logger.debug(f"  action_type: {action_type.name}")
+            logger.debug(f"  tune_type: {tune_type.name}")
+            logger.debug(f"  input_type: {input_type.name}")
+            logger.debug(f"  spec_mode: {spec_mode.name}")
 
         if action_type == ActionType.build:
             bench_parent_dir = self.spec_build_dir
@@ -180,6 +213,9 @@ class PackSPEC:
             if bench_dir in spec_bench_list:
                 # 根据动作类型构建完整路径（build或run目录）
                 bench_run_dir = os.path.join(self.spec_bench_path, bench_dir, bench_parent_dir)
+                if self.debug_mode:
+                    logger.debug(f"Bench {bench_dir} run dir: {bench_run_dir}")
+                    
                 run_dir_path_list = []
 
                 pattern = re.compile(rf"^{re.escape(bench_dir_perfix)}\.\d{{4}}$")
