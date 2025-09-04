@@ -1,4 +1,3 @@
-from asyncio import streams
 import os
 from config import *
 import subprocess
@@ -179,7 +178,8 @@ class PackUtils:
             self.logger.debug(f"Copying {src_file_name}\n\tFrom {src_path} -to-> {dest_path}")
             return True
         except Exception as e:
-            self.logger.error(f"Failed to copy {file_info} file '{src_path}' to '{dest_path}': {str(e)}")
+            self.logger.warning(f"Failed to copy {file_info} file '{src_path}' to '{dest_path}': {str(e)}")
+            self.logger.warning(f"If you didn't use this tool for setup, {file_info} will not be generated. Please ignore this warning.")
             return False
 
     def copy_script_file_to_target_dir(self, script_name: str, script_target_dir: str):
