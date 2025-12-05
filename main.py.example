@@ -1,4 +1,5 @@
-from pack_spec.pack_spec import *
+from pack_spec.pack_spec import PackSPEC
+from config import SPECName, TuneType, InputType, SPECMode
 
 if __name__ == "__main__":
     """
@@ -86,7 +87,7 @@ if __name__ == "__main__":
     packer.setup_spec(spec_config)
 
     # 打包二进制文件、spec cfg文件
-    packer.pack_binarys_cfg(spec_config)
+    packer.pack_binaries_cfg(spec_config)
 
     # 打包完整测试环境、spec cfg文件
     packer.pack_benches_cfg(spec_config)
@@ -96,7 +97,7 @@ if __name__ == "__main__":
     # label = packer.analyze_spec_config(spec_config)
 
     # 打包二进制文件
-    # packer.pack_binarys(label)
+    # packer.pack_binaries(label)
 
     # 打包完整测试环境
     # packer.pack_benches(label)

@@ -1,27 +1,69 @@
 from config import *
-from pack_spec.pack_utils import *
+from pack_spec.pack_utils import PackUtils
 import shutil
 import os
 import re
 import subprocess
 from datetime import datetime
+from typing import List, Dict, Optional, Any
 
 class PackSPEC:
+    # 实例变量类型注解
+    debug_mode: bool
+    utils: PackUtils
+    spec_name: SPECName
+    spec_dir: str
+    spec_bench_path: str
+    spec_bench_map: Dict[str, str]
+    spec_build_dir: str
+    spec_run_dir: str
+    setup_script_path: str
+    spec_benches: str
+    spec_bench_list: List[str]
+    tune_type: TuneType
+    input_type: InputType
+    spec_mode: SPECMode
+    iterations: int
+    test_core_num: int
+    rebuild: bool
+    profile_gen: bool
+    auto_mode: bool
+    host_mode: bool
+    test_clock_rate: float
+
     def __init__(self,
                  spec_name: SPECName, 
                  spec_benches: str,
                  tune_type: TuneType, 
                  input_type: InputType,
                  spec_mode: SPECMode,
-                 iterations: int = 3,
-                 test_core_num: int = -1,
-                 test_clock_rate: float = 1,
-                 rebuild: bool = True,
-                 profile_gen: bool = False,
-                 auto_mode: bool = False,
-                 host_mode: bool = False,
-                 debug_mode: bool = False,
+                 iterations: int = DEFAULT_ITERATIONS,
+                 test_core_num: int = DEFAULT_CORE_NUM,
+                 test_clock_rate: float = DEFAULT_CLOCK_RATE,
+                 rebuild: bool = DEFAULT_REBUILD,
+                 profile_gen: bool = DEFAULT_PROFILE_GEN,
+                 auto_mode: bool = DEFAULT_AUTO_MODE,
+                 host_mode: bool = DEFAULT_HOST_MODE,
+                 debug_mode: bool = DEFAULT_DEBUG_MODE,
                  ):
+        """
+        初始化PackSPEC实例
+        
+        Args:
+            spec_name (SPECName): SPEC基准测试版本
+            spec_benches (str): 基准测试列表，格式为空格分隔的基准测试名称或子集标识
+            tune_type (TuneType): 优化级别
+            input_type (InputType): 输入数据集类型
+            spec_mode (SPECMode): 运行模式
+            iterations (int, optional): 运行迭代次数，默认为DEFAULT_ITERATIONS
+            test_core_num (int, optional): 测试运行绑定的核心编号，默认为DEFAULT_CORE_NUM（不绑定）
+            test_clock_rate (float, optional): 测试运行的CPU主频，用于算分，单位GHz，默认为DEFAULT_CLOCK_RATE
+            rebuild (bool, optional): 是否重新构建，默认为DEFAULT_REBUILD
+            profile_gen (bool, optional): 是否以生成profile模式运行，默认为DEFAULT_PROFILE_GEN
+            auto_mode (bool, optional): 是否以自动模式运行，默认为DEFAULT_AUTO_MODE
+            host_mode (bool, optional): 是否以HOST模式运行，默认为DEFAULT_HOST_MODE
+            debug_mode (bool, optional): 是否开启调试模式，默认为DEFAULT_DEBUG_MODE
+        """
         self.debug_mode = debug_mode
         self.utils = PackUtils(logger, self.debug_mode)
         self.spec_name = spec_name
@@ -65,6 +107,11 @@ class PackSPEC:
         self.print_base_info()
 
     def print_base_info(self):
+        """
+        打印PackSPEC实例的基本信息
+        
+        包括当前时间、SPEC版本、SPEC路径等基本信息
+        """
         logger.info(" ")
         logger.info("="*80)
         logger.info(f"Start Packing {self.spec_name.name}")
@@ -77,7 +124,19 @@ class PackSPEC:
         logger.info("="*80)
         logger.info(" ")
 
-    def get_bench_list(self, spec_benches: str):
+    def get_bench_list(self, spec_benches: str) -> list:
+        """
+        根据输入的spec_benches字符串获取基准测试列表
+        
+        Args:
+            spec_benches (str): 基准测试列表，格式为空格分隔的基准测试名称或子集标识
+            
+        Returns:
+            list: 基准测试列表
+            
+        Raises:
+            BenchmarkError: 当没有选择到任何基准测试时抛出
+        """
         spec_bench_set = set()
         spec_bench_list = []
         if self.spec_name == SPECName.spec2006:
@@ -113,14 +172,28 @@ class PackSPEC:
 
         if spec_bench_list == []:
             logger.error(f"No bench selected from {spec_benches} in {self.spec_name.name}.")
-            exit(1)
+            raise BenchmarkError(f"No bench selected from {spec_benches} in {self.spec_name.name}.")
         else:
             logger.info(f"Selected {len(spec_bench_list)} benches from {spec_benches} in {self.spec_name.name}.")
             for spec_bench in spec_bench_list:
                 logger.debug(f"Selected {spec_bench}.")
         return spec_bench_list
 
-    def get_ref_time(self, bench_name: str, input_type: InputType):
+    def get_ref_time(self, bench_name: str, input_type: InputType) -> str:
+        """
+        获取基准测试的参考时间
+        
+        Args:
+            bench_name (str): 基准测试名称
+            input_type (InputType): 输入数据集类型
+            
+        Returns:
+            str: 参考时间字符串
+            
+        Raises:
+            FileOperationError: 当无法读取参考时间文件时抛出
+            AssertionError: 当参考时间不是数字时抛出
+        """
         reftime_result = ""
         if self.spec_name == SPECName.spec2006:
             reftime_path = os.path.join(self.spec_bench_path, bench_name, "data", 
@@ -132,7 +205,7 @@ class PackSPEC:
                 reftime_result = reftime[1].strip()
             except Exception as e:
                 logger.error(f"Failed to get reftime from '{reftime_path}': {str(e)}")
-                exit(1)
+                raise FileOperationError(f"Failed to get reftime from '{reftime_path}': {str(e)}")
         elif self.spec_name == SPECName.spec2017:
             reftime_path = os.path.join(
                 self.spec_bench_path, 
@@ -153,10 +226,10 @@ class PackSPEC:
                                 break
                 if reftime_result == "":
                     logger.error(f"Failed to get reftime from '{reftime_path}'")
-                    exit(1)
+                    raise FileOperationError(f"Failed to get reftime from '{reftime_path}'")
             except Exception as e:
                 logger.error(f"Failed to get reftime from '{reftime_path}': {str(e)}")
-                exit(1)
+                raise FileOperationError(f"Failed to get reftime from '{reftime_path}': {str(e)}")
         def is_number(s):
             try:
                 float(s)
@@ -166,7 +239,16 @@ class PackSPEC:
         assert is_number(reftime_result), f"Failed to get reftime from '{reftime_path}': Expect a numeric but get '{reftime_result}'"
         return reftime_result
 
-    def get_spec_log(self, spec_log_file):
+    def get_spec_log(self, spec_log_file: str) -> str:
+        """
+        从SPEC日志文件中获取日志路径
+        
+        Args:
+            spec_log_file (str): SPEC日志文件路径
+            
+        Returns:
+            str: 找到的日志路径，如果未找到则返回空字符串
+        """
         marked_line = f"The log for this run is in {self.spec_dir}"
         try:
             with open(spec_log_file, "r") as f:
@@ -180,6 +262,20 @@ class PackSPEC:
             return ""
 
     def get_bench_path(self, spec_bench_list: list, label: str, action_type: ActionType, tune_type: TuneType, input_type: InputType, spec_mode: SPECMode) -> list:
+        """
+        获取基准测试的构建或运行目录
+        
+        Args:
+            spec_bench_list (list): 基准测试列表
+            label (str): 配置标签
+            action_type (ActionType): 动作类型（build或run）
+            tune_type (TuneType): 优化级别
+            input_type (InputType): 输入数据集类型
+            spec_mode (SPECMode): 运行模式
+            
+        Returns:
+            list: 基准测试目录列表
+        """
         if self.debug_mode:
             logger.debug(f"Get bench dir with:")
             logger.debug(f"  spec_bench_list: {spec_bench_list}")
@@ -257,7 +353,21 @@ class PackSPEC:
 
         return selected_bench_dir
 
-    def analyze_spec_config(self, spec_cfg: str):
+    def analyze_spec_config(self, spec_cfg: str) -> str:
+        """
+        分析SPEC配置文件，提取标签信息
+        
+        Args:
+            spec_cfg (str): SPEC配置文件名
+            
+        Returns:
+            str: 从配置文件中提取的标签
+            
+        Raises:
+            ConfigError: 当配置文件不存在时抛出
+            PackSPECError: 当用户取消操作时抛出
+            AssertionError: 当无法从配置文件中提取标签时抛出
+        """
         spec_cfg_path = os.path.join(self.spec_dir, "config", spec_cfg)
         label = ""
         try:
@@ -300,18 +410,33 @@ class PackSPEC:
                             logger.warning("Process continue with 'basepeak' setting.")
                         else:
                             logger.error("Aborted by user.")
-                            exit(1)
+                            raise PackSPECError("Aborted by user.")
                         
         except FileNotFoundError:
             logger.error(f"File {spec_cfg_path} not found.")
-            exit(1)
+            raise ConfigError(f"File {spec_cfg_path} not found.")
         if self.spec_name == SPECName.spec2006:
             assert label != "", f"Ext not found in file {spec_cfg_path}."
         elif self.spec_name == SPECName.spec2017:
             assert label!= "", f"Label not found in file {spec_cfg_path}."
         return label
 
-    def run_setup_spec(self, spec_cfg: str, tune_type: TuneType, input_type: InputType, rebuild: bool = True):
+    def run_setup_spec(self, spec_cfg: str, tune_type: TuneType, input_type: InputType, rebuild: bool = True) -> str:
+        """
+        运行SPEC setup脚本
+        
+        Args:
+            spec_cfg (str): SPEC配置文件名
+            tune_type (TuneType): 优化级别
+            input_type (InputType): 输入数据集类型
+            rebuild (bool, optional): 是否重新构建，默认为True
+            
+        Returns:
+            str: SPEC日志文件路径
+            
+        Raises:
+            CommandExecutionError: 当命令执行失败时抛出
+        """
         output_log = []
         spec_setup_cmd = [
             self.setup_script_path, 
@@ -360,7 +485,7 @@ class PackSPEC:
                 if error is not None:
                     error = error.read()
                     logger.error(f"Command failed with error: {error}")
-                    exit(1)
+                    raise CommandExecutionError(f"Command failed with error: {error}")
 
             logger.success(f"Successfully setup spec with {tune_type}_{input_type} from config: {spec_cfg}")
 
@@ -370,13 +495,13 @@ class PackSPEC:
             
         except subprocess.CalledProcessError as e:
             logger.error(f"Command failed with error: {e.stderr}")
-            exit(1)
+            raise CommandExecutionError(f"Command failed with error: {e.stderr}")
         except Exception as e:
             logger.error(f"Failed to execute command: {str(e)}")
-            exit(1)
+            raise CommandExecutionError(f"Failed to execute command: {str(e)}")
 
 
-    def copy_binarys(self, label: str, tune_type: TuneType, input_type: InputType, spec_mode: SPECMode, 
+    def copy_binaries(self, label: str, tune_type: TuneType, input_type: InputType, spec_mode: SPECMode, 
                      dest_binary_dir: str = "", spec_cfg: str = "") -> str:
         src_bench_dir = self.get_bench_path(self.spec_bench_list, label, ActionType.build, tune_type, input_type, spec_mode)
 
@@ -398,7 +523,7 @@ class PackSPEC:
             logger.success(f"Successfully copied {copy_num} files.")
         else:
             logger.error(f"No binary to copy.")
-            exit(1)
+            raise FileOperationError("No binary to copy.")
 
         # 复制配置文件及相关日志至目标目录
         if spec_cfg != "":
@@ -449,13 +574,13 @@ class PackSPEC:
                 dest_dir_list.append(dest_dir)
             except Exception as e:
                 logger.error(f"Failed to copy {bench_name}: {str(e)}")
-                exit(1)
+                raise FileOperationError(f"Failed to copy {bench_name}: {str(e)}")
 
             if self.execute_specinvoke(src_run_dir, dest_dir, input_type):
                 logger.success(f"Successfully generated run_{input_type.name}.sh in {dest_dir}")
             else:
                 logger.error(f"Failed to generate run_test.sh in {dest_dir}")
-                exit(1)
+                raise CommandExecutionError(f"Failed to generate run_test.sh in {dest_dir}")
 
             self.create_test_script(label, bench_name, self.test_core_num, dest_dir, tune_type, input_type)
 
@@ -463,7 +588,7 @@ class PackSPEC:
             logger.success(f"Successfully copied {len(dest_dir_list)} benches.")
         else:
             logger.error(f"No benches to copy.")
-            exit(1)
+            raise FileOperationError("No benches to copy.")
         
         self.create_run_all_script(label, self.test_core_num, dest_dir_list, tune_type, input_type)
 
@@ -661,53 +786,64 @@ class PackSPEC:
     def setup_spec(self, spec_cfg: str):
         self.run_setup_spec(spec_cfg, self.tune_type, self.input_type, rebuild=self.rebuild)
 
-    def pack_binarys(self, label: str, spec_cfg: str = "") -> list:
+    def _process_tune_input_combinations(self, func, *args, **kwargs):
+        """
+        处理不同tune_type和input_type组合的通用方法
+        
+        Args:
+            func: 要调用的函数
+            *args: 传递给函数的位置参数
+            **kwargs: 传递给函数的关键字参数
+        """
+        tune_types = [self.tune_type]
         if self.tune_type == TuneType.all:
-            if self.input_type == InputType.all:
-                self.copy_binarys(label, TuneType.base, InputType.test, self.spec_mode, spec_cfg=spec_cfg)
-                self.copy_binarys(label, TuneType.base, InputType.train, self.spec_mode, spec_cfg=spec_cfg)
-                self.copy_binarys(label, TuneType.base, InputType.ref, self.spec_mode, spec_cfg=spec_cfg)
-                self.copy_binarys(label, TuneType.peak, InputType.test, self.spec_mode, spec_cfg=spec_cfg)
-                self.copy_binarys(label, TuneType.peak, InputType.train, self.spec_mode, spec_cfg=spec_cfg)
-                self.copy_binarys(label, TuneType.peak, InputType.ref, self.spec_mode, spec_cfg=spec_cfg)
-            else:
-                self.copy_binarys(label, TuneType.base, self.input_type, self.spec_mode, spec_cfg=spec_cfg)
-                self.copy_binarys(label, TuneType.peak, self.input_type, self.spec_mode, spec_cfg=spec_cfg)
-        else:
-            if self.input_type == InputType.all:
-                self.copy_binarys(label, self.tune_type, InputType.test, self.spec_mode, spec_cfg=spec_cfg)
-                self.copy_binarys(label, self.tune_type, InputType.train, self.spec_mode, spec_cfg=spec_cfg)
-                self.copy_binarys(label, self.tune_type, InputType.ref, self.spec_mode, spec_cfg=spec_cfg)
-            else:
-                self.copy_binarys(label, self.tune_type, self.input_type, self.spec_mode, spec_cfg=spec_cfg)
+            tune_types = [TuneType.base, TuneType.peak]
+        
+        input_types = [self.input_type]
+        if self.input_type == InputType.all:
+            input_types = [InputType.test, InputType.train, InputType.ref]
+        
+        for tune_type in tune_types:
+            for input_type in input_types:
+                func(*args, tune_type=tune_type, input_type=input_type, **kwargs)
+
+    def pack_binaries(self, label: str, spec_cfg: str = "") -> list:
+        """
+        打包二进制文件
+        
+        Args:
+            label (str): 标签
+            spec_cfg (str, optional): SPEC配置文件名，默认为""
+            
+        Returns:
+            list: 目标目录列表
+        """
+        self._process_tune_input_combinations(
+            self.copy_binaries,
+            label, spec_mode=self.spec_mode, spec_cfg=spec_cfg
+        )
     
-    def pack_binarys_cfg(self, spec_cfg: str):
+    def pack_binaries_cfg(self, spec_cfg: str):
         label = self.analyze_spec_config(spec_cfg)
-        self.pack_binarys(label, spec_cfg)
+        self.pack_binaries(label, spec_cfg)
 
     def pack_benches(self, label: str, with_build:bool = False, spec_cfg: str = "") -> list:
-        dest_benches_dir_list = []
-        if self.tune_type == TuneType.all:
-            if self.input_type == InputType.all:
-                self.copy_benches(label, TuneType.base, InputType.test, self.spec_mode, with_build, spec_cfg=spec_cfg)
-                self.copy_benches(label, TuneType.base, InputType.train, self.spec_mode, with_build, spec_cfg=spec_cfg)
-                self.copy_benches(label, TuneType.base, InputType.ref, self.spec_mode, with_build, spec_cfg=spec_cfg)
-                self.copy_benches(label, TuneType.peak, InputType.test, self.spec_mode, with_build, spec_cfg=spec_cfg)
-                self.copy_benches(label, TuneType.peak, InputType.train, self.spec_mode, with_build, spec_cfg=spec_cfg)
-                self.copy_benches(label, TuneType.peak, InputType.ref, self.spec_mode, with_build, spec_cfg=spec_cfg)
-            else:
-                self.copy_benches(label, TuneType.base, self.input_type, self.spec_mode, with_build, spec_cfg=spec_cfg)
-                self.copy_benches(label, TuneType.peak, self.input_type, self.spec_mode, with_build, spec_cfg=spec_cfg)
-
-        else:
-            if self.input_type == InputType.all:
-                self.copy_benches(label, self.tune_type, InputType.test, self.spec_mode, with_build, spec_cfg=spec_cfg)
-                self.copy_benches(label, self.tune_type, InputType.train, self.spec_mode, with_build, spec_cfg=spec_cfg)
-                self.copy_benches(label, self.tune_type, InputType.ref, self.spec_mode, with_build, spec_cfg=spec_cfg)
-            else:
-                self.copy_benches(label, self.tune_type, self.input_type, self.spec_mode, with_build, spec_cfg=spec_cfg)
-
-        return dest_benches_dir_list
+        """
+        打包基准测试
+        
+        Args:
+            label (str): 标签
+            with_build (bool, optional): 是否包含构建目录，默认为False
+            spec_cfg (str, optional): SPEC配置文件名，默认为""
+            
+        Returns:
+            list: 目标目录列表
+        """
+        self._process_tune_input_combinations(
+            self.copy_benches,
+            label, spec_mode=self.spec_mode, with_build=with_build, spec_cfg=spec_cfg
+        )
+        return []
 
     def pack_benches_cfg(self, spec_cfg: str, with_build=False):
         label = self.analyze_spec_config(spec_cfg)

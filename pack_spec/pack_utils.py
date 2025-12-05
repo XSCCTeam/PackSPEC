@@ -2,14 +2,36 @@ import os
 from config import *
 import subprocess
 import shutil
+from typing import List, Dict, Optional, Any, Tuple
 
 
 class PackUtils:
-    def __init__(self, logger, debug_mode=False):
+    # 实例变量类型注解
+    logger: Any
+    debug_mode: bool
+
+    def __init__(self, logger: Any, debug_mode: bool = False):
+        """
+        初始化PackUtils实例
+        
+        Args:
+            logger (Any): 日志记录器实例
+            debug_mode (bool, optional): 是否开启调试模式，默认为False
+        """
         self.logger = logger
         self.debug_mode = debug_mode
 
-    def get_bench_dir(self, bench_name: str, bench_dirs: list) -> str:
+    def get_bench_dir(self, bench_name: str, bench_dirs: List[str]) -> str:
+        """
+        从基准测试目录列表中查找指定名称的基准测试目录
+        
+        Args:
+            bench_name (str): 基准测试名称
+            bench_dirs (List[str]): 基准测试目录列表
+            
+        Returns:
+            str: 找到的基准测试目录路径，如果未找到则返回空字符串
+        """
         if self.debug_mode:
             self.logger.debug(f"Get bench dir with:")
             self.logger.debug(f"  bench_name: {bench_name}")
@@ -24,7 +46,23 @@ class PackUtils:
         return ""
 
     def get_dest_dir(self, label: str, profile_gen: bool, auto_mode: bool, pack_mode: PACKMode,
-                     spec_name: SPECName, tune_type: TuneType, input_type: InputType, spec_mode: SPECMode):
+                     spec_name: SPECName, tune_type: TuneType, input_type: InputType, spec_mode: SPECMode) -> str:
+        """
+        获取基准测试打包的目标目录路径
+        
+        Args:
+            label (str): 基准测试标签
+            profile_gen (bool): 是否生成profile
+            auto_mode (bool): 是否自动模式
+            pack_mode (PACKMode): 打包模式
+            spec_name (SPECName): SPEC基准测试版本
+            tune_type (TuneType): 优化级别
+            input_type (InputType): 输入数据集类型
+            spec_mode (SPECMode): 运行模式
+            
+        Returns:
+            str: 目标目录路径
+        """
         if self.debug_mode:
             self.logger.debug(f"Get dest dir with:")
             self.logger.debug(f"  spec_name: {spec_name.name}")
@@ -49,6 +87,16 @@ class PackUtils:
         return dest_bench_dir
 
     def get_spec_log_file_path(self, spec_dir: str, spec_log_file: str) -> str:
+        """
+        从SPEC日志文件中获取实际的日志文件路径
+        
+        Args:
+            spec_dir (str): SPEC目录路径
+            spec_log_file (str): SPEC日志文件路径
+            
+        Returns:
+            str: 实际的日志文件路径，如果未找到则返回空字符串
+        """
         if self.debug_mode:
             self.logger.debug(f"Get spec log file path with:")
             self.logger.debug(f"  spec_dir: {spec_dir}")
@@ -65,7 +113,18 @@ class PackUtils:
             self.logger.debug(f"Failed find spec log from '{spec_log_file}': {str(e)}")
             return ""
     
-    def get_run_script_name(self, profile_gen: bool, input_type: InputType, suffix: str = ""):
+    def get_run_script_name(self, profile_gen: bool, input_type: InputType, suffix: str = "") -> str:
+        """
+        获取运行脚本的名称
+        
+        Args:
+            profile_gen (bool): 是否生成profile
+            input_type (InputType): 输入数据集类型
+            suffix (str, optional): 脚本名称后缀，默认为空
+            
+        Returns:
+            str: 运行脚本的完整名称
+        """
         script_name = ""
         if profile_gen:
             script_name = f"profile_gen_{input_type.name}"
@@ -75,7 +134,18 @@ class PackUtils:
             script_name = f"{script_name}_{suffix}"
         return f"{script_name}.sh"
 
-    def get_spec_setup_log_path(self, spec_cfg: str, tune_type: TuneType, input_type: InputType):
+    def get_spec_setup_log_path(self, spec_cfg: str, tune_type: TuneType, input_type: InputType) -> str:
+        """
+        获取SPEC setup日志文件的路径
+        
+        Args:
+            spec_cfg (str): SPEC配置文件名
+            tune_type (TuneType): 优化级别
+            input_type (InputType): 输入数据集类型
+            
+        Returns:
+            str: SPEC setup日志文件的完整路径
+        """
         if self.debug_mode:
             self.logger.debug(f"Get spec setup log path with:")
             self.logger.debug(f"  spec_cfg: {spec_cfg}")
@@ -87,7 +157,19 @@ class PackUtils:
         return spec_log_path
 
     def create_spec_setup_log_path(self, log_content: str, 
-                                   spec_cfg: str, tune_type: TuneType, input_type: InputType):
+                                   spec_cfg: str, tune_type: TuneType, input_type: InputType) -> str:
+        """
+        创建SPEC setup日志文件
+        
+        Args:
+            log_content (str): 日志内容列表
+            spec_cfg (str): SPEC配置文件名
+            tune_type (TuneType): 优化级别
+            input_type (InputType): 输入数据集类型
+            
+        Returns:
+            str: 创建的日志文件路径
+        """
         if self.debug_mode:
             self.logger.debug(f"Create spec setup log path with:")
             self.logger.debug(f"  log_content: {log_content}")
@@ -101,7 +183,26 @@ class PackUtils:
         return spec_log_path
     
     def create_dest_dir(self, label: str, profile_gen: bool, auto_mode: bool, pack_mode: PACKMode,
-                        spec_name: SPECName, tune_type: TuneType, input_type: InputType, spec_mode: SPECMode):
+                        spec_name: SPECName, tune_type: TuneType, input_type: InputType, spec_mode: SPECMode) -> str:
+        """
+        创建基准测试打包的目标目录
+        
+        Args:
+            label (str): 基准测试标签
+            profile_gen (bool): 是否生成profile
+            auto_mode (bool): 是否自动模式
+            pack_mode (PACKMode): 打包模式
+            spec_name (SPECName): SPEC基准测试版本
+            tune_type (TuneType): 优化级别
+            input_type (InputType): 输入数据集类型
+            spec_mode (SPECMode): 运行模式
+            
+        Returns:
+            str: 创建的目标目录路径
+            
+        Raises:
+            PackSPECError: 当用户取消目录覆盖操作时抛出
+        """
         if self.debug_mode:
             self.logger.debug(f"Create dest dir with:")
             self.logger.debug(f"  spec_name: {spec_name.name}")
@@ -126,13 +227,20 @@ class PackUtils:
                 os.makedirs(dest_bench_dir, exist_ok=False)
             else:
                 self.logger.error("User canceled the operation. Directory not overwritten.")
-                exit(1)
+                raise PackSPECError("User canceled the operation. Directory not overwritten.")
         else:
             self.logger.debug(f"Creating directory {dest_bench_dir} ")
             os.makedirs(dest_bench_dir, exist_ok=False)
         return dest_bench_dir
 
-    def create_env_file(self, dest_dir: str, env_name: str):
+    def create_env_file(self, dest_dir: str, env_name: str) -> None:
+        """
+        创建环境变量文件
+        
+        Args:
+            dest_dir (str): 目标目录路径
+            env_name (str): 环境文件名称（不带后缀）
+        """
         try:
             self.logger.info(f"Create {env_name}.env to record compile environment.")
             with open(os.path.join(dest_dir, f"{env_name}.env"), 'w') as f:
@@ -144,9 +252,22 @@ class PackUtils:
             self.logger.error(f"Failed to create compile.env: {str(e)}")
 
 
-    def execute_commands(self, command: str, work_dir: str):
+    def execute_commands(self, command: str, work_dir: str) -> List[str]:
+        """
+        执行命令并捕获输出
+        
+        Args:
+            command (str): 要执行的命令字符串
+            work_dir (str): 命令执行的工作目录
+            
+        Returns:
+            List[str]: 命令输出的行列表
+            
+        Raises:
+            CommandExecutionError: 当命令执行失败时抛出
+        """
         try:
-            # 执行specinvoke命令并捕获输出
+            # 执行命令并捕获输出
             self.logger.debug(f"Executing command: {command}")
             if self.debug_mode:
                 self.logger.debug(f"On: {work_dir}")
@@ -164,12 +285,23 @@ class PackUtils:
             return bash_result
         except subprocess.CalledProcessError as e:
             self.logger.error(f"Command failed with error: {e.stderr}")
-            exit(1)
+            raise CommandExecutionError(f"Command failed with error: {e.stderr}")
         except Exception as e:
             self.logger.error(f"Failed to execute command: {str(e)}")
-            exit(1)
+            raise CommandExecutionError(f"Failed to execute command: {str(e)}")
         
-    def copy_file_to_target_dir(self, src_path: str, dest_path: str, file_info: str=""):
+    def copy_file_to_target_dir(self, src_path: str, dest_path: str, file_info: str="") -> bool:
+        """
+        复制文件到目标目录
+        
+        Args:
+            src_path (str): 源文件路径
+            dest_path (str): 目标文件路径
+            file_info (str, optional): 文件描述信息，默认为空
+            
+        Returns:
+            bool: 复制成功返回True，失败返回False
+        """
         try:
             src_file_name = os.path.basename(src_path)
             dest_file_name = os.path.basename(dest_path)
@@ -182,11 +314,32 @@ class PackUtils:
             self.logger.warning(f"If you didn't use this tool for setup, {file_info} will not be generated. Please ignore this warning.")
             return False
 
-    def copy_script_file_to_target_dir(self, script_name: str, script_target_dir: str):
+    def copy_script_file_to_target_dir(self, script_name: str, script_target_dir: str) -> bool:
+        """
+        复制脚本文件到目标目录
+        
+        Args:
+            script_name (str): 脚本名称
+            script_target_dir (str): 目标目录路径
+            
+        Returns:
+            bool: 复制成功返回True，失败返回False
+        """
         src_dir = os.path.join(SCRIPTS_PATH, script_name)
         return self.copy_file_to_target_dir(src_dir, script_target_dir, f"script {script_name}")
 
-    def use_template_to_create_script(self, template_name: str, script_target_dir: str, replace_dict: dict):
+    def use_template_to_create_script(self, template_name: str, script_target_dir: str, replace_dict: Dict[str, str]) -> None:
+        """
+        使用模板创建脚本文件
+        
+        Args:
+            template_name (str): 模板文件名（带.template后缀）
+            script_target_dir (str): 目标目录路径
+            replace_dict (Dict[str, str]): 替换字典，key为模板中的占位符，value为替换值
+            
+        Raises:
+            CommandExecutionError: 当创建脚本失败时抛出
+        """
         if self.debug_mode:
             self.logger.debug(f"Use template to create script with:")
             self.logger.debug(f"  template_name: {template_name}")
@@ -205,10 +358,20 @@ class PackUtils:
             self.logger.debug(f"Create script {script_name} from template {template_name} to {script_target_dir}.")
         except Exception as e:
             self.logger.error(f"Failed to create script {script_name} from template {template_name} to {script_target_dir}: {str(e)}")
-            exit(1)
+            raise CommandExecutionError(f"Failed to create script {script_name} from template {template_name} to {script_target_dir}: {str(e)}")
 
     def copy_spec_cfg_and_logs_to_target_dir(self, spec_dir: str, spec_cfg: str, dest_dir: str,
-                                             tune_type: TuneType, input_type: InputType):
+                                             tune_type: TuneType, input_type: InputType) -> None:
+        """
+        复制SPEC配置文件和日志到目标目录
+        
+        Args:
+            spec_dir (str): SPEC目录路径
+            spec_cfg (str): SPEC配置文件名
+            dest_dir (str): 目标目录路径
+            tune_type (TuneType): 优化级别
+            input_type (InputType): 输入数据集类型
+        """
         # 复制配置文件至目标目录
         spec_cfg_path = os.path.join(spec_dir, "config", spec_cfg)
         self.copy_file_to_target_dir(spec_cfg_path, dest_dir, "configs")
@@ -225,9 +388,23 @@ class PackUtils:
         # 创建env文件至目标目录
         self.create_env_file(dest_dir, "compile")
 
-    def commands_to_cal_score(self, script_target_dir:str, test_clock_rate: float, score_file: str=""):
+    def commands_to_cal_score(self, script_target_dir:str, test_clock_rate: float, score_file: str="") -> List[str]:
+        """
+        生成计算分数的命令列表
+        
+        Args:
+            script_target_dir (str): 脚本目标目录
+            test_clock_rate (float): 测试CPU主频，用于算分，单位GHz
+            score_file (str, optional): 分数输出文件，默认为空
+            
+        Returns:
+            List[str]: 计算分数的命令列表
+            
+        Raises:
+            FileOperationError: 当复制cal_score.py失败时抛出
+        """
         if not self.copy_script_file_to_target_dir("cal_score.py", script_target_dir):
-            exit(1)
+            raise FileOperationError("Failed to copy cal_score.py to target directory.")
         if self.debug_mode:
             self.logger.debug(f"Commands to cal score with:")
             self.logger.debug(f"  script_target_dir: {script_target_dir}")
@@ -245,7 +422,16 @@ class PackUtils:
         self.logger.debug(f"Add cal score commands.")
         return commands
 
-    def commands_to_send_message(self, message: str):
+    def commands_to_send_message(self, message: str) -> List[str]:
+        """
+        生成发送消息的命令列表
+        
+        Args:
+            message (str): 要发送的消息内容
+            
+        Returns:
+            List[str]: 发送消息的命令列表
+        """
         if self.debug_mode:
             self.logger.debug(f"Commands to send message with:")
             self.logger.debug(f"  message: {message}")
@@ -260,9 +446,24 @@ class PackUtils:
         self.logger.debug(f"Add send message commands.")
         return commands
 
-    def commands_to_send_md_message(self, script_target_dir:str, title_message: str, text_message: str, md_path: str):
+    def commands_to_send_md_message(self, script_target_dir:str, title_message: str, text_message: str, md_path: str) -> List[str]:
+        """
+        生成发送Markdown格式消息的命令列表
+        
+        Args:
+            script_target_dir (str): 脚本目标目录
+            title_message (str): 消息标题
+            text_message (str): 消息文本内容
+            md_path (str): Markdown文件路径
+            
+        Returns:
+            List[str]: 发送Markdown格式消息的命令列表
+            
+        Raises:
+            FileOperationError: 当复制send_md_message.py失败时抛出
+        """
         if not self.copy_script_file_to_target_dir("send_md_message.py", script_target_dir):
-            exit(1)
+            raise FileOperationError("Failed to copy send_md_message.py to target directory.")
         if self.debug_mode:
             self.logger.debug(f"Commands to send md message with:")
             self.logger.debug(f"  script_target_dir: {script_target_dir}")
@@ -282,7 +483,16 @@ class PackUtils:
         self.logger.debug(f"Add send md message commands.")
         return commands
     
-    def commands_to_collect_profiles(self, script_target_dir: str):
+    def commands_to_collect_profiles(self, script_target_dir: str) -> List[str]:
+        """
+        生成收集profile文件的命令列表
+        
+        Args:
+            script_target_dir (str): 脚本目标目录
+            
+        Returns:
+            List[str]: 收集profile文件的命令列表
+        """
         self.use_template_to_create_script(
             "collect_profiles.sh.template",
             script_target_dir,
@@ -300,7 +510,18 @@ class PackUtils:
         self.logger.debug(f"Add collect profiles commands.")
         return commands
 
-    def commands_to_prepare_run(self, log_name: str, core_num: int, iterations: int):
+    def commands_to_prepare_run(self, log_name: str, core_num: int, iterations: int) -> List[str]:
+        """
+        生成准备运行的命令列表
+        
+        Args:
+            log_name (str): 日志文件名
+            core_num (int): 绑定的核心编号，DEFAULT_CORE_NUM表示不绑定
+            iterations (int): 测试迭代次数
+            
+        Returns:
+            List[str]: 准备运行的命令列表
+        """
         if self.debug_mode:
             self.logger.debug(f"Commands to prepare run with:")
             self.logger.debug(f"  log_name: {log_name}")
@@ -326,7 +547,7 @@ class PackUtils:
             "# 定义测试迭代次数",
             f"TEST_TIMES={iterations}",
         ]
-        if core_num!= -1:
+        if core_num != DEFAULT_CORE_NUM:
             commands.extend([
                 "# 定义绑定核心编号",
                 f"CORE_NUM={core_num}"
@@ -335,7 +556,23 @@ class PackUtils:
 
     def commands_to_run_bench(self, bench_name: str, profile_gen: bool, spec_bench_map: dict, 
                               core_num: int, ref_time: float,
-                              tune_type: TuneType, label: str, input_type: InputType):
+                              tune_type: TuneType, label: str, input_type: InputType) -> List[str]:
+        """
+        生成运行基准测试的命令列表
+        
+        Args:
+            bench_name (str): 基准测试名称
+            profile_gen (bool): 是否生成profile
+            spec_bench_map (dict): 基准测试二进制文件映射字典
+            core_num (int): 绑定的核心编号，DEFAULT_CORE_NUM表示不绑定
+            ref_time (float): 参考时间
+            tune_type (TuneType): 优化级别
+            label (str): 基准测试标签
+            input_type (InputType): 输入数据集类型
+            
+        Returns:
+            List[str]: 运行基准测试的命令列表
+        """
         if self.debug_mode:
             self.logger.debug(f"Commands to run bench with:")
             self.logger.debug(f"  bench_name: {bench_name}")
@@ -361,14 +598,12 @@ class PackUtils:
             f"for i in $(seq 1 $TEST_TIMES); do",
             f"    echo \"Test {bench_name} #$i:\" | tee -a \"$LOG_FILE\""
         ])
-        if core_num!= -1:
+        if core_num != DEFAULT_CORE_NUM:
             commands.append(
-                f"    (time -p taskset -c $CORE_NUM bash run_{input_type.name}.sh) 2>&1 | tee -a \"$LOG_FILE\""
-            )
+                f"    (time -p taskset -c $CORE_NUM bash run_{input_type.name}.sh) 2>&1 | tee -a \"$LOG_FILE\"")
         else:
             commands.append(
-                f"    (time -p bash run_{input_type.name}.sh) 2>&1 | tee -a \"$LOG_FILE\""
-            )
+                f"    (time -p bash run_{input_type.name}.sh) 2>&1 | tee -a \"$LOG_FILE\"")
         commands.extend([
             f"done",
             f"echo -e '{bench_name} completed ' | tee -a \"$LOG_FILE\"",
