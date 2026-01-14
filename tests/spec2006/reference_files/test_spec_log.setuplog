@@ -1,0 +1,105 @@
+Build successes: 400.perlbench(base), 401.bzip2(base), 403.gcc(base), 410.bwaves(base), 416.gamess(base), 429.mcf(base), 433.milc(base), 434.zeusmp(base), 435.gromacs(base), 436.cactusADM(base), 437.leslie3d(base), 444.namd(base), 445.gobmk(base), 447.dealII(base), 450.soplex(base), 453.povray(base), 454.calculix(base), 456.hmmer(base), 458.sjeng(base), 459.GemsFDTD(base), 462.libquantum(base), 464.h264ref(base), 465.tonto(base), 470.lbm(base), 471.omnetpp(base), 473.astar(base), 481.wrf(base), 482.sphinx3(base), 483.xalancbmk(base), 998.specrand(base), 999.specrand(base)
+
+Parsing Flags
+Looking at 400.perlbench base x86_llvm19_novec_wll default: done
+Looking at 401.bzip2 base x86_llvm19_novec_wll default: done
+Looking at 403.gcc base x86_llvm19_novec_wll default: done
+Looking at 429.mcf base x86_llvm19_novec_wll default: done
+Looking at 445.gobmk base x86_llvm19_novec_wll default: done
+Looking at 456.hmmer base x86_llvm19_novec_wll default: done
+Looking at 458.sjeng base x86_llvm19_novec_wll default: done
+Looking at 462.libquantum base x86_llvm19_novec_wll default: done
+Looking at 464.h264ref base x86_llvm19_novec_wll default: done
+Looking at 471.omnetpp base x86_llvm19_novec_wll default: done
+Looking at 473.astar base x86_llvm19_novec_wll default: done
+Looking at 483.xalancbmk base x86_llvm19_novec_wll default: done
+Looking at 999.specrand base x86_llvm19_novec_wll default: done
+Looking at 410.bwaves base x86_llvm19_novec_wll default: done
+Looking at 416.gamess base x86_llvm19_novec_wll default: done
+Looking at 433.milc base x86_llvm19_novec_wll default: done
+Looking at 434.zeusmp base x86_llvm19_novec_wll default: done
+Looking at 435.gromacs base x86_llvm19_novec_wll default: done
+Looking at 436.cactusADM base x86_llvm19_novec_wll default: done
+Looking at 437.leslie3d base x86_llvm19_novec_wll default: done
+Looking at 444.namd base x86_llvm19_novec_wll default: done
+Looking at 447.dealII base x86_llvm19_novec_wll default: done
+Looking at 450.soplex base x86_llvm19_novec_wll default: done
+Looking at 453.povray base x86_llvm19_novec_wll default: done
+Looking at 454.calculix base x86_llvm19_novec_wll default: done
+Looking at 459.GemsFDTD base x86_llvm19_novec_wll default: done
+Looking at 465.tonto base x86_llvm19_novec_wll default: done
+Looking at 470.lbm base x86_llvm19_novec_wll default: done
+Looking at 481.wrf base x86_llvm19_novec_wll default: done
+Looking at 482.sphinx3 base x86_llvm19_novec_wll default: done
+Looking at 998.specrand base x86_llvm19_novec_wll default: done
+Flag Parsing Complete
+
+Setting Up Run Directories
+Setting up 400.perlbench ref base x86_llvm19_novec_wll default: existing (run_base_ref_x86_llvm19_novec_wll.0000)
+Setting up 401.bzip2 ref base x86_llvm19_novec_wll default: existing (run_base_ref_x86_llvm19_novec_wll.0000)
+Setting up 403.gcc ref base x86_llvm19_novec_wll default: existing (run_base_ref_x86_llvm19_novec_wll.0000)
+Setting up 429.mcf ref base x86_llvm19_novec_wll default: existing (run_base_ref_x86_llvm19_novec_wll.0000)
+Setting up 445.gobmk ref base x86_llvm19_novec_wll default: existing (run_base_ref_x86_llvm19_novec_wll.0000)
+Setting up 456.hmmer ref base x86_llvm19_novec_wll default: existing (run_base_ref_x86_llvm19_novec_wll.0000)
+Setting up 458.sjeng ref base x86_llvm19_novec_wll default: existing (run_base_ref_x86_llvm19_novec_wll.0000)
+Setting up 462.libquantum ref base x86_llvm19_novec_wll default: existing (run_base_ref_x86_llvm19_novec_wll.0000)
+Setting up 464.h264ref ref base x86_llvm19_novec_wll default: existing (run_base_ref_x86_llvm19_novec_wll.0000)
+Setting up 471.omnetpp ref base x86_llvm19_novec_wll default: existing (run_base_ref_x86_llvm19_novec_wll.0000)
+Setting up 473.astar ref base x86_llvm19_novec_wll default: existing (run_base_ref_x86_llvm19_novec_wll.0000)
+Setting up 483.xalancbmk ref base x86_llvm19_novec_wll default: existing (run_base_ref_x86_llvm19_novec_wll.0000)
+Setting up 999.specrand ref base x86_llvm19_novec_wll default: created (run_base_ref_x86_llvm19_novec_wll.0000)
+Setting up 410.bwaves ref base x86_llvm19_novec_wll default: existing (run_base_ref_x86_llvm19_novec_wll.0000)
+Setting up 416.gamess ref base x86_llvm19_novec_wll default: existing (run_base_ref_x86_llvm19_novec_wll.0000)
+Setting up 433.milc ref base x86_llvm19_novec_wll default: existing (run_base_ref_x86_llvm19_novec_wll.0000)
+Setting up 434.zeusmp ref base x86_llvm19_novec_wll default: existing (run_base_ref_x86_llvm19_novec_wll.0000)
+Setting up 435.gromacs ref base x86_llvm19_novec_wll default: existing (run_base_ref_x86_llvm19_novec_wll.0000)
+Setting up 436.cactusADM ref base x86_llvm19_novec_wll default: existing (run_base_ref_x86_llvm19_novec_wll.0000)
+Setting up 437.leslie3d ref base x86_llvm19_novec_wll default: existing (run_base_ref_x86_llvm19_novec_wll.0000)
+Setting up 444.namd ref base x86_llvm19_novec_wll default: existing (run_base_ref_x86_llvm19_novec_wll.0000)
+Setting up 447.dealII ref base x86_llvm19_novec_wll default: existing (run_base_ref_x86_llvm19_novec_wll.0000)
+Setting up 450.soplex ref base x86_llvm19_novec_wll default: existing (run_base_ref_x86_llvm19_novec_wll.0000)
+Setting up 453.povray ref base x86_llvm19_novec_wll default: existing (run_base_ref_x86_llvm19_novec_wll.0000)
+Setting up 454.calculix ref base x86_llvm19_novec_wll default: existing (run_base_ref_x86_llvm19_novec_wll.0000)
+Setting up 459.GemsFDTD ref base x86_llvm19_novec_wll default: existing (run_base_ref_x86_llvm19_novec_wll.0000)
+Setting up 465.tonto ref base x86_llvm19_novec_wll default: existing (run_base_ref_x86_llvm19_novec_wll.0000)
+Setting up 470.lbm ref base x86_llvm19_novec_wll default: existing (run_base_ref_x86_llvm19_novec_wll.0000)
+Setting up 481.wrf ref base x86_llvm19_novec_wll default: created (run_base_ref_x86_llvm19_novec_wll.0000)
+Setting up 482.sphinx3 ref base x86_llvm19_novec_wll default: existing (run_base_ref_x86_llvm19_novec_wll.0000)
+Setting up 998.specrand ref base x86_llvm19_novec_wll default: created (run_base_ref_x86_llvm19_novec_wll.0000)
+Writing Command Files
+Writing control file for 400.perlbench ref base x86_llvm19_novec_wll default
+Writing control file for 401.bzip2 ref base x86_llvm19_novec_wll default
+Writing control file for 403.gcc ref base x86_llvm19_novec_wll default
+Writing control file for 429.mcf ref base x86_llvm19_novec_wll default
+Writing control file for 445.gobmk ref base x86_llvm19_novec_wll default
+Writing control file for 456.hmmer ref base x86_llvm19_novec_wll default
+Writing control file for 458.sjeng ref base x86_llvm19_novec_wll default
+Writing control file for 462.libquantum ref base x86_llvm19_novec_wll default
+Writing control file for 464.h264ref ref base x86_llvm19_novec_wll default
+Writing control file for 471.omnetpp ref base x86_llvm19_novec_wll default
+Writing control file for 473.astar ref base x86_llvm19_novec_wll default
+Writing control file for 483.xalancbmk ref base x86_llvm19_novec_wll default
+Writing control file for 999.specrand ref base x86_llvm19_novec_wll default
+Writing control file for 410.bwaves ref base x86_llvm19_novec_wll default
+Writing control file for 416.gamess ref base x86_llvm19_novec_wll default
+Writing control file for 433.milc ref base x86_llvm19_novec_wll default
+Writing control file for 434.zeusmp ref base x86_llvm19_novec_wll default
+Writing control file for 435.gromacs ref base x86_llvm19_novec_wll default
+Writing control file for 436.cactusADM ref base x86_llvm19_novec_wll default
+Writing control file for 437.leslie3d ref base x86_llvm19_novec_wll default
+Writing control file for 444.namd ref base x86_llvm19_novec_wll default
+Writing control file for 447.dealII ref base x86_llvm19_novec_wll default
+Writing control file for 450.soplex ref base x86_llvm19_novec_wll default
+Writing control file for 453.povray ref base x86_llvm19_novec_wll default
+Writing control file for 454.calculix ref base x86_llvm19_novec_wll default
+Writing control file for 459.GemsFDTD ref base x86_llvm19_novec_wll default
+Writing control file for 465.tonto ref base x86_llvm19_novec_wll default
+Writing control file for 470.lbm ref base x86_llvm19_novec_wll default
+Writing control file for 481.wrf ref base x86_llvm19_novec_wll default
+Writing control file for 482.sphinx3 ref base x86_llvm19_novec_wll default
+Writing control file for 998.specrand ref base x86_llvm19_novec_wll default
+Setup Complete
+
+The log for this run is in /home/wll/PackSPEC/tests/spec2006/spec_env/speccpu2006-v1.2/result/CPU2006.001.log
+
+runspec finished at Fri Jun 13 17:25:49 2025; 915 total seconds elapsed

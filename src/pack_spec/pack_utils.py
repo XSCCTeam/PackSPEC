@@ -1,25 +1,180 @@
 import os
-from config import *
+import sys
+import json
+from enum import Enum
+from typing import Any, Union, Optional
+
+from src.pack_spec.pack_config import *
 import subprocess
 import shutil
-from typing import List, Dict, Optional, Any, Tuple
+from typing import List, Dict, Type
 
+
+class EnumEncoder(json.JSONEncoder):
+    """
+    自定义JSON编码器，支持枚举类型序列化
+    """
+    def default(self, obj: Any) -> Union[str, Any]:
+        if isinstance(obj, Enum):
+            return obj.name
+        return super().default(obj)
+
+
+class EnumDecoder(json.JSONDecoder):
+    """
+    自定义JSON解码器，支持将字符串转换为枚举类型
+    
+    根据config字段名智能判断应该使用哪个枚举类
+    """
+    
+    FIELD_TO_ENUM = {
+        'spec_name': SPECName,
+        'tune_type': TuneType,
+        'input_type': InputType,
+        'spec_mode': SPECMode,
+        # 'pack_mode': PACKMode,
+        # 'spec_benches': SPECSubBench,
+    }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, object_hook=self._object_hook, **kwargs)
+    
+    def _object_hook(self, obj: Dict[str, Any]) -> Dict[str, Any]:
+        return self._convert_enums(obj)
+    
+    def _convert_enums(self, obj: Any, parent_key: str = None) -> Any:
+        if isinstance(obj, dict):
+            result = {}
+            for key, value in obj.items():
+                result[key] = self._convert_field(key, value)
+            return result
+        elif isinstance(obj, list):
+            return [self._convert_enums(item) for item in obj]
+        return obj
+    
+    def _convert_field(self, key: str, value: Any) -> Any:
+        """
+        根据字段名和值进行枚举转换
+        
+        Args:
+            key: 字段名
+            value: 字段值
+            
+        Returns:
+            转换后的值
+        """
+        if not isinstance(value, str):
+            return self._convert_enums(value, key)
+        
+        if key in self.FIELD_TO_ENUM:
+            enum_class = self.FIELD_TO_ENUM[key]
+            converted = self._str_to_enum(value, enum_class)
+            if converted is not None:
+                return converted
+        
+        return self._convert_enums(value, key)
+    
+    def _str_to_enum(self, value: str, enum_class: Type[Enum]) -> Optional[Enum]:
+        """
+        将字符串转换为指定枚举类
+        
+        Args:
+            value: 字符串值
+            enum_class: 枚举类
+            
+        Returns:
+            枚举值，转换失败返回None
+        """
+        try:
+            return enum_class[value]
+        except KeyError:
+            return None
+
+
+def str_to_enum(value: str, enum_class: type) -> Enum:
+    """
+    将字符串转换为枚举类型
+    
+    Args:
+        value (str): 字符串值
+        enum_class (type): 枚举类
+        
+    Returns:
+        Enum: 枚举值，如果转换失败则返回原始字符串
+    """
+    try:
+        return enum_class[value]
+    except (KeyError, AttributeError):
+        return value
+
+
+def convert_dict_enums(data: Dict[str, Any], enum_fields: Dict[str, type]) -> Dict[str, Any]:
+    """
+    将字典中的指定字段转换为枚举类型
+    
+    Args:
+        data (Dict[str, Any]): 原始字典数据
+        enum_fields (Dict[str, type]): 字段名到枚举类的映射
+        
+    Returns:
+        Dict[str, Any]: 转换后的字典
+    """
+    result = {}
+    for key, value in data.items():
+        if key in enum_fields and isinstance(value, str):
+            result[key] = str_to_enum(value, enum_fields[key])
+        else:
+            result[key] = value
+    return result
+
+def save_pack_spec_cfg(pack_spec_cfg: dict, pack_generated_files_path: str):
+    """
+    保存PackSPEC配置文件
+    """
+    pack_spec_cfg_path = os.path.join(pack_generated_files_path, "pack_spec.cfg")
+    with open(pack_spec_cfg_path, "w") as f:
+        json.dump(pack_spec_cfg, f, indent=4, cls=EnumEncoder)
+    return pack_spec_cfg_path
+
+def load_pack_spec_cfg(pack_spec_cfg_path: str) -> dict:
+    """
+    加载PackSPEC配置文件
+    
+    Args:
+        pack_spec_cfg_path (str): 配置文件路径
+        
+    Returns:
+        dict: 加载的配置字典
+    """
+    with open(pack_spec_cfg_path, "r") as f:
+        pack_spec_cfg = json.load(f, cls=EnumDecoder)
+    return pack_spec_cfg
 
 class PackUtils:
     # 实例变量类型注解
     logger: Any
-    debug_mode: bool
 
-    def __init__(self, logger: Any, debug_mode: bool = False):
+    def __init__(self, config: dict, logger: Any):
         """
         初始化PackUtils实例
         
         Args:
             logger (Any): 日志记录器实例
-            debug_mode (bool, optional): 是否开启调试模式，默认为False
         """
+        self.pack_name = config["pack_name"]
         self.logger = logger
-        self.debug_mode = debug_mode
+        self.init_date = config.get('date', CURRENT_DATE)
+
+    def save_pack_spec_cfg(self, pack_spec_cfg: dict):
+        """
+        保存PackSPEC配置文件
+        """
+        pack_spec_cfg_path = self.get_pack_generated_file_path()
+        pack_spec_cfg["date"] = self.init_date
+        with open(pack_spec_cfg_path, "w") as f:
+            json.dump(pack_spec_cfg, f, indent=4, cls=EnumEncoder)
+        self.logger.info(f"PackSPEC config file saved to: {pack_spec_cfg_path}")
+
 
     def get_bench_dir(self, bench_name: str, bench_dirs: List[str]) -> str:
         """
@@ -32,10 +187,6 @@ class PackUtils:
         Returns:
             str: 找到的基准测试目录路径，如果未找到则返回空字符串
         """
-        if self.debug_mode:
-            self.logger.debug(f"Get bench dir with:")
-            self.logger.debug(f"  bench_name: {bench_name}")
-            self.logger.debug(f"  bench_dirs: {bench_dirs}")
         for bench_dir in bench_dirs:
             dir_bench_name = os.path.basename(
                 os.path.dirname(
@@ -45,13 +196,12 @@ class PackUtils:
         self.logger.warning(f"Failed to find bench dir for {bench_name}.")
         return ""
 
-    def get_dest_dir(self, label: str, profile_gen: bool, auto_mode: bool, pack_mode: PACKMode,
+    def get_dest_dir(self, profile_gen: bool, auto_mode: bool, pack_mode: PACKMode,
                      spec_name: SPECName, tune_type: TuneType, input_type: InputType, spec_mode: SPECMode) -> str:
         """
         获取基准测试打包的目标目录路径
         
         Args:
-            label (str): 基准测试标签
             profile_gen (bool): 是否生成profile
             auto_mode (bool): 是否自动模式
             pack_mode (PACKMode): 打包模式
@@ -63,17 +213,7 @@ class PackUtils:
         Returns:
             str: 目标目录路径
         """
-        if self.debug_mode:
-            self.logger.debug(f"Get dest dir with:")
-            self.logger.debug(f"  spec_name: {spec_name.name}")
-            self.logger.debug(f"  label: {label}")
-            self.logger.debug(f"  profile_gen: {profile_gen}")
-            self.logger.debug(f"  auto_mode: {auto_mode}")
-            self.logger.debug(f"  pack_mode: {pack_mode.name}")
-            self.logger.debug(f"  tune_type: {tune_type}")
-            self.logger.debug(f"  input_type: {input_type}")
-            self.logger.debug(f"  spec_mode: {spec_mode}")
-        test_name = f"{label}.{tune_type.name}_{input_type.name}_{spec_mode.name}"
+        test_name = f"{self.pack_name}.{tune_type.name}_{input_type.name}_{spec_mode.name}"
         dest_bench_name = f"{spec_name.name}_{pack_mode.name}_{test_name}"
         
         if profile_gen:
@@ -83,7 +223,7 @@ class PackUtils:
             dest_bench_dir = os.path.join(PACK_PATH, dest_bench_name)
         else:
             dest_bench_dir = os.path.join(PACK_PATH, spec_name.name, 
-                pack_mode.name, f"{CURRENT_DATE}_{dest_bench_name}")
+                pack_mode.name, f"{self.init_date}_{dest_bench_name}")
         return dest_bench_dir
 
     def get_spec_log_file_path(self, spec_dir: str, spec_log_file: str) -> str:
@@ -97,10 +237,6 @@ class PackUtils:
         Returns:
             str: 实际的日志文件路径，如果未找到则返回空字符串
         """
-        if self.debug_mode:
-            self.logger.debug(f"Get spec log file path with:")
-            self.logger.debug(f"  spec_dir: {spec_dir}")
-            self.logger.debug(f"  spec_log_file: {spec_log_file}")
         marked_line = f"The log for this run is in {spec_dir}"
         try:
             with open(spec_log_file, "r") as f:
@@ -109,6 +245,8 @@ class PackUtils:
                 if spec_log_line.startswith(marked_line):
                     self.logger.debug(f"Find spec log from '{spec_log_file}'")
                     return spec_log_line.replace("The log for this run is in ", "").strip()
+            self.logger.debug(f"Failed find spec log from '{spec_log_file}': marked line not found.")
+            return ""
         except Exception as e:
             self.logger.debug(f"Failed find spec log from '{spec_log_file}': {str(e)}")
             return ""
@@ -134,6 +272,63 @@ class PackUtils:
             script_name = f"{script_name}_{suffix}"
         return f"{script_name}.sh"
 
+    #
+    # 打包生成的配置文件目录
+    #
+    def get_pack_generated_dir_path(self) -> str:
+        """
+        获取打包生成的配置文件路径
+        
+        Args:
+            pack_name (str): 打包名称
+            log_file (str): 日志文件名
+            
+        Returns:
+            str: 配置文件的完整路径
+        """
+        return os.path.join(GENERATED_FILES_PATH, self.pack_name)
+
+    def get_pack_generated_file_path(self) -> str:
+        """
+        获取打包生成的配置文件路径
+        
+        Args:
+            pack_name (str): 打包名称
+            log_file (str): 日志文件名
+            
+        Returns:
+            str: 配置文件的完整路径
+        """
+        return os.path.join(self.get_pack_generated_dir_path(), f"{self.init_date}_{self.pack_name}.json")
+    
+    def create_generated_dir(self, auto_mode: bool = False):
+        """
+        创建生成的文件目录
+        """
+        os.makedirs(GENERATED_FILES_PATH, exist_ok=True)
+        self.logger.info(f"Created generated files dir: {GENERATED_FILES_PATH}")
+        pack_generated_dir_path = self.get_pack_generated_dir_path()
+        # 检查目录是否已存在
+        if os.path.exists(pack_generated_dir_path):
+            self.logger.warning(f"Pack generated files dir {pack_generated_dir_path} already exists.")
+            if not auto_mode:
+                self.logger.debug(f"Do you want to continue? (y/n): ")
+                choice = input(f"Do you want to continue? (y/n): ")
+            if auto_mode == True or choice.lower() == 'y':
+                os.makedirs(pack_generated_dir_path, exist_ok=True)
+                self.logger.info(f"Created pack generated files dir: {pack_generated_dir_path}")
+            else:
+                self.logger.error("User canceled the operation. ")
+                raise PackSPECError("User canceled the operation. ")
+        else:
+            os.makedirs(pack_generated_dir_path, exist_ok=False)
+            self.logger.info(f"Created pack generated files dir: {pack_generated_dir_path}")
+        
+        return pack_generated_dir_path
+
+    #
+    # 打包生成的SPEC setup日志文件目录
+    #
     def get_spec_setup_log_path(self, spec_cfg: str, tune_type: TuneType, input_type: InputType) -> str:
         """
         获取SPEC setup日志文件的路径
@@ -146,14 +341,9 @@ class PackUtils:
         Returns:
             str: SPEC setup日志文件的完整路径
         """
-        if self.debug_mode:
-            self.logger.debug(f"Get spec setup log path with:")
-            self.logger.debug(f"  spec_cfg: {spec_cfg}")
-            self.logger.debug(f"  tune_type: {tune_type}")
-            self.logger.debug(f"  input_type: {input_type}")
-        spec_cfg_name = spec_cfg.replace('.cfg', '')
-        spec_log_file = f"{spec_cfg_name}.{tune_type.name}_{input_type.name}.setuplog"
-        spec_log_path = os.path.join(SPEC_LOG_PATH, spec_log_file)
+        spec_cfg_filename = os.path.basename(spec_cfg).replace('.cfg', '')
+        spec_log_file = f"{spec_cfg_filename}.{tune_type.name}_{input_type.name}.setuplog"
+        spec_log_path = os.path.join(self.get_pack_generated_dir_path(), spec_log_file)
         return spec_log_path
 
     def create_spec_setup_log_path(self, log_content: str, 
@@ -170,25 +360,17 @@ class PackUtils:
         Returns:
             str: 创建的日志文件路径
         """
-        if self.debug_mode:
-            self.logger.debug(f"Create spec setup log path with:")
-            self.logger.debug(f"  log_content: {log_content}")
-            self.logger.debug(f"  spec_cfg: {spec_cfg}")
-            self.logger.debug(f"  tune_type: {tune_type}")
-            self.logger.debug(f"  input_type: {input_type}")
         spec_log_path = self.get_spec_setup_log_path(spec_cfg, tune_type, input_type)
-        os.makedirs(SPEC_LOG_PATH, exist_ok=True)
         with open(spec_log_path, "w") as f:
             f.write("\n".join(log_content))
         return spec_log_path
     
-    def create_dest_dir(self, label: str, profile_gen: bool, auto_mode: bool, pack_mode: PACKMode,
+    def create_dest_dir(self, profile_gen: bool, auto_mode: bool, pack_mode: PACKMode,
                         spec_name: SPECName, tune_type: TuneType, input_type: InputType, spec_mode: SPECMode) -> str:
         """
         创建基准测试打包的目标目录
         
         Args:
-            label (str): 基准测试标签
             profile_gen (bool): 是否生成profile
             auto_mode (bool): 是否自动模式
             pack_mode (PACKMode): 打包模式
@@ -203,21 +385,10 @@ class PackUtils:
         Raises:
             PackSPECError: 当用户取消目录覆盖操作时抛出
         """
-        if self.debug_mode:
-            self.logger.debug(f"Create dest dir with:")
-            self.logger.debug(f"  spec_name: {spec_name.name}")
-            self.logger.debug(f"  label: {label}")
-            self.logger.debug(f"  profile_gen: {profile_gen}")
-            self.logger.debug(f"  auto_mode: {auto_mode}")
-            self.logger.debug(f"  pack_mode: {pack_mode.name}")
-            self.logger.debug(f"  tune_type: {tune_type}")
-            self.logger.debug(f"  input_type: {input_type}")
-            self.logger.debug(f"  spec_mode: {spec_mode}")
-        dest_bench_dir = self.get_dest_dir(label,
-                                           profile_gen, auto_mode, pack_mode,
+        dest_bench_dir = self.get_dest_dir(profile_gen, auto_mode, pack_mode,
                                            spec_name, tune_type, input_type, spec_mode)
         if os.path.exists(dest_bench_dir):
-            self.logger.info(f"Directory {dest_bench_dir} already exists.")
+            self.logger.warning(f"Directory {dest_bench_dir} already exists.")
             if not auto_mode:
                 self.logger.debug(f"Do you want to overwrite it? (y/n): ")
                 choice = input(f"Do you want to overwrite it? (y/n): ")
@@ -269,8 +440,6 @@ class PackUtils:
         try:
             # 执行命令并捕获输出
             self.logger.debug(f"Executing command: {command}")
-            if self.debug_mode:
-                self.logger.debug(f"On: {work_dir}")
             result = subprocess.run(
                 command.split(),
                 cwd=work_dir,
@@ -280,8 +449,6 @@ class PackUtils:
             )
             # 处理命令输出
             bash_result = result.stdout.split("\n")
-            if self.debug_mode:
-                self.logger.debug(f"Command output: {bash_result}")
             return bash_result
         except subprocess.CalledProcessError as e:
             self.logger.error(f"Command failed with error: {e.stderr}")
@@ -290,7 +457,7 @@ class PackUtils:
             self.logger.error(f"Failed to execute command: {str(e)}")
             raise CommandExecutionError(f"Failed to execute command: {str(e)}")
         
-    def copy_file_to_target_dir(self, src_path: str, dest_path: str, file_info: str="") -> bool:
+    def copy_file_to_target_dir(self, src_path: str, dest_path: str, file_info: str="", error_info: str="") -> bool:
         """
         复制文件到目标目录
         
@@ -311,7 +478,9 @@ class PackUtils:
             return True
         except Exception as e:
             self.logger.warning(f"Failed to copy {file_info} file '{src_path}' to '{dest_path}': {str(e)}")
-            self.logger.warning(f"If you didn't use this tool for setup, {file_info} will not be generated. Please ignore this warning.")
+            if error_info != "":
+                self.logger.warning(f"{error_info}")
+                # self.logger.warning(f"If you didn't use this tool for setup, {file_info} will not be generated. Please ignore this warning.")
             return False
 
     def copy_script_file_to_target_dir(self, script_name: str, script_target_dir: str) -> bool:
@@ -328,6 +497,20 @@ class PackUtils:
         src_dir = os.path.join(SCRIPTS_PATH, script_name)
         return self.copy_file_to_target_dir(src_dir, script_target_dir, f"script {script_name}")
 
+    def copy_pack_log_file_to_target_dir(self, log_target_dir: str) -> bool:
+        """
+        复制打包日志文件到目标目录
+        
+        Args:
+            log_file_name (str): 日志文件名
+            log_target_dir (str): 目标目录路径
+            
+        Returns:
+            bool: 复制成功返回True，失败返回False
+        """
+        pack_log_file_name = self.get_pack_generated_file_path()
+        return self.copy_file_to_target_dir(pack_log_file_name, log_target_dir, f"log file {pack_log_file_name}")
+
     def use_template_to_create_script(self, template_name: str, script_target_dir: str, replace_dict: Dict[str, str]) -> None:
         """
         使用模板创建脚本文件
@@ -340,11 +523,6 @@ class PackUtils:
         Raises:
             CommandExecutionError: 当创建脚本失败时抛出
         """
-        if self.debug_mode:
-            self.logger.debug(f"Use template to create script with:")
-            self.logger.debug(f"  template_name: {template_name}")
-            self.logger.debug(f"  script_target_dir: {script_target_dir}")
-            self.logger.debug(f"  replace_dict: {replace_dict}")
         try:
             script_name = template_name.replace('.template', '')
             with open(os.path.join(SCRIPTS_PATH, template_name), "r") as f:
@@ -378,7 +556,8 @@ class PackUtils:
 
         # 复制setup log至目标目录
         spec_log_path = self.get_spec_setup_log_path(spec_cfg, tune_type, input_type)
-        self.copy_file_to_target_dir(spec_log_path, dest_dir, "spec_setup log")
+        self.copy_file_to_target_dir(spec_log_path, dest_dir, "spec_setup log", 
+                                    "If you didn't use this tool for setup, spec_setup log will not be generated. Please ignore this warning.")
 
         # 复制spec log至目标目录
         spec_log_file_path = self.get_spec_log_file_path(spec_dir, spec_log_path)
@@ -387,6 +566,8 @@ class PackUtils:
 
         # 创建env文件至目标目录
         self.create_env_file(dest_dir, "compile")
+
+        self.copy_pack_log_file_to_target_dir(dest_dir)
 
     def commands_to_cal_score(self, script_target_dir:str, test_clock_rate: float, score_file: str="") -> List[str]:
         """
@@ -405,11 +586,6 @@ class PackUtils:
         """
         if not self.copy_script_file_to_target_dir("cal_score.py", script_target_dir):
             raise FileOperationError("Failed to copy cal_score.py to target directory.")
-        if self.debug_mode:
-            self.logger.debug(f"Commands to cal score with:")
-            self.logger.debug(f"  script_target_dir: {script_target_dir}")
-            self.logger.debug(f"  test_clock_rate: {test_clock_rate}")
-            self.logger.debug(f"  score_file: {score_file}")
         commands = [
             "# 计算分数",
             f"chmod +x cal_score.py"
@@ -432,9 +608,6 @@ class PackUtils:
         Returns:
             List[str]: 发送消息的命令列表
         """
-        if self.debug_mode:
-            self.logger.debug(f"Commands to send message with:")
-            self.logger.debug(f"  message: {message}")
         commands = [
             "# 发送任务完成信息并at指定用户",
             f"curl -X POST \"http://172.38.8.102:8848/send-message\" \\",
@@ -464,12 +637,6 @@ class PackUtils:
         """
         if not self.copy_script_file_to_target_dir("send_md_message.py", script_target_dir):
             raise FileOperationError("Failed to copy send_md_message.py to target directory.")
-        if self.debug_mode:
-            self.logger.debug(f"Commands to send md message with:")
-            self.logger.debug(f"  script_target_dir: {script_target_dir}")
-            self.logger.debug(f"  title_message: {title_message}")
-            self.logger.debug(f"  text_message: {text_message}")
-            self.logger.debug(f"  md_path: {md_path}")
         commands = [
             "# 发送MarkDown格式信息并at指定用户",
             f"chmod +x send_md_message.py",
@@ -498,9 +665,7 @@ class PackUtils:
             script_target_dir,
             {"<your llvm-profdata abspath>": DEFAULT_LLVM_PROFDATA_PATH}
         )
-        if self.debug_mode:
-            self.logger.debug(f"Commands to collect profiles with:")
-            self.logger.debug(f"  script_target_dir: {script_target_dir}")
+
         commands = [
             "# 收集profile文件",
             f"chmod +x collect_profiles.sh",
@@ -522,11 +687,7 @@ class PackUtils:
         Returns:
             List[str]: 准备运行的命令列表
         """
-        if self.debug_mode:
-            self.logger.debug(f"Commands to prepare run with:")
-            self.logger.debug(f"  log_name: {log_name}")
-            self.logger.debug(f"  core_num: {core_num}")
-            self.logger.debug(f"  iterations: {iterations}")
+
         commands = [
             "#!/bin/bash",
             "",
@@ -573,16 +734,7 @@ class PackUtils:
         Returns:
             List[str]: 运行基准测试的命令列表
         """
-        if self.debug_mode:
-            self.logger.debug(f"Commands to run bench with:")
-            self.logger.debug(f"  bench_name: {bench_name}")
-            self.logger.debug(f"  profile_gen: {profile_gen}")
-            self.logger.debug(f"  spec_bench_map: {spec_bench_map}")
-            self.logger.debug(f"  core_num: {core_num}")
-            self.logger.debug(f"  ref_time: {ref_time}")
-            self.logger.debug(f"  tune_type: {tune_type}")
-            self.logger.debug(f"  label: {label}")
-            self.logger.debug(f"  input_type: {input_type}")
+
         commands = [
             f"echo -e '\\nRunning {bench_name}...' | tee -a \"$LOG_FILE\"",
             f"echo -e 'Reftime: {ref_time}' | tee -a \"$LOG_FILE\"",

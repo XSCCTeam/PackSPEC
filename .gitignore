@@ -1,9 +1,13 @@
 /__pycache__/
-/pack_spec/__pycache__/
+/src/pack_spec/__pycache__/
 /log/
 /packed_files/
+/generated_files/
 /spec_setup_logs/
 /scripts/625_inputgen/625_host_run/
-/tests/test_space/
-config.py
+/tests/spec2006/generated_files/
+/tests/spec2006/generated_files/__pycache__/
+/spec_env/spec2006/
+set_env.sh
 main.py
+*.pyc
