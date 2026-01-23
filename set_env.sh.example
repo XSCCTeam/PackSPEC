@@ -1,6 +1,22 @@
 #!/bin/bash
 # 脚本根目录
-SCRIPT_DIR=$(dirname "$(readlink -f "$0")")
+# 兼容各种情况：直接运行、被 sourced、符号链接等
+_get_script_path() {
+    local source="${BASH_SOURCE[0]}"
+    local dir=""
+    
+    # 解析符号链接
+    while [ -h "$source" ]; do
+        dir=$(cd -P "$(dirname "$source")" && pwd)
+        source=$(readlink "$source")
+        [[ $source != /* ]] && source="$dir/$source"
+    done
+    
+    dir=$(cd "$(dirname "$source")" && pwd)
+    echo "$dir"
+}
+
+SCRIPT_DIR=$(_get_script_path)
 
 #########################################
 # LLVM Configs
@@ -12,8 +28,8 @@ DEFAULT_LLVM_PATH= # <your llvm install abspath>
 # DingDing rebot Configs
 #########################################
 # 参考：https://thoughts.aliyun.com/workspaces/66597cc824f406001b6ef466/docs/675b9751a7c8ff00016d92a2
-BOSC_API_KEY= # <Your BOSC_API_KEY>
-BOSC_AT_USER= # <Your Phone Number>
+# BOSC_API_KEY= # <Your BOSC_API_KEY>
+# BOSC_AT_USER= # <Your Phone Number>
 
 #########################################
 # SPEC Configs
@@ -21,9 +37,17 @@ BOSC_AT_USER= # <Your Phone Number>
 SPEC2006_PATH=$SCRIPT_DIR/spec_env/spec2006/speccpu2006-v1.2 # <Your SPEC2006 Install Path>
 SPEC2017_PATH= # <Your SPEC2017 Install Path>
 
+#########################################
+# QEMU Configs
+#########################################
+QEMU_PATH= # <Your QEMU Install Path>
+
+
 
 export DEFAULT_LLVM_PATH
-export BOSC_API_KEY
-export BOSC_AT_USER
+# export BOSC_API_KEY
+# export BOSC_AT_USER
 export SPEC2006_PATH
 export SPEC2017_PATH
+
+
