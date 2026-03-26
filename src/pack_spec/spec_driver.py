@@ -1,14 +1,66 @@
+"""
+SPEC CPU基准测试驱动基类模块
+
+本模块定义了SPEC CPU基准测试驱动的基类SPECDriver，提供了SPEC基准测试的通用操作接口。
+SPEC2006和SPEC2017的具体实现继承自该基类。
+
+主要功能：
+- 解析SPEC配置文件，提取标签信息
+- 执行SPEC setup脚本进行编译和环境准备
+- 获取基准测试的构建和运行目录路径
+- 执行specinvoke命令生成运行脚本
+- 获取基准测试的参考时间
+
+子类需要实现：
+- get_bench_list(): 获取基准测试列表
+- get_ref_time(): 获取参考时间
+- get_bench_path(): 获取基准测试目录路径
+- get_binary_path_map(): 获取二进制文件路径映射
+"""
+
 import sys
 import os
 import subprocess
 
-# 添加项目根目录到Python路径
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
-
-from src.pack_spec.pack_config import *
+from src.pack_spec.pack_config import (
+    SPECName, TuneType, InputType, SPECMode, ActionType,
+    PackSPECError, ConfigError, FileOperationError, CommandExecutionError,
+    P_PATH, logger
+)
 from src.pack_spec.pack_utils import PackUtils
+from typing import Dict, List, Optional
+
 
 class SPECDriver:
+    """
+    SPEC CPU基准测试驱动基类
+    
+    该类是SPEC2006Driver和SPEC2017Driver的基类，定义了SPEC基准测试的通用操作接口。
+    提供了配置解析、编译执行、路径获取等核心功能。
+    
+    Attributes:
+        spec_cfg_path (str): SPEC配置文件的绝对路径
+        spec_name (SPECName): SPEC版本枚举值
+        tune_type (TuneType): 优化级别枚举值
+        input_type (InputType): 输入数据集类型枚举值
+        spec_mode (SPECMode): 运行模式枚举值
+        spec_benches (str): 基准测试选择字符串
+        iterations (int): 测试迭代次数
+        rebuild (bool): 是否重新构建
+        debug_mode (bool): 是否调试模式
+        utils (PackUtils): 工具类实例
+        label (str): 从配置文件中提取的标签
+        spec_dir (str): SPEC安装目录路径
+        spec_bench_path (str): SPEC基准测试目录路径
+        spec_bench_map (dict): 基准测试名称到二进制文件名的映射
+        spec_build_dir (str): 构建目录名称
+        spec_run_dir (str): 运行目录名称
+        setup_script_path (str): setup脚本路径
+        spec_bench_list (list): 选中的基准测试列表
+        
+    Note:
+        该类不应直接实例化，应使用SPEC2006Driver或SPEC2017Driver
+    """
     def __init__(self, 
                  spec_cfg_path: str,
                  spec_name: SPECName, 
@@ -21,6 +73,24 @@ class SPECDriver:
                  rebuild: bool = False,
                  debug_mode: bool = False,
                  ):
+        """
+        初始化SPECDriver实例
+        
+        Args:
+            spec_cfg_path (str): SPEC配置文件的绝对路径
+            spec_name (SPECName): SPEC版本枚举值(spec2006/spec2006v1p01/spec2017)
+            tune_type (TuneType): 优化级别枚举值(base/peak/all)
+            input_type (InputType): 输入数据集类型枚举值(test/train/ref/all)
+            spec_mode (SPECMode): 运行模式枚举值(speed/rate)
+            spec_benches (str): 基准测试选择字符串，空格分隔
+            utils (PackUtils): 工具类实例
+            iterations (int, optional): 测试迭代次数，默认3
+            rebuild (bool, optional): 是否重新构建，默认False
+            debug_mode (bool, optional): 是否调试模式，默认False
+            
+        Note:
+            初始化时会自动调用analyze_spec_config()解析配置文件获取标签
+        """
         self.spec_cfg_path = spec_cfg_path
         self.spec_name = spec_name
         self.tune_type = tune_type
@@ -33,11 +103,24 @@ class SPECDriver:
         self.utils = utils
         self.label = self.analyze_spec_config()
     
-    def get_spec_info(self):
+    def get_spec_info(self) -> Dict[str, str]:
         """
-        获取SPEC CPU 的基本信息
+        获取SPEC CPU的基本信息
+        
+        返回当前SPEC版本的名称、版本号和安装路径。
+        
+        Returns:
+            dict: 包含以下键的字典：
+                - spec_name (str): SPEC名称，如"SPEC CPU 2006"
+                - spec_version (str): SPEC版本号，如"v1.2.0"
+                - spec_path (str): SPEC安装目录路径
+                
+        Raises:
+            ValueError: 当spec_name不是已知的SPEC版本时抛出
+            
+        Note:
+            子类可以重写此方法以提供更准确的版本信息
         """
-        # TODO: 应该能够自动获取SPEC CPU的版本信息
         if self.spec_name == SPECName.spec2006:
             return {
                 "spec_name": "SPEC CPU 2006",
@@ -61,13 +144,18 @@ class SPECDriver:
 
     def get_spec_log(self, spec_log_file: str) -> str:
         """
-        从SPEC日志文件中获取日志路径
+        从SPEC日志文件中获取实际的日志文件路径
+        
+        SPEC setup执行后会输出日志路径信息，此方法用于解析并提取该路径。
         
         Args:
             spec_log_file (str): SPEC日志文件路径
             
         Returns:
-            str: 找到的日志路径，如果未找到则返回空字符串
+            str: 找到的日志文件绝对路径，如果未找到则返回空字符串
+            
+        Note:
+            日志文件中包含形如"The log for this run is in /path/to/log"的行
         """
         marked_line = f"The log for this run is in {self.spec_dir}"
         try:
@@ -85,16 +173,21 @@ class SPECDriver:
         """
         分析SPEC配置文件，提取标签信息
         
-        Args:
-            spec_cfg (str): SPEC配置文件名
-            
+        从SPEC配置文件中解析出标签(label)，用于标识编译配置。
+        SPEC2006使用'ext'字段，SPEC2017使用'label'字段。
+        
         Returns:
-            str: 从配置文件中提取的标签
+            str: 从配置文件中提取的标签字符串
             
         Raises:
             ConfigError: 当配置文件不存在时抛出
-            PackSPECError: 当用户取消操作时抛出
+            PackSPECError: 当用户取消basepeak确认时抛出
             AssertionError: 当无法从配置文件中提取标签时抛出
+            
+        Note:
+            - 如果配置文件中设置了basepeak=yes，会提示用户确认
+            - SPEC2006配置文件格式: ext = label_name
+            - SPEC2017配置文件格式: label = label_name
         """
         label = ""
         try:
@@ -150,18 +243,25 @@ class SPECDriver:
     
     def run_setup_spec(self, tune_type: TuneType, input_type: InputType, rebuild: bool = True) -> str:
         """
-        运行SPEC setup脚本
+        运行SPEC setup脚本进行编译和环境准备
+        
+        调用外部setup脚本执行SPEC基准测试的编译和运行目录准备。
+        脚本会实时输出执行过程，并记录日志。
         
         Args:
-            tune_type (TuneType): 优化级别
-            input_type (InputType): 输入数据集类型
-            rebuild (bool, optional): 是否重新构建，默认为True
+            tune_type (TuneType): 优化级别(base/peak)
+            input_type (InputType): 输入数据集类型(test/train/ref)
+            rebuild (bool, optional): 是否重新构建，默认True
             
         Returns:
-            str: SPEC日志文件路径
+            str: SPEC setup日志文件路径
             
         Raises:
             CommandExecutionError: 当命令执行失败时抛出
+            
+        Note:
+            - 脚本路径由setup_script_path属性指定
+            - 执行的命令格式: setup_script --spec-dir ... --config ... --action setup ...
         """
         output_log = []
         spec_setup_cmd = [
@@ -231,19 +331,26 @@ class SPECDriver:
 
     def execute_specinvoke(self, src_dir: str, dest_dir: str, input_type: InputType, binary_name_map: tuple = ("", "")) -> bool:
         """
-        执行specinvoke命令
+        执行specinvoke命令生成运行脚本
+        
+        specinvoke是SPEC工具提供的命令，用于解析speccmds.cmd文件并生成可执行的运行命令。
+        此方法调用specinvoke，处理输出并生成run_{input_type}.sh脚本。
         
         Args:
-            src_dir (str): 源目录路径
-            dest_dir (str): 目标目录路径
+            src_dir (str): 源目录路径，包含speccmds.cmd文件
+            dest_dir (str): 目标目录路径，生成的脚本将保存在此
             input_type (InputType): 输入数据集类型
-            binary_name_map (tuple, optional): 二进制文件名映射，默认为("", "")
+            binary_name_map (tuple, optional): 二进制文件名映射(旧名, 新名)，默认为("", "")
             
         Returns:
-            bool: 如果成功创建run.sh文件则返回True，否则返回False
+            bool: 如果成功创建run.sh文件则返回True
             
         Raises:
             CommandExecutionError: 当命令执行失败时抛出
+            
+        Note:
+            - 生成的脚本会去除cd命令和绝对路径引用
+            - 脚本具有可执行权限(0o755)
         """
 
         specinvoke = os.path.join(self.spec_dir, "bin", "specinvoke")

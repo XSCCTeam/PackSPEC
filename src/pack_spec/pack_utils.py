@@ -1,20 +1,86 @@
+"""
+PackSPEC工具类模块
+
+本模块提供了PackSPEC工具的辅助功能，包括：
+1. 配置文件读写：支持JSON格式的配置文件，自动处理枚举类型序列化/反序列化
+2. 文件操作：复制文件、创建目录、处理路径等
+3. 脚本生成：生成测试运行脚本、计算分数脚本、消息通知脚本等
+4. 命令执行：执行外部命令并捕获输出
+
+主要类：
+- EnumEncoder: 自定义JSON编码器，支持枚举类型序列化
+- EnumDecoder: 自定义JSON解码器，支持枚举类型反序列化
+- PackUtils: 工具类，提供各种辅助方法
+
+主要函数：
+- str_to_enum(): 字符串转枚举
+- convert_dict_enums(): 字典字段枚举转换
+- save_pack_spec_cfg(): 保存配置文件
+- load_pack_spec_cfg(): 加载配置文件
+"""
+
 import os
 import sys
 import json
 from enum import Enum
 from typing import Any, Union, Optional
 
-from src.pack_spec.pack_config import *
+from src.pack_spec.pack_config import (
+    SPECName, TuneType, InputType, SPECMode, PACKMode,
+    PackSPECError, FileOperationError, CommandExecutionError,
+    CURRENT_DATE, DEFAULT_CORE_NUM, DEFAULT_LLVM_PROFDATA_PATH,
+    SCRIPTS_PATH, GENERATED_FILES_PATH, logger
+)
 import subprocess
 import shutil
 from typing import List, Dict, Type
 
 
+def is_numeric(s: str) -> bool:
+    """
+    检查字符串是否为有效数字
+    
+    Args:
+        s (str): 要检查的字符串
+        
+    Returns:
+        bool: 如果字符串可以转换为浮点数则返回True，否则返回False
+        
+    Example:
+        >>> is_numeric("123.45")
+        True
+        >>> is_numeric("abc")
+        False
+    """
+    try:
+        float(s)
+        return True
+    except (ValueError, TypeError):
+        return False
+
+
 class EnumEncoder(json.JSONEncoder):
     """
     自定义JSON编码器，支持枚举类型序列化
+    
+    将枚举类型转换为其名称字符串进行存储。
+    
+    Example:
+        >>> import json
+        >>> data = {"tune_type": TuneType.base}
+        >>> json.dumps(data, cls=EnumEncoder)
+        '{"tune_type": "base"}'
     """
     def default(self, obj: Any) -> Union[str, Any]:
+        """
+        重写default方法，处理枚举类型的序列化
+        
+        Args:
+            obj (Any): 要序列化的对象
+            
+        Returns:
+            Union[str, Any]: 枚举类型返回其名称字符串，其他类型调用父类方法
+        """
         if isinstance(obj, Enum):
             return obj.name
         return super().default(obj)
@@ -24,7 +90,17 @@ class EnumDecoder(json.JSONDecoder):
     """
     自定义JSON解码器，支持将字符串转换为枚举类型
     
-    根据config字段名智能判断应该使用哪个枚举类
+    根据配置字段名智能判断应该使用哪个枚举类进行转换。
+    
+    Attributes:
+        FIELD_TO_ENUM (dict): 字段名到枚举类的映射字典
+        
+    Example:
+        >>> import json
+        >>> json_str = '{"tune_type": "base"}'
+        >>> data = json.loads(json_str, cls=EnumDecoder)
+        >>> data["tune_type"]
+        <TuneType.base: 1>
     """
     
     FIELD_TO_ENUM = {
@@ -32,17 +108,28 @@ class EnumDecoder(json.JSONDecoder):
         'tune_type': TuneType,
         'input_type': InputType,
         'spec_mode': SPECMode,
-        # 'pack_mode': PACKMode,
-        # 'spec_benches': SPECSubBench,
     }
+    """字段名到枚举类的映射，用于自动转换"""
 
     def __init__(self, *args, **kwargs):
+        """初始化解码器，设置object_hook"""
         super().__init__(*args, object_hook=self._object_hook, **kwargs)
     
     def _object_hook(self, obj: Dict[str, Any]) -> Dict[str, Any]:
+        """对象钩子，处理字典对象"""
         return self._convert_enums(obj)
     
     def _convert_enums(self, obj: Any, parent_key: str = None) -> Any:
+        """
+        递归转换对象中的枚举字段
+        
+        Args:
+            obj (Any): 要转换的对象
+            parent_key (str, optional): 父级键名
+            
+        Returns:
+            Any: 转换后的对象
+        """
         if isinstance(obj, dict):
             result = {}
             for key, value in obj.items():
@@ -57,11 +144,11 @@ class EnumDecoder(json.JSONDecoder):
         根据字段名和值进行枚举转换
         
         Args:
-            key: 字段名
-            value: 字段值
+            key (str): 字段名
+            value (Any): 字段值
             
         Returns:
-            转换后的值
+            Any: 转换后的值
         """
         if not isinstance(value, str):
             return self._convert_enums(value, key)
@@ -79,11 +166,11 @@ class EnumDecoder(json.JSONDecoder):
         将字符串转换为指定枚举类
         
         Args:
-            value: 字符串值
-            enum_class: 枚举类
+            value (str): 字符串值
+            enum_class (Type[Enum]): 枚举类
             
         Returns:
-            枚举值，转换失败返回None
+            Optional[Enum]: 枚举值，转换失败返回None
         """
         try:
             return enum_class[value]
@@ -127,14 +214,23 @@ def convert_dict_enums(data: Dict[str, Any], enum_fields: Dict[str, type]) -> Di
             result[key] = value
     return result
 
+
 def save_pack_spec_cfg(pack_spec_cfg: dict, pack_generated_files_path: str):
     """
     保存PackSPEC配置文件
+    
+    Args:
+        pack_spec_cfg (dict): 配置字典
+        pack_generated_files_path (str): 配置文件保存路径
+        
+    Returns:
+        str: 配置文件的完整路径
     """
     pack_spec_cfg_path = os.path.join(pack_generated_files_path, "pack_spec.cfg")
     with open(pack_spec_cfg_path, "w") as f:
         json.dump(pack_spec_cfg, f, indent=4, cls=EnumEncoder)
     return pack_spec_cfg_path
+
 
 def load_pack_spec_cfg(pack_spec_cfg_path: str) -> dict:
     """
@@ -144,14 +240,28 @@ def load_pack_spec_cfg(pack_spec_cfg_path: str) -> dict:
         pack_spec_cfg_path (str): 配置文件路径
         
     Returns:
-        dict: 加载的配置字典
+        dict: 加载的配置字典，枚举字段已自动转换
     """
     with open(pack_spec_cfg_path, "r") as f:
         pack_spec_cfg = json.load(f, cls=EnumDecoder)
     return pack_spec_cfg
 
+
 class PackUtils:
-    # 实例变量类型注解
+    """
+    PackSPEC工具类
+    
+    提供文件操作、脚本生成、命令执行等辅助功能。
+    
+    Attributes:
+        pack_name (str): 打包任务名称
+        logger (Any): 日志记录器实例
+        init_date (str): 初始化日期
+        
+    Example:
+        >>> utils = PackUtils(config, logger)
+        >>> utils.copy_file_to_target_dir(src, dest)
+    """
     logger: Any
 
     def __init__(self, config: dict, logger: Any):
@@ -159,6 +269,7 @@ class PackUtils:
         初始化PackUtils实例
         
         Args:
+            config (dict): 配置字典，需要包含pack_name和date字段
             logger (Any): 日志记录器实例
         """
         self.pack_name = config["pack_name"]
@@ -212,6 +323,9 @@ class PackUtils:
             
         Returns:
             str: 目标目录路径
+            
+        Note:
+            输出目录格式: {GENERATED_FILES_PATH}/{pack_name}/{bin|run}/{spec_name}_{pack_mode}_{pack_name}.{tune_type}_{input_type}_{spec_mode}
         """
         test_name = f"{self.pack_name}.{tune_type.name}_{input_type.name}_{spec_mode.name}"
         dest_bench_name = f"{spec_name.name}_{pack_mode.name}_{test_name}"
@@ -219,11 +333,12 @@ class PackUtils:
         if profile_gen:
             dest_bench_name = f"{dest_bench_name}_profilegen"
 
-        if auto_mode:
-            dest_bench_dir = os.path.join(PACK_PATH, dest_bench_name)
+        if pack_mode == PACKMode.bin:
+            subdir = "bin"
         else:
-            dest_bench_dir = os.path.join(PACK_PATH, spec_name.name, 
-                pack_mode.name, f"{self.init_date}_{dest_bench_name}")
+            subdir = "run"
+
+        dest_bench_dir = os.path.join(GENERATED_FILES_PATH, self.pack_name, subdir, dest_bench_name)
         return dest_bench_dir
 
     def get_spec_log_file_path(self, spec_dir: str, spec_log_file: str) -> str:
@@ -607,13 +722,19 @@ class PackUtils:
             
         Returns:
             List[str]: 发送消息的命令列表
+            
+        Note:
+            使用环境变量 BOSC_API_KEY 和 BOSC_AT_USER 来保护敏感信息
         """
         commands = [
             "# 发送任务完成信息并at指定用户",
-            f"curl -X POST \"http://172.38.8.102:8848/send-message\" \\",
-            f"     -H \"api-key: {BOSC_API_KEY}\" \\",
-            f"     -H \"Content-Type: application/json\" \\",
-            f"     -d \"{{\\\"content\\\": \\\"{message}\\\\n【来自李扬的 HUAWEI Pure 70 Pro Max】\\\", \\\"at_user_ids\\\": [\\\"{BOSC_AT_USER}\\\"]}}\"",
+            "# 从环境变量获取敏感信息",
+            'BOSC_API_KEY="${BOSC_API_KEY}"',
+            'BOSC_AT_USER="${BOSC_AT_USER}"',
+            'curl -X POST "http://172.38.8.102:8848/send-message" \\',
+            '     -H "api-key: $BOSC_API_KEY" \\',
+            '     -H "Content-Type: application/json" \\',
+            f'     -d "{{\\"content\\": \\"{message}\\\\n【来自李扬的 HUAWEI Pure 70 Pro Max】\\", \\"at_user_ids\\": [\\"$BOSC_AT_USER\\"]}}"',
             ""
         ]
         self.logger.debug(f"Add send message commands.")
@@ -639,12 +760,15 @@ class PackUtils:
             raise FileOperationError("Failed to copy send_md_message.py to target directory.")
         commands = [
             "# 发送MarkDown格式信息并at指定用户",
+            "# 从环境变量获取敏感信息",
+            'BOSC_API_KEY="${BOSC_API_KEY}"',
+            'BOSC_AT_USER="${BOSC_AT_USER}"',
             f"chmod +x send_md_message.py",
-            f"./send_md_message.py --api_key {BOSC_API_KEY} \\",
-            f"     --title \"{title_message}\" \\",
-            f"     --text \"{text_message}\" \\",
-            f"     --md_path \"{md_path}\" \\",
-            f"     --at_mobiles \"{BOSC_AT_USER}\"",
+            './send_md_message.py --api_key "$BOSC_API_KEY" \\',
+            f'     --title "{title_message}" \\',
+            f'     --text "{text_message}" \\',
+            f'     --md_path "{md_path}" \\',
+            '     --at_mobiles "$BOSC_AT_USER"',
             ""
         ]
         self.logger.debug(f"Add send md message commands.")

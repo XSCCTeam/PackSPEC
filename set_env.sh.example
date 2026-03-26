@@ -34,7 +34,7 @@ DEFAULT_LLVM_PATH= # <your llvm install abspath>
 #########################################
 # SPEC Configs
 #########################################
-SPEC2006_PATH=$SCRIPT_DIR/spec_env/spec2006/speccpu2006-v1.2 # <Your SPEC2006 Install Path>
+SPEC2006_PATH= # <Your SPEC2006 Install Path>
 SPEC2017_PATH= # <Your SPEC2017 Install Path>
 
 #########################################

@@ -1,152 +1,397 @@
-
-
 # PackSPEC 项目
 
 ## 项目简介
-PackSPEC 是一个用于自动化打包和管理SPEC CPU基准测试文件的工具，支持SPEC2006和SPEC2017版本。
 
-## 主要功能
-- 自动化打包SPEC基准测试二进制文件和运行环境
-- 管理SPEC文件配置和构建参数
-- 提供便捷的测试脚本生成功能
-- 支持多种输入类型(test/train/ref/all)
-- 支持多种优化级别(base/peak/all)
-- 支持配置绑核测试
-- 自动生成测试报告和日志文件
-- 支持自定义测试迭代次数
-- 支持生成完整的测试报告
-- 提供详细的日志记录功能
+PackSPEC 是一个用于自动化打包和管理 SPEC CPU 基准测试文件的工具，支持 SPEC2006 和 SPEC2017 版本。该工具能够自动化完成 SPEC 基准测试的编译、打包和测试脚本生成工作，极大简化了 SPEC 测试环境的部署流程。
 
-## 枚举类说明
-- `SPECName`: 指定SPEC版本(spec2006/spec2017)
-- `TuneType`: 优化级别(base/peak/all)
-- `InputType`: 输入类型(test/train/ref/all)
-- `SPECSubBench`: 基准测试子集(all/int/fp)
-- `ActionType`: 操作类型(build/run)
+### 主要特性
+
+- 支持 SPEC CPU 2006 (v1.2.0 和 v1.0.1) 和 SPEC CPU 2017
+- 自动化打包二进制文件和运行环境
+- 支持多种优化级别 (base/peak) 和输入类型 (test/train/ref)
+- 支持速度模式 (speed) 和吞吐模式 (rate)
+- 自动生成测试脚本和分数计算脚本
+- 支持 Profile 生成模式 (PGO)
+- 支持钉钉机器人消息通知
+- 完善的类型注解和错误处理
+
+## 项目结构
+
+```
+pack_spec/
+├── src/pack_spec/           # 核心源代码目录
+│   ├── __init__.py          # 包初始化文件，导出公共 API
+│   ├── pack_spec.py         # 主模块，PackSPEC 类定义
+│   ├── spec_driver.py       # SPEC 驱动基类
+│   ├── spec_2006_driver.py  # SPEC2006 驱动实现
+│   ├── spec_2017_driver.py  # SPEC2017 驱动实现
+│   ├── pack_config.py       # 配置模块，枚举和异常定义
+│   └── pack_utils.py        # 工具类模块
+├── scripts/                  # 辅助脚本目录
+│   ├── setup-spec06.sh      # SPEC2006 安装脚本
+│   ├── setup-spec17.sh      # SPEC2017 安装脚本
+│   ├── cal_score.py         # 分数计算脚本
+│   ├── send_md_message.py   # 钉钉消息发送脚本
+│   └── ...
+├── tests/                    # 测试用例目录
+├── config.py                 # 用户配置文件
+├── main.py.example           # 主程序示例
+├── set_env.sh.example        # 环境变量示例
+├── pyproject.toml            # 项目配置文件
+└── README.md                 # 项目说明文档
+```
+
+## 核心模块说明
+
+### pack_spec.py - 主模块
+
+PackSPEC 核心类，负责协调 SPEC 基准测试的编译、打包和测试脚本生成。支持从配置文件或配置字典初始化，提供 `setup_spec()`、`pack_binaries()`、`pack_benches()` 等主要方法。
+
+### spec_driver.py - 驱动基类
+
+定义了 SPEC 基准测试驱动的通用接口，包括配置解析、编译执行、路径获取等功能。SPEC2006Driver 和 SPEC2017Driver 继承自该基类。
+
+**主要方法：**
+- `analyze_spec_config()`: 分析 SPEC 配置文件，提取标签信息
+- `run_setup_spec()`: 运行 SPEC setup 脚本进行编译
+- `execute_specinvoke()`: 执行 specinvoke 生成运行脚本
+- `get_spec_info()`: 获取 SPEC 版本信息
+
+### spec_2006_driver.py - SPEC2006 驱动
+
+实现 SPEC2006 基准测试的具体操作，包含 29 个基准测试（12 个整数测试 + 17 个浮点测试）的配置和管理。
+
+**基准测试列表：**
+- 整数测试 (INT): 400.perlbench, 401.bzip2, 403.gcc, 429.mcf, 445.gobmk, 456.hmmer, 458.sjeng, 462.libquantum, 464.h264ref, 471.omnetpp, 473.astar, 483.xalancbmk
+- 浮点测试 (FP): 410.bwaves, 416.gamess, 433.milc, 434.zeusmp, 435.gromacs, 436.cactusADM, 437.leslie3d, 444.namd, 447.dealII, 450.soplex, 453.povray, 454.calculix, 459.GemsFDTD, 465.tonto, 470.lbm, 481.wrf, 482.sphinx3
+
+### spec_2017_driver.py - SPEC2017 驱动
+
+实现 SPEC2017 基准测试的具体操作，包含 20 个基准测试（10 个整数测试 + 10 个浮点测试）的配置和管理。
+
+**基准测试列表：**
+- 整数测试 (INT): 600.perlbench_s, 602.gcc_s, 605.mcf_s, 620.omnetpp_s, 623.xalancbmk_s, 625.x264_s, 631.deepsjeng_s, 641.leela_s, 648.exchange2_s, 657.xz_s
+- 浮点测试 (FP): 603.bwaves_s, 607.cactuBSSN_s, 619.lbm_s, 621.wrf_s, 627.cam4_s, 628.pop2_s, 638.imagick_s, 644.nab_s, 649.fotonik3d_s, 654.roms_s
+
+### pack_config.py - 配置模块
+
+定义全局配置常量、枚举类型和异常类：
+
+**枚举类型：**
+- `ActionType`: 操作类型 (build/run)
+- `TuneType`: 优化级别 (base/peak/all)
+- `InputType`: 输入类型 (test/train/ref/all)
+- `SPECName`: SPEC 版本 (spec2006/spec2006v1p01/spec2017)
+- `SPECMode`: 运行模式 (speed/rate)
+- `PACKMode`: 打包模式 (bin/run/buildrun)
+
+**异常类：**
+- `PackSPECError`: 基础异常类
+- `ConfigError`: 配置相关异常
+- `FileOperationError`: 文件操作异常
+- `CommandExecutionError`: 命令执行异常
+- `BenchmarkError`: 基准测试异常
+
+### pack_utils.py - 工具模块
+
+提供文件操作、脚本生成、命令执行等辅助功能：
+
+**主要功能：**
+- JSON 配置文件读写（支持枚举类型序列化/反序列化）
+- 文件复制和目录创建
+- 测试脚本生成
+- 分数计算脚本生成
+- 钉钉消息通知脚本生成
+- Profile 文件收集脚本生成
 
 ## 安装步骤
-1. 安装依赖:
+
+### 1. 安装依赖
+
 ```bash
-pip install -r requirements.txt
+pip install loguru
 ```
 
-2. 配置项目:
-将 `config.py.example` 复制为 `config.py` 并编辑配置文件, 将 `main.py.example` 复制为 `main.py`:
+或使用 pip 安装项目：
+
 ```bash
-cp config.py.example config.py
+pip install -e .
+```
+
+### 2. 配置环境变量
+
+将 `set_env.sh.example` 复制为 `set_env.sh` 并编辑：
+
+```bash
+cp set_env.sh.example set_env.sh
+source set_env.sh
+```
+
+**必需的环境变量：**
+- `SPEC2006_PATH`: SPEC2006 安装目录路径
+- `SPEC2017_PATH`: SPEC2017 安装目录路径
+
+**可选的环境变量：**
+- `DEFAULT_LLVM_PATH`: LLVM 安装路径（用于 Profile 生成）
+- `BOSC_API_KEY`: 钉钉机器人 API 密钥（消息通知功能）
+- `BOSC_AT_USER`: 钉钉通知 @ 的用户手机号
+
+### 3. 配置项目
+
+将 `main.py.example` 复制为 `main.py`：
+
+```bash
 cp main.py.example main.py
 ```
-
-编辑config.py文件配置以下信息:
-- `SPEC2006_PATH`: SPEC2006安装目录路径
-- `SPEC2017_PATH`: SPEC2017安装目录路径
-- `BOSC_API_KEY`: (可选)钉钉机器人API密钥
-- `BOSC_AT_USER`: (可选)钉钉通知手机号
 
 ## 使用说明
 
 ### 基本用法
-1. 配置config.py中的SPEC路径和其他参数
-2. 运行主程序:
-```bash
-python main.py
-```
 
-### 高级功能
-- 自定义测试迭代次数: 通过`iterations`参数设置
-- 指定测试核心编号: 通过`test_core_num`参数设置
-- 生成完整测试报告: 自动记录测试日志和结果
-- 支持多种优化级别: base(基础优化)和peak(峰值优化)
-- 支持多种输入数据集: test(测试)、train(训练)和ref(参考)
-
-## 示例
-
-### PackSPEC类初始化参数
 ```python
-PackSPEC(
-    spec_name: SPECName,   # SPEC版本(spec2006/spec2017)
-    spec_benches: str,     # 基准测试子集("all"/"int"/"fp")
-    tune_type: TuneType,   # 优化级别(base/peak/all)
-    input_type: InputType,  # 输入类型(test/train/ref/all)
-    iterations: int = 3,    # 测试迭代次数(默认3)
-    test_core_num: int = 4, # 测试核心数(默认4)
-    rebuild: bool = True    # 是否重新构建(默认True)
-)
-```
+from src.pack_spec import PackSPEC, SPECName, TuneType, InputType, SPECMode
 
-参数说明:
-- `spec_name`: 指定SPEC版本(spec2006或spec2017)
-- `spec_benches`: 基准测试子集，可以是"all"(全部)、"int"(整数)或"fp"(浮点)，也可以是具体基准测试名称
-- `tune_type`: 优化级别，base(基础优化)、peak(峰值优化)或all(两者)
-- `input_type`: 输入数据集类型，test(测试)、train(训练)、ref(参考)或all(全部)
-- `iterations`: 测试运行迭代次数，默认为3
-- `test_core_num`: 测试绑定的CPU核心编号，默认为4
-- `rebuild`: 是否重新构建测试环境，默认为True
+# 配置打包参数
+config = {
+    "pack_name": "my_test",
+    "spec_cfg_path": "/path/to/spec/config.cfg",
+    "spec_config": {
+        "spec_name": SPECName.spec2017,
+        "tune_type": TuneType.base,
+        "input_type": InputType.ref,
+        "spec_mode": SPECMode.speed,
+        "spec_benches": "all",
+        "iterations": 3,
+        "rebuild": False,
+    },
+    "pack_config": {
+        "test_core_num": 4,
+        "test_clock_rate": 1.0,
+        "profile_gen": False,
+        "auto_mode": False,
+    },
+}
 
-### 主要方法
-- `analyze_spec_config(spec_cfg: str) -> str`: 分析SPEC配置文件获取构建标签
-- `run_setup_spec(spec_cfg: str, tune_type: TuneType, input_type: InputType, rebuild: bool = True) -> str`: 设置并编译SPEC环境
-- `get_bench_path(label: str, action_type: ActionType, tune_type: TuneType, input_type: InputType) -> list`: 获取基准测试路径
-- `copy_binarys(label: str, tune_type: TuneType, input_type: InputType, dest_binary_dir: str = "") -> str`: 复制二进制文件
-- `copy_benches(label: str, tune_type: TuneType, input_type: InputType, with_build: bool = False, dest_bench_dir: str = "") -> list`: 复制完整测试环境
-- `pack_binarys_cfg(spec_cfg: str)`: 打包二进制文件及相关配置文件
-  - 功能: 根据SPEC配置文件自动分析标签并打包二进制文件，同时复制配置文件和相关日志
-  - 参数: 
-    - `spec_cfg`: SPEC配置文件名
-  - 示例: `packer.pack_binarys_cfg("my_config.cfg")`
+# 创建打包实例
+packer = PackSPEC(config)
 
-- `pack_benches_cfg(spec_cfg: str, with_build=False)`: 打包完整测试环境及相关配置文件
-  - 功能: 根据SPEC配置文件自动分析标签并打包完整测试环境，同时复制配置文件和相关日志
-  - 参数: 
-    - `spec_cfg`: SPEC配置文件名
-    - `with_build`: 是否包含构建目录(默认False)
-  - 示例: `packer.pack_benches_cfg("my_config.cfg", with_build=True)`
-
-### 基本示例
-```python
-from pack_spec import *
-
-# 创建SPEC2006整数基准测试打包实例
-packer = PackSPEC(
-    spec_name=SPECName.spec2006,
-    spec_benches="int",
-    tune_type=TuneType.base,
-    input_type=InputType.ref,
-    iterations=3,
-    test_core_num=4,
-    rebuild=True
-)
-
-# 分析SPEC配置文件获取标签
-label = packer.analyze_spec_config("my_config.cfg")
-
-# 设置并编译SPEC环境
-packer.run_setup_spec("my_config.cfg", TuneType.base, InputType.ref)
+# 执行编译
+packer.setup_spec()
 
 # 打包二进制文件
-binary_dir = packer.copy_binarys(label, TuneType.base, InputType.ref)
+packer.pack_binaries()
 
 # 打包完整测试环境
-bench_dirs = packer.copy_benches(label, TuneType.base, InputType.ref, with_build=True)
+packer.pack_benches()
 ```
 
-### 高级示例
+### 从配置文件加载
+
 ```python
-# 创建SPEC2017完整基准测试打包实例
-packer = PackSPEC(
-    spec_name=SPECName.spec2017,
-    spec_benches="all",
-    tune_type=TuneType.all,
-    input_type=InputType.all,
-    iterations=5,
-    test_core_num=8
-)
+from src.pack_spec import PackSPEC
 
-# 设置并编译SPEC环境
-packer.setup_spec("advanced_config.cfg")
-
-# 打包所有内容
-label = packer.analyze_spec_config("advanced_config.cfg")
-packer.pack_binarys(label)
-packer.pack_benches(label)
+# 从配置文件路径初始化
+packer = PackSPEC("/path/to/pack_spec.cfg")
+packer.setup_spec()
+packer.pack_benches()
 ```
+
+### 配置参数说明
+
+#### spec_config 配置项
+
+| 参数 | 类型 | 说明 | 默认值 |
+|------|------|------|--------|
+| `spec_name` | SPECName | SPEC 版本 | 必填 |
+| `tune_type` | TuneType | 优化级别 | 必填 |
+| `input_type` | InputType | 输入数据集类型 | 必填 |
+| `spec_mode` | SPECMode | 运行模式 | 必填 |
+| `spec_benches` | str | 基准测试选择 | 必填 |
+| `iterations` | int | 测试迭代次数 | 3 |
+| `rebuild` | bool | 是否重新构建 | False |
+
+#### pack_config 配置项
+
+| 参数 | 类型 | 说明 | 默认值 |
+|------|------|------|--------|
+| `test_core_num` | int | 绑定的 CPU 核心编号 | -1 (不绑定) |
+| `test_clock_rate` | float | CPU 主频 (GHz)，用于算分 | 1.0 |
+| `profile_gen` | bool | Profile 生成模式 | False |
+| `auto_mode` | bool | 自动模式，无需确认 | False |
+| `host_mode` | bool | HOST 模式 | False |
+
+### spec_benches 参数格式
+
+`spec_benches` 参数支持以下格式：
+
+| 格式 | 说明 | 示例 |
+|------|------|------|
+| `"all"` | 选择所有基准测试 | `"all"` |
+| `"int"` 或 `"intspeed"` | 选择所有整数基准测试 | `"int"` |
+| `"fp"` 或 `"fpspeed"` | 选择所有浮点基准测试 | `"fp"` |
+| `"600 602 603"` | 选择指定编号的基准测试（空格分隔） | `"600 602"` |
+| 组合使用 | 可以组合多个选择条件 | `"int 603 607"` |
+
+### 主要方法
+
+| 方法 | 说明 |
+|------|------|
+| `setup_spec()` | 执行 SPEC 编译和环境准备 |
+| `pack_binaries()` | 打包二进制文件 |
+| `pack_binaries_cfg()` | 打包二进制文件（使用配置文件路径） |
+| `pack_benches(with_build=False)` | 打包完整测试环境 |
+| `pack_benches_cfg(with_build=False)` | 打包完整测试环境（使用配置文件路径） |
+
+## 输出目录结构
+
+打包完成后，输出目录结构如下：
+
+```
+generated_files/
+└── {pack_name}/
+    ├── pack_spec.cfg                    # 配置文件
+    ├── spec2017_bin_{pack_name}.{tune_type}_{input_type}_{spec_mode}/
+    │   ├── 600.perlbench_s/
+    │   │   └── perlbench_s
+    │   └── ...
+    └── spec2017_run_{pack_name}.{tune_type}_{input_type}_{spec_mode}/
+        ├── 600.perlbench_s/
+        │   ├── perlbench_s_base.{label}
+        │   ├── run_ref.sh
+        │   ├── test_ref.sh
+        │   └── ...
+        ├── test_ref_all.sh
+        └── ...
+```
+
+## 高级功能
+
+### Profile 生成模式
+
+设置 `profile_gen: True` 可启用 Profile 生成模式，该模式下：
+
+- 迭代次数自动设为 1
+- 生成 `profile_gen_{input_type}.sh` 脚本
+- 自动生成 `merge_profile.sh` 用于合并 Profile 文件
+- 需要配置 `DEFAULT_LLVM_PATH` 环境变量
+
+```python
+config = {
+    ...
+    "pack_config": {
+        "profile_gen": True,
+    },
+}
+```
+
+### 钉钉消息通知
+
+配置 `BOSC_API_KEY` 和 `BOSC_AT_USER` 环境变量后，测试完成后会自动发送钉钉消息通知，包含：
+
+- 测试完成通知
+- 测试结果和分数信息
+- Markdown 格式的详细报告
+
+**安全说明：** API 密钥通过环境变量传递，不会硬编码在生成的脚本中。
+
+### 绑核测试
+
+通过 `test_core_num` 参数指定测试运行的 CPU 核心：
+
+```python
+config = {
+    ...
+    "pack_config": {
+        "test_core_num": 4,  # 绑定到 CPU 核心 4
+    },
+}
+```
+
+设置为 `-1` 表示不绑定核心。
+
+## 枚举类说明
+
+| 枚举类 | 说明 | 可选值 |
+|--------|------|--------|
+| `SPECName` | SPEC 版本 | `spec2006`, `spec2006v1p01`, `spec2017` |
+| `TuneType` | 优化级别 | `base` (基础优化), `peak` (峰值优化), `all` |
+| `InputType` | 输入类型 | `test` (最小), `train` (中等), `ref` (最大), `all` |
+| `SPECMode` | 运行模式 | `speed` (速度测试), `rate` (吞吐测试) |
+| `ActionType` | 操作类型 | `build` (构建), `run` (运行) |
+| `PACKMode` | 打包模式 | `bin` (仅二进制), `run` (运行环境), `buildrun` (完整环境) |
+
+## 开发指南
+
+### 代码风格
+
+- 使用 Python 3.8+ 语法
+- 代码注释使用中文
+- 遵循 PEP 8 编码规范
+- 使用显式导入，避免 `import *`
+- 添加完整的类型注解
+
+### 运行测试
+
+```bash
+cd tests/spec2006
+bash run_test.sh
+```
+
+### 模块导入
+
+推荐使用以下方式导入：
+
+```python
+# 导入主要类和枚举
+from src.pack_spec import PackSPEC, SPECName, TuneType, InputType, SPECMode
+
+# 导入异常类
+from src.pack_spec import PackSPECError, ConfigError, FileOperationError
+
+# 导入工具函数
+from src.pack_spec import load_pack_spec_cfg, save_pack_spec_cfg
+```
+
+## 注意事项
+
+1. **环境变量配置**：确保 SPEC 安装路径正确配置
+2. **首次使用**：建议使用 `test` 输入类型进行快速验证
+3. **重新构建**：`rebuild: True` 会重新编译所有基准测试，耗时较长
+4. **Profile 生成**：需要配置 LLVM 工具链路径
+5. **安全性**：敏感信息（API 密钥）通过环境变量传递，不要硬编码
+
+## 更新日志
+
+### v0.1.0
+
+**新功能：**
+- 支持 SPEC2006 和 SPEC2017 基准测试打包
+- 支持多种优化级别和输入类型
+- 支持自动生成测试脚本
+- 支持 Profile 生成模式
+- 支持钉钉消息通知
+
+**优化改进：**
+- 改进模块导入方式，使用显式导入避免命名空间污染
+- 添加完整的类型注解支持
+- 统一错误处理，使用自定义异常替代 assert
+- 优化安全性，API 密钥通过环境变量传递
+- 提取公共函数 `is_numeric()` 减少代码重复
+- 完善 `__init__.py` 导出公共 API
+- 更新所有模块的文档字符串
+
+## 许可证
+
+本项目仅供内部使用。
+
+## 贡献指南
+
+1. Fork 本仓库
+2. 创建特性分支 (`git checkout -b feature/AmazingFeature`)
+3. 提交更改 (`git commit -m 'Add some AmazingFeature'`)
+4. 推送到分支 (`git push origin feature/AmazingFeature`)
+5. 创建 Pull Request
+
+## 联系方式
+
+如有问题或建议，请联系项目维护者。
