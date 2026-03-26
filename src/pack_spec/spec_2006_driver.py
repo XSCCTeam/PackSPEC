@@ -337,6 +337,49 @@ class SPEC2006Driver(SPECDriver):
                 logger.warning(f"Binary {target_binary} not found in {exe_dir}")
         return binary_path_map
 
+    def _build_run_command(self) -> List[str]:
+        """
+        构建SPEC2006 runspec命令
+        
+        根据配置构建runspec命令及参数。
+        runspec是SPEC2006的测试运行命令。
+        
+        Returns:
+            List[str]: runspec命令及参数列表
+            
+        Note:
+            命令格式: runspec --config <cfg> --tune <tune> --size <size> 
+                      --iterations <n> --noreportable <benches>
+        """
+        runspec = os.path.join(self.spec_dir, "bin", "runspec")
+        
+        cmd = [runspec]
+        
+        cmd.extend(["--config", self.spec_cfg_path])
+        
+        if self.tune_type == TuneType.all:
+            cmd.extend(["--tune", "base,peak"])
+        else:
+            cmd.extend(["--tune", self.tune_type.name])
+        
+        if self.input_type == InputType.all:
+            cmd.extend(["--size", "test,train,ref"])
+        else:
+            cmd.extend(["--size", self.input_type.name])
+        
+        cmd.extend(["--iterations", str(self.iterations)])
+        
+        cmd.append("--noreportable")
+        
+        if self.spec_mode == SPECMode.rate:
+            cmd.extend(["--rate", str(self.iterations)])
+        
+        cmd.extend(self.spec_bench_list)
+        
+        logger.debug(f"构建runspec命令: {' '.join(cmd)}")
+        return cmd
+
+
 class SPEC2006V1P01Driver(SPEC2006Driver):
     """
     SPEC CPU 2006 v1.0.1版本驱动类

@@ -22,6 +22,7 @@ PackSPEC工具类模块
 import os
 import sys
 import json
+import shlex
 from enum import Enum
 from typing import Any, Union, Optional
 
@@ -29,7 +30,7 @@ from src.pack_spec.pack_config import (
     SPECName, TuneType, InputType, SPECMode, PACKMode,
     PackSPECError, FileOperationError, CommandExecutionError,
     CURRENT_DATE, DEFAULT_CORE_NUM, DEFAULT_LLVM_PROFDATA_PATH,
-    SCRIPTS_PATH, GENERATED_FILES_PATH, logger
+    SCRIPTS_PATH, GENERATED_FILES_PATH, logger, QEMU_CMD
 )
 import subprocess
 import shutil
@@ -885,3 +886,485 @@ class PackUtils:
             f"echo -e '{bench_name} completed ' | tee -a \"$LOG_FILE\"",
         ])
         return commands
+
+
+def parse_spec_results(result_dir: str, spec_name: 'SPECName') -> Dict:
+    """
+    解析SPEC测试结果
+    
+    从SPEC测试输出目录中解析测试结果，提取各基准测试的运行时间和分数。
+    
+    Args:
+        result_dir (str): SPEC测试结果目录路径
+        spec_name (SPECName): SPEC版本枚举值
+        
+    Returns:
+        Dict: 包含以下键的结果字典：
+            - benchmarks (Dict): 各基准测试的结果
+            - int_score (float): 整数测试综合分数
+            - fp_score (float): 浮点测试综合分数
+            - raw_data (List): 原始数据行列表
+            
+    Note:
+        SPEC结果通常保存在 result 目录下的 .sum 文件中
+    """
+    from src.pack_spec.pack_config import logger
+    
+    results = {
+        "benchmarks": {},
+        "int_score": 0.0,
+        "fp_score": 0.0,
+        "raw_data": []
+    }
+    
+    result_path = os.path.join(result_dir, "result")
+    if not os.path.isdir(result_path):
+        logger.warning(f"结果目录不存在: {result_path}")
+        return results
+    
+    sum_files = [f for f in os.listdir(result_path) if f.endswith('.sum')]
+    if not sum_files:
+        logger.warning(f"未找到 .sum 文件: {result_path}")
+        return results
+    
+    for sum_file in sum_files:
+        sum_path = os.path.join(result_path, sum_file)
+        try:
+            with open(sum_path, 'r') as f:
+                lines = f.readlines()
+            results["raw_data"].extend(lines)
+            
+            for line in lines:
+                parts = line.strip().split()
+                if len(parts) >= 4:
+                    bench_name = parts[0]
+                    if bench_name.startswith(('4', '6')):
+                        try:
+                            runtime = float(parts[2])
+                            score = float(parts[3]) if len(parts) > 3 else 0.0
+                            results["benchmarks"][bench_name] = {
+                                "runtime": runtime,
+                                "score": score
+                            }
+                        except (ValueError, IndexError):
+                            continue
+        except Exception as e:
+            logger.warning(f"解析 {sum_path} 失败: {e}")
+    
+    results["int_score"] = calculate_spec_score(
+        results["benchmarks"], "int", spec_name
+    )
+    results["fp_score"] = calculate_spec_score(
+        results["benchmarks"], "fp", spec_name
+    )
+    
+    return results
+
+
+def calculate_spec_score(benchmarks: Dict, bench_type: str, spec_name: 'SPECName') -> float:
+    """
+    计算SPEC综合分数
+    
+    根据各基准测试的分数计算综合分数。
+    SPEC分数计算使用几何平均数。
+    
+    Args:
+        benchmarks (Dict): 各基准测试的结果字典
+        bench_type (str): 基准测试类型，"int" 或 "fp"
+        spec_name (SPECName): SPEC版本枚举值
+        
+    Returns:
+        float: 综合分数，如果无法计算则返回0.0
+        
+    Note:
+        SPEC分数 = geometric_mean(reference_time / runtime) * 100
+    """
+    from src.pack_spec.pack_config import SPECName
+    
+    int_benches_2006 = [
+        "400.perlbench", "401.bzip2", "403.gcc", "429.mcf", "445.gobmk",
+        "456.hmmer", "458.sjeng", "462.libquantum", "464.h264ref",
+        "471.omnetpp", "473.astar", "483.xalancbmk"
+    ]
+    fp_benches_2006 = [
+        "410.bwaves", "416.gamess", "433.milc", "434.zeusmp", "435.gromacs",
+        "436.cactusADM", "437.leslie3d", "444.namd", "447.dealII", "450.soplex",
+        "453.povray", "454.calculix", "459.GemsFDTD", "465.tonto", "470.lbm",
+        "481.wrf", "482.sphinx3"
+    ]
+    
+    int_benches_2017 = [
+        "600.perlbench_s", "602.gcc_s", "605.mcf_s", "620.omnetpp_s",
+        "623.xalancbmk_s", "625.x264_s", "631.deepsjeng_s", "641.leela_s",
+        "648.exchange2_s", "657.xz_s"
+    ]
+    fp_benches_2017 = [
+        "603.bwaves_s", "607.cactuBSSN_s", "619.lbm_s", "621.wrf_s",
+        "627.cam4_s", "628.pop2_s", "638.imagick_s", "644.nab_s",
+        "649.fotonik3d_s", "654.roms_s"
+    ]
+    
+    if spec_name in [SPECName.spec2006, SPECName.spec2006v1p01]:
+        target_benches = int_benches_2006 if bench_type == "int" else fp_benches_2006
+    else:
+        target_benches = int_benches_2017 if bench_type == "int" else fp_benches_2017
+    
+    scores = []
+    for bench in target_benches:
+        if bench in benchmarks and benchmarks[bench]["score"] > 0:
+            scores.append(benchmarks[bench]["score"])
+    
+    if not scores:
+        return 0.0
+    
+    import math
+    geometric_mean = math.exp(sum(math.log(s) for s in scores) / len(scores))
+    return round(geometric_mean, 2)
+
+
+def generate_json_report(results: Dict, config: Dict, output_path: str) -> str:
+    """
+    生成JSON格式的测试报告
+    
+    Args:
+        results (Dict): 测试结果字典
+        config (Dict): 测试配置字典
+        output_path (str): 输出文件路径
+        
+    Returns:
+        str: 生成的报告文件路径
+    """
+    from datetime import datetime
+    from src.pack_spec.pack_config import CURRENT_DATE, CURRENT_TIME
+    
+    report = {
+        "report_info": {
+            "generated_at": datetime.now().isoformat(),
+            "date": CURRENT_DATE,
+            "time": CURRENT_TIME
+        },
+        "config": {
+            "spec_name": str(config.get("spec_name", "")),
+            "tune_type": str(config.get("tune_type", "")),
+            "input_type": str(config.get("input_type", "")),
+            "spec_mode": str(config.get("spec_mode", "")),
+            "iterations": config.get("iterations", 0),
+        },
+        "results": {
+            "benchmarks": results.get("benchmarks", {}),
+            "int_score": results.get("int_score", 0.0),
+            "fp_score": results.get("fp_score", 0.0)
+        }
+    }
+    
+    os.makedirs(os.path.dirname(output_path), exist_ok=True)
+    
+    with open(output_path, 'w', encoding='utf-8') as f:
+        json.dump(report, f, indent=2, ensure_ascii=False)
+    
+    return output_path
+
+
+def generate_markdown_report(results: Dict, config: Dict, output_path: str) -> str:
+    """
+    生成Markdown格式的测试报告
+    
+    Args:
+        results (Dict): 测试结果字典
+        config (Dict): 测试配置字典
+        output_path (str): 输出文件路径
+        
+    Returns:
+        str: 生成的报告文件路径
+    """
+    from datetime import datetime
+    from src.pack_spec.pack_config import CURRENT_DATE, CURRENT_TIME
+    
+    lines = [
+        "# SPEC CPU 测试报告",
+        "",
+        f"**生成时间**: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
+        "",
+        "## 测试配置",
+        "",
+        f"- **SPEC版本**: {config.get('spec_name', '')}",
+        f"- **优化级别**: {config.get('tune_type', '')}",
+        f"- **输入类型**: {config.get('input_type', '')}",
+        f"- **运行模式**: {config.get('spec_mode', '')}",
+        f"- **迭代次数**: {config.get('iterations', 0)}",
+        "",
+        "## 测试结果",
+        "",
+        "### 综合分数",
+        "",
+        f"| 类型 | 分数 |",
+        f"|------|------|",
+        f"| 整数测试 (INT) | {results.get('int_score', 0.0):.2f} |",
+        f"| 浮点测试 (FP) | {results.get('fp_score', 0.0):.2f} |",
+        "",
+        "### 各基准测试结果",
+        "",
+        "| 基准测试 | 运行时间 | 分数 |",
+        "|----------|----------|------|",
+    ]
+    
+    benchmarks = results.get("benchmarks", {})
+    for bench_name, bench_data in sorted(benchmarks.items()):
+        lines.append(
+            f"| {bench_name} | {bench_data.get('runtime', 0):.2f} | {bench_data.get('score', 0):.2f} |"
+        )
+    
+    lines.extend([
+        "",
+        "---",
+        f"*报告由 PackSPEC 自动生成*"
+    ])
+    
+    os.makedirs(os.path.dirname(output_path), exist_ok=True)
+    
+    with open(output_path, 'w', encoding='utf-8') as f:
+        f.write('\n'.join(lines))
+    
+    return output_path
+
+
+def build_qemu_command(input_type: InputType, 
+                       bench_name: str, spec_bench_map: dict, tune_type: TuneType, 
+                       label: str) -> List[str]:
+    """
+    构建QEMU运行命令
+    
+    使用环境变量QEMU_CMD构建QEMU运行命令。
+    
+    Args:
+        input_type (InputType): 输入数据集类型
+        bench_name (str): 基准测试名称
+        spec_bench_map (dict): 基准测试二进制文件映射字典
+        tune_type (TuneType): 优化级别
+        label (str): 配置标签
+        
+    Returns:
+        List[str]: QEMU命令列表
+        
+    Raises:
+        ConfigError: 当QEMU_CMD未配置或格式无效时抛出
+        
+    Note:
+        QEMU命令格式: {qemu_cmd} {binary} {args}
+    """
+    from src.pack_spec.pack_config import ConfigError
+    
+    if not QEMU_CMD:
+        raise ConfigError("未配置QEMU_CMD环境变量，请在set_env.sh中设置")
+    
+    try:
+        qemu_cmd_parts = shlex.split(QEMU_CMD)
+    except ValueError as e:
+        raise ConfigError(f"QEMU_CMD环境变量格式无效: {e}")
+    
+    if not qemu_cmd_parts:
+        raise ConfigError("QEMU_CMD环境变量格式无效")
+    
+    qemu_binary = qemu_cmd_parts[0]
+    if not qemu_binary.startswith("qemu-"):
+        logger.warning(f"QEMU命令 '{qemu_binary}' 可能不是有效的QEMU模拟器")
+    
+    commands = []
+    
+    commands.append(f"# QEMU模拟器命令（从环境变量QEMU_CMD获取）")
+    commands.append(f"QEMU_CMD=\"{QEMU_CMD}\"")
+    
+    commands.extend([
+        "",
+        "# 运行二进制文件",
+        f"$QEMU_CMD ./{spec_bench_map[bench_name]}_{tune_type.name}.{label} < /dev/null"
+    ])
+    
+    return commands
+
+
+def generate_qemu_verify_script(bench_name: str, dest_dir: str,
+                                spec_bench_map: dict, tune_type: TuneType, 
+                                label: str, input_type: InputType,
+                                data_dir: str, output_dir: str) -> str:
+    """
+    生成单个基准测试的QEMU验证脚本
+    
+    生成一个bash脚本，使用QEMU模拟器运行编译出的二进制文件，
+    用于验证二进制文件的正确性，不统计运行时间。
+    
+    Args:
+        bench_name (str): 基准测试名称
+        dest_dir (str): 脚本输出目录
+        spec_bench_map (dict): 基准测试二进制文件映射字典
+        tune_type (TuneType): 优化级别
+        label (str): 配置标签
+        input_type (InputType): 输入数据集类型
+        data_dir (str): 输入数据目录
+        output_dir (str): 输出日志目录
+        
+    Returns:
+        str: 生成的脚本文件路径
+        
+    Note:
+        脚本名称格式: verify_{input_type}.sh
+        输出日志格式: {output_dir}/{bench_name}_verify.log
+    """
+    script_path = os.path.join(dest_dir, f"verify_{input_type.name}.sh")
+    
+    script_content = [
+        "#!/bin/bash",
+        "",
+        "# QEMU验证脚本 - 用于验证编译出的二进制文件是否正确",
+        "# 注意: 此脚本不统计运行时间，仅验证程序能否正确执行",
+        "",
+        "set -e",
+        "",
+        "# 获取脚本所在目录",
+        "SCRIPT_DIR=$(cd \"$(dirname \"$0\")\" && pwd)",
+        "cd \"$SCRIPT_DIR\"",
+        "",
+        "# 定义日志文件（使用相对路径）",
+        "LOG_FILE=\"$SCRIPT_DIR/logs/{}_verify.log\"".format(bench_name),
+        "",
+        "echo \"========================================\" | tee \"$LOG_FILE\"",
+        f"echo \"QEMU验证测试: {bench_name}\" | tee -a \"$LOG_FILE\"",
+        f"echo \"输入类型: {input_type.name}\" | tee -a \"$LOG_FILE\"",
+        f"echo \"优化级别: {tune_type.name}\" | tee -a \"$LOG_FILE\"",
+        "echo \"========================================\" | tee -a \"$LOG_FILE\"",
+        "",
+        "# 解除栈限制",
+        "ulimit -s unlimited",
+        "",
+        "# 创建输出目录",
+        "mkdir -p \"$SCRIPT_DIR/logs\"",
+        "",
+    ]
+    
+    qemu_commands = build_qemu_command(
+        input_type, bench_name, spec_bench_map, tune_type, label
+    )
+    script_content.extend(qemu_commands)
+    
+    script_content.extend([
+        "",
+        "echo \"\" | tee -a \"$LOG_FILE\"",
+        "echo \"验证完成: {bench_name}\" | tee -a \"$LOG_FILE\"",
+        "echo \"日志已保存到: $LOG_FILE\"",
+    ])
+    
+    with open(script_path, 'w', encoding='utf-8') as f:
+        f.write('\n'.join(script_content))
+    
+    os.chmod(script_path, 0o755)
+    
+    return script_path
+
+
+def generate_qemu_verify_all_script(bench_list: List[str], 
+                                    dest_dir: str, spec_bench_map: dict,
+                                    tune_type: TuneType, label: str, 
+                                    input_type: InputType, output_dir: str) -> str:
+    """
+    生成批量QEMU验证脚本
+    
+    生成一个统一的脚本，使用QEMU模拟器依次运行所有基准测试，
+    用于验证所有编译出的二进制文件是否正确。
+    
+    Args:
+        bench_list (List[str]): 基准测试名称列表
+        dest_dir (str): 脚本输出目录
+        spec_bench_map (dict): 基准测试二进制文件映射字典
+        tune_type (TuneType): 优化级别
+        label (str): 配置标签
+        input_type (InputType): 输入数据集类型
+        output_dir (str): 输出日志目录
+        
+    Returns:
+        str: 生成的脚本文件路径
+        
+    Note:
+        脚本名称格式: verify_{input_type}_all.sh
+        每个基准测试的输出保存在各自的日志文件中
+    """
+    script_path = os.path.join(dest_dir, f"verify_{input_type.name}_all.sh")
+    
+    script_content = [
+        "#!/bin/bash",
+        "",
+        "# QEMU批量验证脚本 - 用于验证所有编译出的二进制文件是否正确",
+        "# 注意: 此脚本不统计运行时间，仅验证程序能否正确执行",
+        "",
+        "set -e",
+        "",
+        "# 获取脚本所在目录",
+        "SCRIPT_DIR=$(cd \"$(dirname \"$0\")\" && pwd)",
+        "cd \"$SCRIPT_DIR\"",
+        "",
+        "# 定义总日志文件（使用相对路径）",
+        "TOTAL_LOG=\"$SCRIPT_DIR/logs/verify_all.log\"",
+        "",
+        "echo \"========================================\" | tee \"$TOTAL_LOG\"",
+        f"echo \"QEMU批量验证测试\" | tee -a \"$TOTAL_LOG\"",
+        f"echo \"输入类型: {input_type.name}\" | tee -a \"$TOTAL_LOG\"",
+        f"echo \"优化级别: {tune_type.name}\" | tee -a \"$TOTAL_LOG\"",
+        f"echo \"基准测试数量: {len(bench_list)}\" | tee -a \"$TOTAL_LOG\"",
+        "echo \"========================================\" | tee -a \"$TOTAL_LOG\"",
+        "",
+        "# 解除栈限制",
+        "ulimit -s unlimited",
+        "",
+        "# 创建输出目录",
+        "mkdir -p \"$SCRIPT_DIR/logs\"",
+        "",
+        "# 记录开始时间",
+        "START_TIME=$(date +%s)",
+        "",
+        "# 验证结果统计",
+        "TOTAL_COUNT=0",
+        "SUCCESS_COUNT=0",
+        "FAIL_COUNT=0",
+        "",
+    ]
+    
+    for bench_name in bench_list:
+        script_content.extend([
+            f"# 验证 {bench_name}",
+            f"echo \"\" | tee -a \"$TOTAL_LOG\"",
+            f"echo \"验证 {bench_name}...\" | tee -a \"$TOTAL_LOG\"",
+            f"cd \"$SCRIPT_DIR/{bench_name}\"",
+            "",
+        ])
+        
+        qemu_commands = build_qemu_command(
+            input_type, bench_name, spec_bench_map, tune_type, label
+        )
+        
+        for cmd in qemu_commands:
+            script_content.append(f"{cmd} | tee -a \"$TOTAL_LOG\"")
+        
+        script_content.extend([
+            "cd \"$SCRIPT_DIR\"",
+            "TOTAL_COUNT=$((TOTAL_COUNT + 1))",
+            "",
+        ])
+    
+    script_content.extend([
+        "# 记录结束时间",
+        "END_TIME=$(date +%s)",
+        "ELAPSED_TIME=$((END_TIME - START_TIME))",
+        "",
+        "echo \"\" | tee -a \"$TOTAL_LOG\"",
+        "echo \"========================================\" | tee -a \"$TOTAL_LOG\"",
+        "echo \"验证完成\" | tee -a \"$TOTAL_LOG\"",
+        "echo \"总测试数: $TOTAL_COUNT\" | tee -a \"$TOTAL_LOG\"",
+        "echo \"总耗时: $ELAPSED_TIME 秒\" | tee -a \"$TOTAL_LOG\"",
+        "echo \"========================================\" | tee -a \"$TOTAL_LOG\"",
+    ])
+    
+    with open(script_path, 'w', encoding='utf-8') as f:
+        f.write('\n'.join(script_content))
+    
+    os.chmod(script_path, 0o755)
+    
+    return script_path

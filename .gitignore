@@ -11,3 +11,4 @@
 set_env.sh
 main.py
 *.pyc
+.trae

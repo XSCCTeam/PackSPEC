@@ -85,6 +85,12 @@ if __name__ == "__main__":
             # 仅在打包SPEC2017基准测试625.x264_s的时生效
             # HOST模式下，打包SPEC2017的625.x264_s的例子将不会单独生成input
             "host_mode": False,
+
+            # 是否开启QEMU验证模式，默认为 False
+            # 开启后可调用 pack_qemu_verify() 生成QEMU验证脚本
+            # 用于验证编译出的二进制文件是否正确
+            # 需要在 set_env.sh 中配置 QEMU_PATH 环境变量
+            "verify_mode": False,
         },
     }
 
@@ -102,3 +108,6 @@ if __name__ == "__main__":
 
     # 打包完整测试环境（附带build目录）
     # packer.pack_benches_cfg(spec_config, with_build=True)
+
+    # QEMU验证模式（需要配置QEMU_PATH环境变量并设置verify_mode=True）
+    # packer.pack_qemu_verify()

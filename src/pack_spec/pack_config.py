@@ -205,6 +205,33 @@ class PACKMode(Enum):
     buildrun = 3
 
 
+class RunMode(Enum):
+    """
+    PackSPEC运行模式枚举类
+    
+    定义PackSPEC的运行模式，区分打包模式和直接运行模式
+    
+    Attributes:
+        pack (int): 打包模式，将SPEC测试打包为可独立运行的文件集
+        direct (int): 直接运行模式，直接调用runspec/runcpu命令执行测试
+    
+    Note:
+        打包模式适用于需要在其他机器上运行测试的场景；
+        直接运行模式适用于本地直接执行测试的场景，无需打包文件
+    """
+    pack = 1
+    direct = 2
+
+
+DEFAULT_RUN_MODE = RunMode.pack
+"""默认运行模式，默认为打包模式以保持向后兼容"""
+
+DEFAULT_REPORT_FORMAT = "json"
+"""默认报告格式，支持json和markdown"""
+
+RESULTS_OUTPUT_PATH = os.path.join(P_PATH, "spec_results")
+"""SPEC测试结果输出目录路径"""
+
 DEFAULT_CORE_NUM = -1
 """默认绑定的CPU核心编号，-1表示不绑定核心"""
 
@@ -355,3 +382,17 @@ if SPEC2017_PATH != None:
 else:
     SPEC2017_BENCH_PATH = None
     SPEC2017_CONFIG_PATH = None
+
+
+#########################################
+# QEMU Configs - QEMU模拟器配置
+#########################################
+
+QEMU_PATH = os.getenv('QEMU_PATH')
+"""QEMU安装目录路径，从环境变量获取，用于QEMU验证模式"""
+
+QEMU_CMD = os.getenv('QEMU_CMD', 'qemu-aarch64')
+"""QEMU模拟器命令，从环境变量获取，默认为qemu-aarch64"""
+
+DEFAULT_VERIFY_MODE = False
+"""默认验证模式开关，开启后生成QEMU验证脚本用于验证编译出的binary是否正确"""

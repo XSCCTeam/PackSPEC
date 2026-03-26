@@ -401,3 +401,143 @@ class SPECDriver:
         
         return True
 
+    def _check_spec_environment(self) -> bool:
+        """
+        检查SPEC环境是否正确配置
+        
+        检查SPEC安装目录是否存在，以及runspec/runcpu命令是否可用。
+        
+        Returns:
+            bool: 如果环境检查通过返回True
+            
+        Raises:
+            FileOperationError: 当SPEC安装目录不存在时抛出
+            CommandExecutionError: 当SPEC命令不可用时抛出
+        """
+        if not os.path.isdir(self.spec_dir):
+            raise FileOperationError(f"SPEC安装目录不存在: {self.spec_dir}")
+        
+        if self.spec_name in [SPECName.spec2006, SPECName.spec2006v1p01]:
+            spec_cmd = os.path.join(self.spec_dir, "bin", "runspec")
+        else:
+            spec_cmd = os.path.join(self.spec_dir, "bin", "runcpu")
+        
+        if not os.path.isfile(spec_cmd):
+            raise CommandExecutionError(f"SPEC命令不存在: {spec_cmd}")
+        
+        logger.debug(f"SPEC环境检查通过: {self.spec_dir}")
+        return True
+
+    def _build_run_command(self) -> List[str]:
+        """
+        构建SPEC运行命令
+        
+        根据SPEC版本构建runspec或runcpu命令及参数。
+        子类需要重写此方法以提供版本特定的命令构建逻辑。
+        
+        Returns:
+            List[str]: SPEC命令及参数列表
+            
+        Note:
+            此方法应由子类重写，基类返回空列表
+        """
+        logger.warning("_build_run_command() 应由子类重写")
+        return []
+
+    def run_spec_directly(self, output_dir: Optional[str] = None) -> Dict:
+        """
+        直接运行SPEC测试
+        
+        调用runspec/runcpu命令直接执行SPEC基准测试，无需打包。
+        测试完成后返回结果信息。
+        
+        Args:
+            output_dir (str, optional): 结果输出目录，默认为spec_results/{timestamp}
+            
+        Returns:
+            Dict: 包含以下键的结果字典：
+                - success (bool): 是否成功完成
+                - output_dir (str): 结果输出目录
+                - log_file (str): 日志文件路径
+                - return_code (int): 命令返回码
+                - error_message (str): 错误信息（如果有）
+                
+        Raises:
+            FileOperationError: 当SPEC环境检查失败时抛出
+            CommandExecutionError: 当命令执行失败时抛出
+            
+        Note:
+            - 测试过程中会实时输出日志
+            - 支持Ctrl+C中断测试
+        """
+        self._check_spec_environment()
+        
+        spec_cmd = self._build_run_command()
+        if not spec_cmd:
+            raise CommandExecutionError("无法构建SPEC命令")
+        
+        if output_dir is None:
+            from src.pack_spec.pack_config import RESULTS_OUTPUT_PATH, CURRENT_TIME
+            output_dir = os.path.join(RESULTS_OUTPUT_PATH, f"run_{CURRENT_TIME}")
+        
+        os.makedirs(output_dir, exist_ok=True)
+        log_file = os.path.join(output_dir, "spec_run.log")
+        
+        result = {
+            "success": False,
+            "output_dir": output_dir,
+            "log_file": log_file,
+            "return_code": -1,
+            "error_message": ""
+        }
+        
+        logger.info(f"开始运行SPEC测试: {' '.join(spec_cmd)}")
+        logger.info(f"结果输出目录: {output_dir}")
+        
+        process = None
+        try:
+            with open(log_file, 'w') as log_f:
+                process = subprocess.Popen(
+                    spec_cmd,
+                    cwd=self.spec_dir,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                    text=True,
+                    bufsize=1
+                )
+                
+                while True:
+                    output = process.stdout
+                    if output is not None:
+                        line = output.readline()
+                        if line == '' and process.poll() is not None:
+                            break
+                        if line:
+                            logger.info(line.strip())
+                            log_f.write(line)
+                            log_f.flush()
+                
+                return_code = process.wait()
+                result["return_code"] = return_code
+                
+                if return_code == 0:
+                    result["success"] = True
+                    logger.success(f"SPEC测试完成: {output_dir}")
+                else:
+                    result["error_message"] = f"命令返回非零退出码: {return_code}"
+                    logger.error(result["error_message"])
+                    
+        except KeyboardInterrupt:
+            if process:
+                process.terminate()
+                process.wait()
+            result["error_message"] = "用户中断测试"
+            logger.warning("用户中断测试")
+            raise CommandExecutionError("用户中断测试")
+        except Exception as e:
+            result["error_message"] = str(e)
+            logger.error(f"执行SPEC命令失败: {e}")
+            raise CommandExecutionError(f"执行SPEC命令失败: {e}")
+        
+        return result
+

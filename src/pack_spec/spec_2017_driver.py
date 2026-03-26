@@ -376,3 +376,45 @@ class SPEC2017Driver(SPECDriver):
             if bench_name in self.spec_bench_map:
                 binary_path_map[bench_name] = os.path.join(bench_dir, self.spec_bench_map[bench_name])
         return binary_path_map
+
+    def _build_run_command(self) -> List[str]:
+        """
+        构建SPEC2017 runcpu命令
+        
+        根据配置构建runcpu命令及参数。
+        runcpu是SPEC2017的测试运行命令。
+        
+        Returns:
+            List[str]: runcpu命令及参数列表
+            
+        Note:
+            命令格式: runcpu --config <cfg> --tune <tune> --size <size> 
+                      --iterations <n> --noreportable <benches>
+        """
+        runcpu = os.path.join(self.spec_dir, "bin", "runcpu")
+        
+        cmd = [runcpu]
+        
+        cmd.extend(["--config", os.path.basename(self.spec_cfg_path)])
+        
+        if self.tune_type == TuneType.all:
+            cmd.extend(["--tune", "base,peak"])
+        else:
+            cmd.extend(["--tune", self.tune_type.name])
+        
+        if self.input_type == InputType.all:
+            cmd.extend(["--size", "test,train,ref"])
+        else:
+            cmd.extend(["--size", self.input_type.name])
+        
+        cmd.extend(["--iterations", str(self.iterations)])
+        
+        cmd.append("--noreportable")
+        
+        if self.spec_mode == SPECMode.rate:
+            cmd.extend(["--rate", str(self.iterations)])
+        
+        cmd.extend(self.spec_bench_list)
+        
+        logger.debug(f"构建runcpu命令: {' '.join(cmd)}")
+        return cmd

@@ -41,13 +41,14 @@ SPEC2017_PATH= # <Your SPEC2017 Install Path>
 # QEMU Configs
 #########################################
 QEMU_PATH= # <Your QEMU Install Path>
-
-
+QEMU_CMD="qemu-riscv64 -s 83886080000" # <QEMU command, e.g. qemu-aarch64, qemu-riscv64, etc.>
 
 export DEFAULT_LLVM_PATH
 # export BOSC_API_KEY
 # export BOSC_AT_USER
 export SPEC2006_PATH
 export SPEC2017_PATH
+export QEMU_PATH
+export QEMU_CMD
 
 

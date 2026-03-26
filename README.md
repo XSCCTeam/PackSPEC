@@ -219,6 +219,8 @@ packer.pack_benches()
 | `profile_gen` | bool | Profile 生成模式 | False |
 | `auto_mode` | bool | 自动模式，无需确认 | False |
 | `host_mode` | bool | HOST 模式 | False |
+| `run_mode` | RunMode | 运行模式（pack/direct） | pack |
+| `report_format` | str | 报告格式（json/markdown） | json |
 
 ### spec_benches 参数格式
 
@@ -241,6 +243,8 @@ packer.pack_benches()
 | `pack_binaries_cfg()` | 打包二进制文件（使用配置文件路径） |
 | `pack_benches(with_build=False)` | 打包完整测试环境 |
 | `pack_benches_cfg(with_build=False)` | 打包完整测试环境（使用配置文件路径） |
+| `run_spec(output_dir=None, generate_report=True)` | 直接运行 SPEC 测试（无需打包） |
+| `pack_qemu_verify(output_dir=None)` | 生成 QEMU 验证脚本 |
 
 ## 输出目录结构
 
@@ -265,6 +269,180 @@ generated_files/
 ```
 
 ## 高级功能
+
+### 直接运行模式
+
+PackSPEC 支持直接运行模式，无需打包即可直接驱动 SPEC 测试。该模式适用于本地测试场景，可以简化测试流程。
+
+**使用方法：**
+
+```python
+from src.pack_spec import PackSPEC, SPECName, TuneType, InputType, SPECMode, RunMode
+
+config = {
+    "pack_name": "my_test",
+    "spec_cfg_path": "/path/to/spec/config.cfg",
+    "spec_config": {
+        "spec_name": SPECName.spec2017,
+        "tune_type": TuneType.base,
+        "input_type": InputType.ref,
+        "spec_mode": SPECMode.speed,
+        "spec_benches": "all",
+        "iterations": 3,
+    },
+    "pack_config": {
+        "run_mode": RunMode.direct,  # 设置为直接运行模式
+        "report_format": "json",     # 报告格式：json 或 markdown
+    },
+}
+
+packer = PackSPEC(config)
+
+# 直接运行 SPEC 测试
+result = packer.run_spec()
+
+# 查看测试结果
+print(f"INT 分数: {result['results']['int_score']}")
+print(f"FP 分数: {result['results']['fp_score']}")
+print(f"报告路径: {result['report_path']}")
+```
+
+**返回结果说明：**
+
+`run_spec()` 方法返回一个字典，包含以下键：
+
+| 键 | 类型 | 说明 |
+|------|------|------|
+| `success` | bool | 是否成功完成 |
+| `output_dir` | str | 结果输出目录 |
+| `log_file` | str | 日志文件路径 |
+| `results` | Dict | 解析后的测试结果 |
+| `report_path` | str | 报告文件路径 |
+
+**测试报告格式：**
+
+测试报告包含以下信息：
+- 测试配置信息（SPEC 版本、优化级别、输入类型等）
+- 各基准测试的运行时间和分数
+- 整数测试 (INT) 综合分数
+- 浮点测试 (FP) 综合分数
+- 测试时间戳
+
+**注意事项：**
+- 直接运行模式需要 SPEC 已正确安装并配置环境变量
+- 测试过程中会实时输出日志
+- 支持 Ctrl+C 中断测试
+- 测试结果保存在 `spec_results/` 目录下
+
+### QEMU 验证模式
+
+PackSPEC 支持 QEMU 验证模式，用于验证编译出的 SPEC CPU 2006/2017 二进制文件是否正确。该模式通过 QEMU 模拟器运行测试，不统计运行时间，只保留程序输出。
+
+**配置环境变量：**
+
+在 `set_env.sh` 中配置 QEMU 路径：
+
+```bash
+# QEMU Configs
+QEMU_PATH=/path/to/qemu
+export QEMU_PATH
+```
+
+**使用方法：**
+
+```python
+from src.pack_spec import PackSPEC, SPECName, TuneType, InputType, SPECMode
+
+config = {
+    "pack_name": "verify_test",
+    "spec_cfg_path": "/path/to/spec/config.cfg",
+    "verify_mode": True,                 # 开启验证模式
+    "spec_config": {
+        "spec_name": SPECName.spec2017,
+        "tune_type": TuneType.base,
+        "input_type": InputType.test,    # 建议使用 test 输入进行快速验证
+        "spec_mode": SPECMode.speed,
+        "spec_benches": "all",
+    },
+}
+
+packer = PackSPEC(config)
+
+# 先编译二进制文件
+packer.setup_spec()
+
+# 生成 QEMU 验证脚本
+result = packer.pack_qemu_verify()
+
+print(f"输出目录: {result['output_dir']}")
+print(f"生成脚本数量: {len(result['scripts'])}")
+```
+
+**配置参数说明：**
+
+| 参数 | 类型 | 说明 | 默认值 |
+|------|------|------|--------|
+| `verify_mode` | bool | 是否开启验证模式 | False |
+
+**环境变量：**
+
+| 变量名 | 说明 |
+|--------|------|
+| `QEMU_PATH` | QEMU 安装目录路径（在 set_env.sh 中配置） |
+
+**QEMU 目录结构要求：**
+
+```
+$QEMU_PATH/
+├── bin/
+│   ├── qemu-aarch64      # ARM64 模拟器
+│   ├── qemu-riscv64      # RISC-V 64 模拟器
+│   └── ...
+└── sysroot/              # 目标架构的系统库
+    ├── lib/
+    └── ...
+```
+
+**生成的脚本：**
+
+- `verify_{input_type}.sh`: 单个基准测试的验证脚本
+- `verify_{input_type}_all.sh`: 批量验证所有基准测试的脚本
+
+**输出目录结构：**
+
+```
+output_dir/
+├── 600.perlbench_s/
+│   ├── perlbench_s_base.{label}
+│   ├── verify_test.sh
+│   └── ...
+├── 602.gcc_s/
+│   └── ...
+├── logs/
+│   ├── 600.perlbench_s_verify.log
+│   └── verify_all.log
+├── verify_test_all.sh
+└── {config}.cfg
+```
+
+**运行验证：**
+
+```bash
+# 验证单个基准测试
+cd output_dir/600.perlbench_s
+./verify_test.sh
+
+# 批量验证所有基准测试
+cd output_dir
+./verify_test_all.sh
+```
+
+**注意事项：**
+- 需要先调用 `setup_spec()` 编译二进制文件
+- QEMU 路径通过环境变量 `QEMU_PATH` 配置
+- QEMU 目录必须包含对应架构的模拟器和 sysroot
+- 验证模式不统计运行时间，仅验证程序能否正确执行
+- 建议使用 `test` 输入类型进行快速验证
 
 ### Profile 生成模式
 
@@ -319,6 +497,7 @@ config = {
 | `SPECMode` | 运行模式 | `speed` (速度测试), `rate` (吞吐测试) |
 | `ActionType` | 操作类型 | `build` (构建), `run` (运行) |
 | `PACKMode` | 打包模式 | `bin` (仅二进制), `run` (运行环境), `buildrun` (完整环境) |
+| `RunMode` | 运行模式 | `pack` (打包模式), `direct` (直接运行模式) |
 
 ## 开发指南
 
@@ -343,13 +522,13 @@ bash run_test.sh
 
 ```python
 # 导入主要类和枚举
-from src.pack_spec import PackSPEC, SPECName, TuneType, InputType, SPECMode
+from src.pack_spec import PackSPEC, SPECName, TuneType, InputType, SPECMode, RunMode
 
 # 导入异常类
 from src.pack_spec import PackSPECError, ConfigError, FileOperationError
 
 # 导入工具函数
-from src.pack_spec import load_pack_spec_cfg, save_pack_spec_cfg
+from src.pack_spec import load_pack_spec_cfg, save_pack_spec_cfg, parse_spec_results, generate_json_report, generate_markdown_report
 ```
 
 ## 注意事项
@@ -361,6 +540,34 @@ from src.pack_spec import load_pack_spec_cfg, save_pack_spec_cfg
 5. **安全性**：敏感信息（API 密钥）通过环境变量传递，不要硬编码
 
 ## 更新日志
+
+### v0.3.0
+
+**新功能：**
+- 新增 QEMU 验证模式，支持通过 QEMU 模拟器验证编译出的二进制文件
+- 新增 `pack_qemu_verify()` 方法，生成 QEMU 验证脚本
+- 新增 `generate_qemu_verify_script()` 函数，生成单个基准测试验证脚本
+- 新增 `generate_qemu_verify_all_script()` 函数，生成批量验证脚本
+- 支持自动检测 QEMU 模拟器类型（aarch64, riscv64, arm, mips 等）
+- 验证模式不统计运行时间，仅验证程序正确性并保留输出
+
+**配置参数：**
+- 新增 `QEMU_PATH` 环境变量，在 set_env.sh 中配置 QEMU 安装目录
+- 新增 `QEMU_CMD` 环境变量，在 set_env.sh 中配置 QEMU 模拟器命令（如 qemu-aarch64, qemu-riscv64 等）
+- 新增 `verify_mode` 配置项，开启验证模式
+
+### v0.2.0
+
+**新功能：**
+- 新增直接运行模式 (`RunMode.direct`)，可直接驱动 SPEC 测试无需打包
+- 新增 `run_spec()` 方法，支持直接调用 runspec/runcpu 命令
+- 新增测试结果解析功能 (`parse_spec_results()`)
+- 新增测试报告生成功能 (`generate_json_report()`, `generate_markdown_report()`)
+- 支持生成 JSON 和 Markdown 格式的测试报告
+
+**改进：**
+- 完善了 SPECDriver 基类的环境检查功能
+- 优化了命令执行和日志输出
 
 ### v0.1.0
 

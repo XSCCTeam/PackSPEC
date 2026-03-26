@@ -36,16 +36,19 @@ PackSPEC - SPEC CPU基准测试打包工具主模块
 
 import os
 import shutil
+from typing import Dict, Optional
 
 from src.pack_spec.pack_config import (
-    SPECName, TuneType, InputType, SPECMode, ActionType, PACKMode,
+    SPECName, TuneType, InputType, SPECMode, ActionType, PACKMode, RunMode,
     PackSPECError, ConfigError, FileOperationError, CommandExecutionError, BenchmarkError,
     CURRENT_DATE, CURRENT_TIME, DEFAULT_ITERATIONS, DEFAULT_REBUILD,
     DEFAULT_CORE_NUM, DEFAULT_CLOCK_RATE, DEFAULT_PROFILE_GEN,
     DEFAULT_AUTO_MODE, DEFAULT_HOST_MODE, DEFAULT_LLVM_PROFDATA_PATH,
+    DEFAULT_RUN_MODE, DEFAULT_REPORT_FORMAT, RESULTS_OUTPUT_PATH,
+    QEMU_PATH, DEFAULT_VERIFY_MODE,
     BOSC_API_KEY, BOSC_AT_USER, P_PATH, logger, GENERATED_FILES_PATH
 )
-from src.pack_spec.pack_utils import PackUtils, load_pack_spec_cfg
+from src.pack_spec.pack_utils import PackUtils, load_pack_spec_cfg, parse_spec_results, generate_json_report, generate_markdown_report, generate_qemu_verify_script, generate_qemu_verify_all_script
 from src.pack_spec.spec_2006_driver import SPEC2006Driver, SPEC2006V1P01Driver
 from src.pack_spec.spec_2017_driver import SPEC2017Driver
 
@@ -172,6 +175,9 @@ class PackSPEC:
         self.profile_gen = config.get('profile_gen', pack_config.get('profile_gen', DEFAULT_PROFILE_GEN))
         self.auto_mode = config.get('auto_mode', pack_config.get('auto_mode', DEFAULT_AUTO_MODE))
         self.host_mode = config.get('host_mode', pack_config.get('host_mode', DEFAULT_HOST_MODE))
+        self.run_mode = config.get('run_mode', pack_config.get('run_mode', DEFAULT_RUN_MODE))
+        self.report_format = config.get('report_format', pack_config.get('report_format', DEFAULT_REPORT_FORMAT))
+        self.verify_mode = config.get('verify_mode', pack_config.get('verify_mode', DEFAULT_VERIFY_MODE))
         
         if self.profile_gen: # profile 生成模式只跑一次程序
             self.iterations = 1
@@ -640,6 +646,253 @@ class PackSPEC:
             with_build (bool, optional): 是否包含构建目录，默认False
         """
         self.pack_benches(with_build, self.spec_cfg_path)
+
+    def run_spec(self, output_dir: str = None, generate_report: bool = True) -> Dict:
+        """
+        直接运行SPEC测试
+        
+        调用runspec/runcpu命令直接执行SPEC基准测试，无需打包。
+        测试完成后可选择生成测试报告。
+        
+        Args:
+            output_dir (str, optional): 结果输出目录，默认自动生成
+            generate_report (bool, optional): 是否生成测试报告，默认True
+            
+        Returns:
+            Dict: 包含以下键的结果字典：
+                - success (bool): 是否成功完成
+                - output_dir (str): 结果输出目录
+                - log_file (str): 日志文件路径
+                - results (Dict): 解析后的测试结果（如果解析成功）
+                - report_path (str): 报告文件路径（如果生成）
+                
+        Raises:
+            CommandExecutionError: 当命令执行失败时抛出
+            
+        Note:
+            - 测试过程中会实时输出日志
+            - 支持Ctrl+C中断测试
+            - 测试完成后自动解析结果并生成报告
+            
+        Example:
+            >>> packer = PackSPEC(config)
+            >>> result = packer.run_spec()
+            >>> print(f"INT分数: {result['results']['int_score']}")
+        """
+        logger.info("="*80)
+        logger.info("开始直接运行SPEC测试")
+        logger.info("="*80)
+        
+        try:
+            run_result = self.spec_driver.run_spec_directly(output_dir)
+        except FileOperationError as e:
+            logger.error(f"SPEC环境检查失败: {e}")
+            raise
+        except CommandExecutionError as e:
+            logger.error(f"SPEC测试执行失败: {e}")
+            raise
+        except Exception as e:
+            logger.error(f"运行SPEC测试时发生未知错误: {e}")
+            raise CommandExecutionError(f"运行SPEC测试时发生未知错误: {e}")
+        
+        if not run_result["success"]:
+            logger.error(f"SPEC测试执行失败: {run_result.get('error_message', '未知错误')}")
+            return run_result
+        
+        if generate_report:
+            logger.info("解析测试结果...")
+            
+            results = parse_spec_results(
+                run_result["output_dir"],
+                self.spec_name
+            )
+            run_result["results"] = results
+            
+            config_info = {
+                "spec_name": self.spec_name.name,
+                "tune_type": self.tune_type.name,
+                "input_type": self.input_type.name,
+                "spec_mode": self.spec_mode.name,
+                "iterations": self.iterations,
+            }
+            
+            if self.report_format == "markdown":
+                report_path = os.path.join(
+                    run_result["output_dir"], 
+                    "spec_report.md"
+                )
+                generate_markdown_report(results, config_info, report_path)
+            else:
+                report_path = os.path.join(
+                    run_result["output_dir"], 
+                    "spec_report.json"
+                )
+                generate_json_report(results, config_info, report_path)
+            
+            run_result["report_path"] = report_path
+            logger.success(f"测试报告已生成: {report_path}")
+            
+            logger.info("="*80)
+            logger.info("测试结果摘要")
+            logger.info("="*80)
+            
+            if results and isinstance(results, dict):
+                int_score = results.get('int_score', 0)
+                fp_score = results.get('fp_score', 0)
+            else:
+                int_score = 0
+                fp_score = 0
+            
+            if int_score > 0:
+                logger.info(f"整数测试(INT)分数: {int_score:.2f}")
+            else:
+                logger.warning("整数测试(INT)分数: 解析失败或无有效数据")
+            if fp_score > 0:
+                logger.info(f"浮点测试(FP)分数: {fp_score:.2f}")
+            else:
+                logger.warning("浮点测试(FP)分数: 解析失败或无有效数据")
+            logger.info("="*80)
+        
+        return run_result
+
+    def pack_qemu_verify(self, output_dir: str = None) -> Dict:
+        """
+        生成QEMU验证脚本
+        
+        当用户配置QEMU_PATH环境变量并开启验证模式时，生成用QEMU运行测试的脚本，
+        用于验证编译出的SPEC CPU 2006/2017二进制文件是否正确。
+        此时不统计运行时间，只通过QEMU运行测试，保留程序输出。
+        
+        Args:
+            output_dir (str, optional): 验证脚本输出目录，默认自动生成
+            
+        Returns:
+            Dict: 包含以下键的结果字典：
+                - success (bool): 是否成功生成
+                - output_dir (str): 输出目录路径
+                - scripts (List[str]): 生成的脚本路径列表
+                
+        Raises:
+            ConfigError: 当未配置QEMU_PATH环境变量或未开启verify_mode时抛出
+            FileOperationError: 当复制文件失败时抛出
+            
+        Note:
+            - 需要先调用setup_spec()编译二进制文件
+            - QEMU路径通过环境变量QEMU_PATH配置
+            - 生成的脚本包括单个验证脚本和批量验证脚本
+            - 验证输出保存在输出目录的logs子目录中
+            
+        Example:
+            >>> # 在set_env.sh中配置: export QEMU_PATH=/path/to/qemu
+            >>> config = {
+            ...     "pack_name": "verify_test",
+            ...     "spec_cfg_path": "/path/to/spec.cfg",
+            ...     "verify_mode": True,
+            ...     "spec_config": {...}
+            ... }
+            >>> packer = PackSPEC(config)
+            >>> packer.setup_spec()
+            >>> result = packer.pack_qemu_verify()
+        """
+        if not QEMU_PATH:
+            raise ConfigError("未配置QEMU路径，请在set_env.sh中设置QEMU_PATH环境变量")
+        
+        if not self.verify_mode:
+            raise ConfigError("未开启验证模式，请设置verify_mode=True")
+        
+        if not os.path.isdir(QEMU_PATH):
+            raise ConfigError(f"QEMU目录不存在: {QEMU_PATH}")
+        
+        logger.info("="*80)
+        logger.info("生成QEMU验证脚本")
+        logger.info("="*80)
+        logger.info(f"QEMU目录: {QEMU_PATH}")
+        logger.info(f"SPEC版本: {self.spec_name.name}")
+        logger.info(f"优化级别: {self.tune_type.name}")
+        logger.info(f"输入类型: {self.input_type.name}")
+        
+        if output_dir is None:
+            output_dir = self.utils.create_dest_dir(
+                False, self.auto_mode, PACKMode.run,
+                self.spec_name, self.tune_type, self.input_type, self.spec_mode
+            )
+            output_dir = f"{output_dir}_qemu_verify"
+            os.makedirs(output_dir, exist_ok=True)
+        
+        logs_dir = os.path.join(output_dir, "logs")
+        os.makedirs(logs_dir, exist_ok=True)
+        
+        generated_scripts = []
+        
+        src_run_bench_dir = self.spec_driver.get_bench_path(
+            ActionType.run, self.tune_type, self.input_type, self.spec_mode
+        )
+        
+        for bench_name in self.spec_driver.spec_bench_list:
+            src_run_dir = self.utils.get_bench_dir(bench_name, src_run_bench_dir)
+            if src_run_dir == "":
+                logger.warning(f"无法找到基准测试目录: {bench_name}")
+                continue
+            
+            dest_bench_dir = os.path.join(output_dir, bench_name)
+            logger.info(f"复制 {bench_name}...")
+            
+            try:
+                if os.path.exists(dest_bench_dir):
+                    if self.auto_mode:
+                        shutil.rmtree(dest_bench_dir)
+                    else:
+                        logger.warning(f"目录 {dest_bench_dir} 已存在")
+                        raise FileOperationError(f"目录 {dest_bench_dir} 已存在，请设置 auto_mode=True 或手动删除")
+                shutil.copytree(src_run_dir, dest_bench_dir, symlinks=True)
+            except FileOperationError:
+                raise
+            except Exception as e:
+                logger.error(f"复制 {bench_name} 失败: {str(e)}")
+                raise FileOperationError(f"复制 {bench_name} 失败: {str(e)}")
+            
+            script_path = generate_qemu_verify_script(
+                bench_name=bench_name,
+                dest_dir=dest_bench_dir,
+                spec_bench_map=self.spec_driver.spec_bench_map,
+                tune_type=self.tune_type,
+                label=self.spec_driver.label,
+                input_type=self.input_type,
+                data_dir=dest_bench_dir,
+                output_dir=logs_dir
+            )
+            generated_scripts.append(script_path)
+            logger.success(f"生成验证脚本: {script_path}")
+        
+        all_script_path = generate_qemu_verify_all_script(
+            bench_list=self.spec_driver.spec_bench_list,
+            dest_dir=output_dir,
+            spec_bench_map=self.spec_driver.spec_bench_map,
+            tune_type=self.tune_type,
+            label=self.spec_driver.label,
+            input_type=self.input_type,
+            output_dir=logs_dir
+        )
+        generated_scripts.append(all_script_path)
+        logger.success(f"生成批量验证脚本: {all_script_path}")
+        
+        self.utils.copy_spec_cfg_and_logs_to_target_dir(
+            self.spec_driver.spec_dir, self.spec_cfg_path,
+            output_dir, self.tune_type, self.input_type
+        )
+        
+        logger.info("="*80)
+        logger.info("QEMU验证脚本生成完成")
+        logger.info(f"输出目录: {output_dir}")
+        logger.info(f"生成脚本数量: {len(generated_scripts)}")
+        logger.info("="*80)
+        
+        return {
+            "success": True,
+            "output_dir": output_dir,
+            "scripts": generated_scripts
+        }
+
 
 if __name__ == "__main__":
     packer = PackSPEC({
