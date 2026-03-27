@@ -23,6 +23,7 @@ from src.pack_spec.pack_config import (
     BenchmarkError,
     QEMU_PATH,
     QEMU_CMD,
+    DEFAULT_MINIMAL_MODE,
 )
 from src.pack_spec.pack_utils import (
     load_pack_spec_cfg,
@@ -50,6 +51,7 @@ __all__ = [
     'BenchmarkError',
     'QEMU_PATH',
     'QEMU_CMD',
+    'DEFAULT_MINIMAL_MODE',
     'load_pack_spec_cfg',
     'save_pack_spec_cfg',
     'parse_spec_results',

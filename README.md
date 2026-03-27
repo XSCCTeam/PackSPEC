@@ -550,11 +550,13 @@ from src.pack_spec import load_pack_spec_cfg, save_pack_spec_cfg, parse_spec_res
 - 新增 `generate_qemu_verify_all_script()` 函数，生成批量验证脚本
 - 支持自动检测 QEMU 模拟器类型（aarch64, riscv64, arm, mips 等）
 - 验证模式不统计运行时间，仅验证程序正确性并保留输出
+- 新增极简模式，生成 POSIX 兼容脚本，适用于功能简单的嵌入式系统
 
 **配置参数：**
 - 新增 `QEMU_PATH` 环境变量，在 set_env.sh 中配置 QEMU 安装目录
 - 新增 `QEMU_CMD` 环境变量，在 set_env.sh 中配置 QEMU 模拟器命令（如 qemu-aarch64, qemu-riscv64 等）
 - 新增 `verify_mode` 配置项，开启验证模式
+- 新增 `minimal_mode` 配置项，开启极简模式
 
 ### v0.2.0
 

@@ -45,7 +45,7 @@ from src.pack_spec.pack_config import (
     DEFAULT_CORE_NUM, DEFAULT_CLOCK_RATE, DEFAULT_PROFILE_GEN,
     DEFAULT_AUTO_MODE, DEFAULT_HOST_MODE, DEFAULT_LLVM_PROFDATA_PATH,
     DEFAULT_RUN_MODE, DEFAULT_REPORT_FORMAT, RESULTS_OUTPUT_PATH,
-    QEMU_PATH, DEFAULT_VERIFY_MODE,
+    QEMU_PATH, DEFAULT_VERIFY_MODE, DEFAULT_MINIMAL_MODE,
     BOSC_API_KEY, BOSC_AT_USER, P_PATH, logger, GENERATED_FILES_PATH
 )
 from src.pack_spec.pack_utils import PackUtils, load_pack_spec_cfg, parse_spec_results, generate_json_report, generate_markdown_report, generate_qemu_verify_script, generate_qemu_verify_all_script
@@ -178,6 +178,7 @@ class PackSPEC:
         self.run_mode = config.get('run_mode', pack_config.get('run_mode', DEFAULT_RUN_MODE))
         self.report_format = config.get('report_format', pack_config.get('report_format', DEFAULT_REPORT_FORMAT))
         self.verify_mode = config.get('verify_mode', pack_config.get('verify_mode', DEFAULT_VERIFY_MODE))
+        self.minimal_mode = config.get('minimal_mode', pack_config.get('minimal_mode', DEFAULT_MINIMAL_MODE))
         
         if self.profile_gen: # profile 生成模式只跑一次程序
             self.iterations = 1
@@ -400,12 +401,12 @@ class PackSPEC:
         run_test_script = os.path.join(dest_dir, self.utils.get_run_script_name(self.profile_gen, input_type))
 
         script_content = self.utils.commands_to_prepare_run(
-            f"$SCRIPT_DIR/test_{input_type.name}.log", core_num, iterations)
+            f"$SCRIPT_DIR/test_{input_type.name}.log", core_num, iterations, self.minimal_mode)
 
         script_content.extend(
             self.spec_driver.utils.commands_to_run_bench(bench_name, self.profile_gen, self.spec_driver.spec_bench_map,
                                              core_num, self.spec_driver.get_ref_time(bench_name, input_type),
-                                             tune_type, label, input_type)
+                                             tune_type, label, input_type, self.minimal_mode)
         )
 
         if self.profile_gen:
@@ -415,7 +416,7 @@ class PackSPEC:
                 {"<your llvm-profdata abspath>": DEFAULT_LLVM_PROFDATA_PATH}
             )
 
-        if BOSC_API_KEY != None and BOSC_AT_USER != None:
+        if BOSC_API_KEY != None and BOSC_AT_USER != None and not self.minimal_mode:
             if self.profile_gen:
                 # 发送完成消息
                 message = f"在 $HOST_NAME 上的 {bench_name}.{label}.{tune_type.name}_{input_type.name} Profile 生成完成喵！"
@@ -427,14 +428,14 @@ class PackSPEC:
                 script_content.append(f"HOST_NAME=$(hostname)")
                 script_content.extend(self.utils.commands_to_send_message(message))
                 # 计算分数
-                script_content.extend(self.utils.commands_to_cal_score(dest_dir, self.test_clock_rate, "score.txt"))
+                script_content.extend(self.utils.commands_to_cal_score(dest_dir, self.test_clock_rate, "score.txt", self.minimal_mode))
                 # 发送分数
                 title_message = f"{bench_name}.{label}.{tune_type.name}_{input_type.name} 测试结果"
                 text_message = f"在 $HOST_NAME 上的 {bench_name}.{label}.{tune_type.name}_{input_type.name} 测试结果喵："
                 script_content.extend(self.utils.commands_to_send_md_message(dest_dir, title_message, text_message, "score.txt"))
         else:
             # 计算分数
-            script_content.extend(self.utils.commands_to_cal_score(dest_dir, self.test_clock_rate))
+            script_content.extend(self.utils.commands_to_cal_score(dest_dir, self.test_clock_rate, minimal_mode=self.minimal_mode))
 
         # 写入脚本文件
         with open(run_test_script, 'w') as f:
@@ -478,16 +479,26 @@ class PackSPEC:
         run_all_script = os.path.join(parent_dir, self.utils.get_run_script_name(self.profile_gen, input_type, "all"))
         
         script_content = self.utils.commands_to_prepare_run(
-            "$SCRIPT_DIR/run_all.log", core_num, iterations)
+            "$SCRIPT_DIR/run_all.log", core_num, iterations, self.minimal_mode)
 
-        script_content.extend([
-            "",
-            "# 运行所有基准测试并记录时间",
-            "echo \"Starting benchmarks run at $(date)\" | tee -a \"$LOG_FILE\"",
-            "",
-            "# 依次运行每个基准测试",
-            ""
-        ])
+        if self.minimal_mode:
+            script_content.extend([
+                "",
+                "# 运行所有基准测试并记录时间",
+                "printf \"Starting benchmarks run at $(date)\\n\" | tee -a \"$LOG_FILE\"",
+                "",
+                "# 依次运行每个基准测试",
+                ""
+            ])
+        else:
+            script_content.extend([
+                "",
+                "# 运行所有基准测试并记录时间",
+                "echo \"Starting benchmarks run at $(date)\" | tee -a \"$LOG_FILE\"",
+                "",
+                "# 依次运行每个基准测试",
+                ""
+            ])
 
         for bench_dir in buildrun_bench_dir_list:
             bench_name = os.path.basename(bench_dir)
@@ -496,24 +507,31 @@ class PackSPEC:
             script_content.extend(
                 self.spec_driver.utils.commands_to_run_bench(bench_name, self.profile_gen, self.spec_driver.spec_bench_map, 
                                                  core_num, self.spec_driver.get_ref_time(bench_name, input_type),
-                                                 tune_type, label, input_type)
+                                                 tune_type, label, input_type, self.minimal_mode)
             )
             script_content.extend([
                 f"cd $SCRIPT_DIR",
                 ""
             ])
         
-        script_content.extend([
-            "echo -e '\\nAll benchmarks completed' | tee -a \"$LOG_FILE\"",
-            "echo \"Finished at $(date)\" | tee -a \"$LOG_FILE\"",
-            ""
-        ])
+        if self.minimal_mode:
+            script_content.extend([
+                "printf '\\nAll benchmarks completed\\n' | tee -a \"$LOG_FILE\"",
+                "printf \"Finished at $(date)\\n\" | tee -a \"$LOG_FILE\"",
+                ""
+            ])
+        else:
+            script_content.extend([
+                "echo -e '\\nAll benchmarks completed' | tee -a \"$LOG_FILE\"",
+                "echo \"Finished at $(date)\" | tee -a \"$LOG_FILE\"",
+                ""
+            ])
 
         if self.profile_gen:
             # 收集profile
             script_content.extend(self.utils.commands_to_collect_profiles(parent_dir))
 
-        if BOSC_API_KEY != None and BOSC_AT_USER != None:
+        if BOSC_API_KEY != None and BOSC_AT_USER != None and not self.minimal_mode:
             if self.profile_gen:
                 # 发送完成消息
                 message = f"在 $HOST_NAME 上的 {label}.{tune_type.name}_{input_type.name} Profile 生成完成喵！"
@@ -525,14 +543,14 @@ class PackSPEC:
                 script_content.append(f"HOST_NAME=$(hostname)")
                 script_content.extend(self.utils.commands_to_send_message(message))
                 # 计算分数
-                script_content.extend(self.utils.commands_to_cal_score(parent_dir, self.test_clock_rate, "score.txt"))
+                script_content.extend(self.utils.commands_to_cal_score(parent_dir, self.test_clock_rate, "score.txt", self.minimal_mode))
                 # 发送分数
                 title_message = f"{label}.{tune_type.name}_{input_type.name} 测试结果"
                 text_message = f"在 $HOST_NAME 上的 {label}.{tune_type.name}_{input_type.name} 测试结果喵："
                 script_content.extend(self.utils.commands_to_send_md_message(parent_dir, title_message, text_message, "score.txt"))
         else:
             # 计算分数
-            script_content.extend(self.utils.commands_to_cal_score(parent_dir, self.test_clock_rate))
+            script_content.extend(self.utils.commands_to_cal_score(parent_dir, self.test_clock_rate, minimal_mode=self.minimal_mode))
 
         # 写入脚本文件
         with open(run_all_script, 'w') as f:
@@ -859,7 +877,8 @@ class PackSPEC:
                 label=self.spec_driver.label,
                 input_type=self.input_type,
                 data_dir=dest_bench_dir,
-                output_dir=logs_dir
+                output_dir=logs_dir,
+                minimal_mode=self.minimal_mode
             )
             generated_scripts.append(script_path)
             logger.success(f"生成验证脚本: {script_path}")
@@ -871,7 +890,8 @@ class PackSPEC:
             tune_type=self.tune_type,
             label=self.spec_driver.label,
             input_type=self.input_type,
-            output_dir=logs_dir
+            output_dir=logs_dir,
+            minimal_mode=self.minimal_mode
         )
         generated_scripts.append(all_script_path)
         logger.success(f"生成批量验证脚本: {all_script_path}")

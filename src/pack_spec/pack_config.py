@@ -396,3 +396,6 @@ QEMU_CMD = os.getenv('QEMU_CMD', 'qemu-aarch64')
 
 DEFAULT_VERIFY_MODE = False
 """默认验证模式开关，开启后生成QEMU验证脚本用于验证编译出的binary是否正确"""
+
+DEFAULT_MINIMAL_MODE = False
+"""默认极简模式开关，开启后生成的脚本使用POSIX兼容语法，降低对运行环境的要求"""
