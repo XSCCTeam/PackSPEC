@@ -599,19 +599,24 @@ class PackUtils:
                 # self.logger.warning(f"If you didn't use this tool for setup, {file_info} will not be generated. Please ignore this warning.")
             return False
 
-    def copy_script_file_to_target_dir(self, script_name: str, script_target_dir: str) -> bool:
+    def copy_script_file_to_target_dir(self, script_name: str, script_target_path: str) -> bool:
         """
         复制脚本文件到目标目录
         
         Args:
             script_name (str): 脚本名称
-            script_target_dir (str): 目标目录路径
+            script_target_path (str): 目标目录路径
             
         Returns:
             bool: 复制成功返回True，失败返回False
+            
+        Raises:
+            FileOperationError: 当脚本文件不存在时抛出
         """
-        src_dir = os.path.join(SCRIPTS_PATH, script_name)
-        return self.copy_file_to_target_dir(src_dir, script_target_dir, f"script {script_name}")
+        src_path = os.path.join(SCRIPTS_PATH, script_name)
+        if not os.path.exists(src_path):
+            raise FileOperationError(f"脚本文件不存在: {src_path}")
+        return self.copy_file_to_target_dir(src_path, script_target_path, f"script {script_name}")
 
     def copy_pack_log_file_to_target_dir(self, log_target_dir: str) -> bool:
         """
@@ -909,10 +914,10 @@ class PackUtils:
             ])
             if core_num != DEFAULT_CORE_NUM:
                 commands.append(
-                    f"    (time -p taskset -c $CORE_NUM sh run_{input_type.name}.sh) 2>&1 | tee -a \"$LOG_FILE\"")
+                    f"    (time -p taskset -c $CORE_NUM ./run_{input_type.name}.sh) 2>&1 | tee -a \"$LOG_FILE\"")
             else:
                 commands.append(
-                    f"    (time -p sh run_{input_type.name}.sh) 2>&1 | tee -a \"$LOG_FILE\"")
+                    f"    (time -p ./run_{input_type.name}.sh) 2>&1 | tee -a \"$LOG_FILE\"")
             commands.extend([
                 "    i=$((i + 1))",
                 "done",
