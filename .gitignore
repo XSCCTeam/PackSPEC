@@ -8,7 +8,7 @@
 /tests/spec2006/generated_files/
 /tests/spec2006/generated_files/__pycache__/
 /spec_env/spec2006/
-set_env.sh
+.env
 main.py
 *.pyc
-.trae
+/.trae/

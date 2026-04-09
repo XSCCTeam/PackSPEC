@@ -33,10 +33,16 @@ from datetime import datetime
 from loguru import logger
 import sys
 from enum import Enum
+from dotenv import load_dotenv
 
 
 P_PATH = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 """项目根目录的绝对路径"""
+
+# 自动加载 .env 文件
+_env_file = os.path.join(P_PATH, ".env")
+if os.path.exists(_env_file):
+    load_dotenv(_env_file)
 
 
 #########################################
@@ -252,9 +258,6 @@ DEFAULT_PROFILE_GEN = False
 
 DEFAULT_AUTO_MODE = False
 """默认是否自动模式，自动模式下无需用户确认"""
-
-DEFAULT_HOST_MODE = False
-"""默认是否HOST模式"""
 
 RANDOM_SUFFIX_LENGTH = 4
 """随机后缀长度，用于目录命名避免冲突"""

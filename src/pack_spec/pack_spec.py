@@ -13,9 +13,14 @@ PackSPEC - SPEC CPU基准测试打包工具主模块
     from pack_spec import PackSPEC, SPECName, TuneType, InputType, SPECMode
     
     config = {
-        "pack_name": "my_test",
-        "spec_cfg_path": "/path/to/config.cfg",
+        "task": {
+            "pack_name": "my_test",
+            "setup_spec": False,
+            "pack_binaries": True,
+            "pack_benches": True,
+        },
         "spec_config": {
+            "spec_cfg_path": "/path/to/config.cfg",
             "spec_name": SPECName.spec2017,
             "tune_type": TuneType.base,
             "input_type": InputType.ref,
@@ -43,7 +48,7 @@ from src.pack_spec.pack_config import (
     PackSPECError, ConfigError, FileOperationError, CommandExecutionError, BenchmarkError,
     CURRENT_DATE, CURRENT_TIME, DEFAULT_ITERATIONS, DEFAULT_REBUILD,
     DEFAULT_CORE_NUM, DEFAULT_CLOCK_RATE, DEFAULT_PROFILE_GEN,
-    DEFAULT_AUTO_MODE, DEFAULT_HOST_MODE, DEFAULT_LLVM_PROFDATA_PATH,
+    DEFAULT_AUTO_MODE, DEFAULT_LLVM_PROFDATA_PATH,
     DEFAULT_RUN_MODE, DEFAULT_REPORT_FORMAT, RESULTS_OUTPUT_PATH,
     QEMU_PATH, DEFAULT_VERIFY_MODE, DEFAULT_MINIMAL_MODE,
     BOSC_API_KEY, BOSC_AT_USER, P_PATH, logger, GENERATED_FILES_PATH
@@ -61,8 +66,11 @@ class PackSPEC:
     支持SPEC2006和SPEC2017两个版本的基准测试套件。
     
     Attributes:
-        spec_cfg_path (str): SPEC配置文件的绝对路径
         pack_name (str): 打包任务名称，用于标识和生成目录
+        setup_spec_enabled (bool): 是否执行SPEC编译
+        pack_binaries_enabled (bool): 是否打包二进制文件
+        pack_benches_enabled (bool): 是否打包完整测试环境
+        spec_cfg_path (str): SPEC配置文件的绝对路径
         spec_name (SPECName): SPEC版本枚举值
         tune_type (TuneType): 优化级别枚举值
         input_type (InputType): 输入数据集类型枚举值
@@ -74,15 +82,22 @@ class PackSPEC:
         test_clock_rate (float): 测试CPU主频(GHz)
         profile_gen (bool): 是否生成Profile模式
         auto_mode (bool): 是否自动模式
-        host_mode (bool): 是否HOST模式
+        verify_mode (bool): 是否开启QEMU验证模式
+        minimal_mode (bool): 是否开启极简模式
+        msg_enabled (bool): 是否开启消息发送
         utils (PackUtils): 工具类实例
         spec_driver (SPECDriver): SPEC驱动实例
         
     Example:
         >>> config = {
-        ...     "pack_name": "test_pack",
-        ...     "spec_cfg_path": "/path/to/spec.cfg",
+        ...     "task": {
+        ...         "pack_name": "test_pack",
+        ...         "setup_spec": False,
+        ...         "pack_binaries": True,
+        ...         "pack_benches": True,
+        ...     },
         ...     "spec_config": {
+        ...         "spec_cfg_path": "/path/to/spec.cfg",
         ...         "spec_name": SPECName.spec2017,
         ...         "tune_type": TuneType.base,
         ...         "input_type": InputType.ref,
@@ -139,48 +154,52 @@ class PackSPEC:
         初始化PackSPEC实例的内部配置
         
         从配置字典中提取参数并初始化各个组件，包括：
-        - 解析SPEC配置路径和打包名称
+        - 解析任务配置和SPEC配置路径
         - 设置SPEC版本、优化级别、输入类型等参数
         - 创建对应的SPEC驱动实例(SPEC2006/SPEC2017)
         - 初始化工具类实例
         
         Args:
             config (dict): 配置字典，包含以下键：
-                - spec_cfg_path: SPEC配置文件路径
-                - pack_name: 打包名称
+                - task: 任务配置子字典
                 - spec_config: SPEC相关配置子字典
                 - pack_config: 打包相关配置子字典(可选)
-                - test_core_num: 测试核心编号(可选)
-                - test_clock_rate: 测试CPU主频(可选)
-                - profile_gen: 是否生成Profile(可选)
-                - auto_mode: 是否自动模式(可选)
-                - host_mode: 是否HOST模式(可选)
+                - msg_config: 消息发送配置子字典(可选)
         """
-        # 从配置字典中提取参数，设置默认值
-        # SPEC cfg 文件绝对路径
-        self.spec_cfg_path = config["spec_cfg_path"]
+        # 任务配置
+        task_config = config.get('task', {})
+        self.pack_name = task_config.get('pack_name', 'packspec')
+        self.setup_spec_enabled = task_config.get('setup_spec', False)
+        self.pack_binaries_enabled = task_config.get('pack_binaries', True)
+        self.pack_benches_enabled = task_config.get('pack_benches', True)
+        self.run_mode = task_config.get('run_mode', DEFAULT_RUN_MODE)
+        
         # SPEC基准测试相关配置
-        self.pack_name = config["pack_name"]
-        self.spec_name = config["spec_config"]['spec_name']
-        self.tune_type = config["spec_config"]['tune_type']
-        self.input_type = config["spec_config"]['input_type']
-        self.spec_mode = config["spec_config"]['spec_mode']
-        self.spec_benches = config["spec_config"]['spec_benches']
-        self.iterations = config["spec_config"].get('iterations', DEFAULT_ITERATIONS)
-        self.rebuild = config["pack_config"].get('rebuild', DEFAULT_REBUILD)
+        spec_config = config.get('spec_config', {})
+        self.spec_cfg_path = spec_config.get('spec_cfg_path', '')
+        self.spec_name = spec_config.get('spec_name', SPECName.spec2006)
+        self.tune_type = spec_config.get('tune_type', TuneType.base)
+        self.input_type = spec_config.get('input_type', InputType.ref)
+        self.spec_mode = spec_config.get('spec_mode', SPECMode.speed)
+        self.spec_benches = spec_config.get('spec_benches', 'all')
+        self.iterations = spec_config.get('iterations', DEFAULT_ITERATIONS)
+        self.rebuild = spec_config.get('rebuild', DEFAULT_REBUILD)
+        
         # PackSPEC打包相关配置
         pack_config = config.get('pack_config', {})
-        self.test_core_num = config.get('test_core_num', pack_config.get('test_core_num', DEFAULT_CORE_NUM))
-        self.test_clock_rate = config.get('test_clock_rate', pack_config.get('test_clock_rate', DEFAULT_CLOCK_RATE))
-        self.profile_gen = config.get('profile_gen', pack_config.get('profile_gen', DEFAULT_PROFILE_GEN))
-        self.auto_mode = config.get('auto_mode', pack_config.get('auto_mode', DEFAULT_AUTO_MODE))
-        self.host_mode = config.get('host_mode', pack_config.get('host_mode', DEFAULT_HOST_MODE))
-        self.run_mode = config.get('run_mode', pack_config.get('run_mode', DEFAULT_RUN_MODE))
-        self.report_format = config.get('report_format', pack_config.get('report_format', DEFAULT_REPORT_FORMAT))
-        self.verify_mode = config.get('verify_mode', pack_config.get('verify_mode', DEFAULT_VERIFY_MODE))
-        self.minimal_mode = config.get('minimal_mode', pack_config.get('minimal_mode', DEFAULT_MINIMAL_MODE))
+        self.test_core_num = pack_config.get('test_core_num', DEFAULT_CORE_NUM)
+        self.test_clock_rate = pack_config.get('test_clock_rate', DEFAULT_CLOCK_RATE)
+        self.profile_gen = pack_config.get('profile_gen', DEFAULT_PROFILE_GEN)
+        self.auto_mode = pack_config.get('auto_mode', DEFAULT_AUTO_MODE)
+        self.report_format = pack_config.get('report_format', DEFAULT_REPORT_FORMAT)
+        self.verify_mode = pack_config.get('verify_mode', DEFAULT_VERIFY_MODE)
+        self.minimal_mode = pack_config.get('minimal_mode', DEFAULT_MINIMAL_MODE)
         
-        if self.profile_gen: # profile 生成模式只跑一次程序
+        # 消息发送配置
+        msg_config = config.get('msg_config', {})
+        self.msg_enabled = msg_config.get('enable', False)
+        
+        if self.profile_gen:
             self.iterations = 1
         
         self.utils = PackUtils(config, logger)
@@ -240,7 +259,7 @@ class PackSPEC:
             FileOperationError: 当没有二进制文件可复制时抛出
             
         Note:
-            目标目录命名格式: {GENERATED_FILES_PATH}/{pack_name}/bin/{spec_name}_bin_{pack_name}.{tune_type}_{input_type}_{spec_mode}
+            目标目录命名格式: {GENERATED_FILES_PATH}/{date}_{pack_name}/bin/{spec_name}_bin_{pack_name}.{tune_type}_{input_type}_{spec_mode}
         """
         src_bench_map = self.spec_driver.get_binary_path_map(tune_type, input_type, spec_mode)
 
@@ -801,19 +820,18 @@ class PackSPEC:
             - 验证输出保存在输出目录的logs子目录中
             
         Example:
-            >>> # 在set_env.sh中配置: export QEMU_PATH=/path/to/qemu
+            >>> # 在.env中配置: QEMU_PATH=/path/to/qemu
             >>> config = {
-            ...     "pack_name": "verify_test",
-            ...     "spec_cfg_path": "/path/to/spec.cfg",
-            ...     "verify_mode": True,
-            ...     "spec_config": {...}
+            ...     "task": {"pack_name": "verify_test", ...},
+            ...     "spec_config": {"spec_cfg_path": "/path/to/spec.cfg", ...},
+            ...     "pack_config": {"verify_mode": True, ...}
             ... }
             >>> packer = PackSPEC(config)
             >>> packer.setup_spec()
             >>> result = packer.pack_qemu_verify()
         """
         if not QEMU_PATH:
-            raise ConfigError("未配置QEMU路径，请在set_env.sh中设置QEMU_PATH环境变量")
+            raise ConfigError("未配置QEMU路径，请在.env中设置QEMU_PATH环境变量")
         
         if not self.verify_mode:
             raise ConfigError("未开启验证模式，请设置verify_mode=True")
@@ -830,12 +848,27 @@ class PackSPEC:
         logger.info(f"输入类型: {self.input_type.name}")
         
         if output_dir is None:
-            output_dir = self.utils.create_dest_dir(
+            # 直接获取目录路径，添加 _qemu_verify 后缀
+            output_dir = self.utils.get_dest_dir(
                 False, self.auto_mode, PACKMode.run,
                 self.spec_name, self.tune_type, self.input_type, self.spec_mode
             )
             output_dir = f"{output_dir}_qemu_verify"
-            os.makedirs(output_dir, exist_ok=True)
+            
+            # 检查 _qemu_verify 目录是否存在
+            if os.path.exists(output_dir):
+                if self.auto_mode:
+                    logger.info(f"目录 {output_dir} 已存在，自动模式下将覆盖")
+                    shutil.rmtree(output_dir)
+                else:
+                    logger.warning(f"目录 {output_dir} 已存在")
+                    choice = input(f"目录 {output_dir} 已存在，是否覆盖？(y/n): ")
+                    if choice.lower() == 'y':
+                        shutil.rmtree(output_dir)
+                    else:
+                        raise FileOperationError(f"用户取消操作，目录 {output_dir} 未被覆盖")
+            
+            os.makedirs(output_dir, exist_ok=False)
         
         logs_dir = os.path.join(output_dir, "logs")
         os.makedirs(logs_dir, exist_ok=True)
@@ -857,14 +890,9 @@ class PackSPEC:
             
             try:
                 if os.path.exists(dest_bench_dir):
-                    if self.auto_mode:
-                        shutil.rmtree(dest_bench_dir)
-                    else:
-                        logger.warning(f"目录 {dest_bench_dir} 已存在")
-                        raise FileOperationError(f"目录 {dest_bench_dir} 已存在，请设置 auto_mode=True 或手动删除")
+                    # 用户已确认覆盖整个 _qemu_verify 目录，直接删除子目录
+                    shutil.rmtree(dest_bench_dir)
                 shutil.copytree(src_run_dir, dest_bench_dir, symlinks=True)
-            except FileOperationError:
-                raise
             except Exception as e:
                 logger.error(f"复制 {bench_name} 失败: {str(e)}")
                 raise FileOperationError(f"复制 {bench_name} 失败: {str(e)}")
@@ -912,6 +940,79 @@ class PackSPEC:
             "output_dir": output_dir,
             "scripts": generated_scripts
         }
+
+    def run(self) -> Dict:
+        """
+        统一入口方法，根据配置自动执行相应操作
+        
+        根据 task 配置和 run_mode 配置自动调用相应方法：
+        - 当 run_mode == RunMode.direct 时，调用 run_spec() 直接运行 SPEC 测试
+        - 当 run_mode == RunMode.pack（默认）时，根据 task 配置执行打包操作
+        
+        Returns:
+            Dict: 包含执行结果的字典，包括各步骤的执行状态
+            
+        Example:
+            >>> config = {
+            ...     "task": {
+            ...         "pack_name": "my_test",
+            ...         "setup_spec": False,
+            ...         "pack_binaries": True,
+            ...         "pack_benches": True,
+            ...     },
+            ...     "spec_config": {...},
+            ...     "pack_config": {"verify_mode": True, ...},
+            ... }
+            >>> packer = PackSPEC(config)
+            >>> result = packer.run()
+        """
+        result = {
+            "success": True,
+            "steps": []
+        }
+        
+        # 根据 run_mode 决定执行模式
+        if self.run_mode == RunMode.direct:
+            # 直接运行模式：调用 run_spec() 直接运行 SPEC 测试
+            logger.info("运行模式: 直接运行 (RunMode.direct)")
+            logger.info("执行 run_spec()...")
+            run_result = self.run_spec()
+            result["steps"].append("run_spec")
+            result["run_spec_result"] = run_result
+        else:
+            # 打包模式（默认）：根据 task 配置执行打包操作
+            logger.info("运行模式: 打包模式 (RunMode.pack)")
+            
+            # 根据 setup_spec 配置执行编译
+            if self.setup_spec_enabled:
+                logger.info("执行 setup_spec()...")
+                self.setup_spec()
+                result["steps"].append("setup_spec")
+            
+            # 根据 pack_binaries 配置打包二进制文件
+            if self.pack_binaries_enabled:
+                logger.info("执行 pack_binaries()...")
+                self.pack_binaries()
+                result["steps"].append("pack_binaries")
+            
+            # 根据 pack_benches 配置打包完整测试环境
+            if self.pack_benches_enabled:
+                logger.info("执行 pack_benches_cfg()...")
+                self.pack_benches_cfg()
+                result["steps"].append("pack_benches_cfg")
+            
+            # 根据 verify_mode 配置生成 QEMU 验证脚本
+            if self.verify_mode:
+                logger.info("执行 pack_qemu_verify()...")
+                self.pack_qemu_verify()
+                result["steps"].append("pack_qemu_verify")
+        
+        logger.info("="*80)
+        logger.info("所有任务执行完成")
+        logger.info(f"执行步骤: {', '.join(result['steps'])}")
+        logger.info("="*80)
+        
+        return result
 
 
 if __name__ == "__main__":

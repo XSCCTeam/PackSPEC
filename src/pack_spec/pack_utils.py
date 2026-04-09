@@ -30,6 +30,7 @@ from src.pack_spec.pack_config import (
     SPECName, TuneType, InputType, SPECMode, PACKMode,
     PackSPECError, FileOperationError, CommandExecutionError,
     CURRENT_DATE, DEFAULT_CORE_NUM, DEFAULT_LLVM_PROFDATA_PATH,
+    DEFAULT_AUTO_MODE,
     SCRIPTS_PATH, GENERATED_FILES_PATH, logger, QEMU_CMD
 )
 import subprocess
@@ -270,10 +271,14 @@ class PackUtils:
         初始化PackUtils实例
         
         Args:
-            config (dict): 配置字典，需要包含pack_name和date字段
+            config (dict): 配置字典，需要包含task配置块或pack_name字段
             logger (Any): 日志记录器实例
         """
-        self.pack_name = config["pack_name"]
+        # 支持新的配置结构（task配置块）和旧的配置结构（顶层pack_name）
+        task_config = config.get('task', {})
+        pack_config = config.get('pack_config', {})
+        self.pack_name = task_config.get('pack_name', config.get('pack_name', 'packspec'))
+        self.auto_mode = pack_config.get('auto_mode', DEFAULT_AUTO_MODE)
         self.logger = logger
         self.init_date = config.get('date', CURRENT_DATE)
 
@@ -326,7 +331,7 @@ class PackUtils:
             str: 目标目录路径
             
         Note:
-            输出目录格式: {GENERATED_FILES_PATH}/{pack_name}/{bin|run}/{spec_name}_{pack_mode}_{pack_name}.{tune_type}_{input_type}_{spec_mode}
+            输出目录格式: {GENERATED_FILES_PATH}/{date}_{pack_name}/{bin|run}/{spec_name}_{pack_mode}_{pack_name}.{tune_type}_{input_type}_{spec_mode}
         """
         test_name = f"{self.pack_name}.{tune_type.name}_{input_type.name}_{spec_mode.name}"
         dest_bench_name = f"{spec_name.name}_{pack_mode.name}_{test_name}"
@@ -339,7 +344,7 @@ class PackUtils:
         else:
             subdir = "run"
 
-        dest_bench_dir = os.path.join(GENERATED_FILES_PATH, self.pack_name, subdir, dest_bench_name)
+        dest_bench_dir = os.path.join(self.get_pack_generated_dir_path(), subdir, dest_bench_name)
         return dest_bench_dir
 
     def get_spec_log_file_path(self, spec_dir: str, spec_log_file: str) -> str:
@@ -393,29 +398,39 @@ class PackUtils:
     #
     def get_pack_generated_dir_path(self) -> str:
         """
-        获取打包生成的配置文件路径
+        获取打包生成的目录路径
         
-        Args:
-            pack_name (str): 打包名称
-            log_file (str): 日志文件名
-            
+        目录名称格式:
+        - auto_mode=True: {pack_name}（不包含日期，便于自动化脚本预测路径）
+        - auto_mode=False: {date}_{pack_name}（包含日期，避免不同日期的生成互相覆盖）
+        
+        例如:
+        - auto_mode=True: x86_llvm19_novec_wll
+        - auto_mode=False: 260408_x86_llvm19_novec_wll
+        
         Returns:
-            str: 配置文件的完整路径
+            str: 目录的完整路径
         """
-        return os.path.join(GENERATED_FILES_PATH, self.pack_name)
+        if self.auto_mode:
+            return os.path.join(GENERATED_FILES_PATH, self.pack_name)
+        else:
+            return os.path.join(GENERATED_FILES_PATH, f"{self.init_date}_{self.pack_name}")
 
     def get_pack_generated_file_path(self) -> str:
         """
         获取打包生成的配置文件路径
         
-        Args:
-            pack_name (str): 打包名称
-            log_file (str): 日志文件名
-            
+        文件名称格式:
+        - auto_mode=True: {pack_name}.json（不包含日期，便于自动化脚本预测路径）
+        - auto_mode=False: {date}_{pack_name}.json（包含日期）
+        
         Returns:
             str: 配置文件的完整路径
         """
-        return os.path.join(self.get_pack_generated_dir_path(), f"{self.init_date}_{self.pack_name}.json")
+        if self.auto_mode:
+            return os.path.join(self.get_pack_generated_dir_path(), f"{self.pack_name}.json")
+        else:
+            return os.path.join(self.get_pack_generated_dir_path(), f"{self.init_date}_{self.pack_name}.json")
     
     def create_generated_dir(self, auto_mode: bool = False):
         """
@@ -1097,11 +1112,11 @@ def generate_json_report(results: Dict, config: Dict, output_path: str) -> str:
             "time": CURRENT_TIME
         },
         "config": {
-            "spec_name": str(config.get("spec_name", "")),
-            "tune_type": str(config.get("tune_type", "")),
-            "input_type": str(config.get("input_type", "")),
-            "spec_mode": str(config.get("spec_mode", "")),
-            "iterations": config.get("iterations", 0),
+            "spec_name": str(config.get("spec_config", {}).get("spec_name", "")),
+            "tune_type": str(config.get("spec_config", {}).get("tune_type", "")),
+            "input_type": str(config.get("spec_config", {}).get("input_type", "")),
+            "spec_mode": str(config.get("spec_config", {}).get("spec_mode", "")),
+            "iterations": config.get("spec_config", {}).get("iterations", 0),
         },
         "results": {
             "benchmarks": results.get("benchmarks", {}),
@@ -1140,11 +1155,11 @@ def generate_markdown_report(results: Dict, config: Dict, output_path: str) -> s
         "",
         "## 测试配置",
         "",
-        f"- **SPEC版本**: {config.get('spec_name', '')}",
-        f"- **优化级别**: {config.get('tune_type', '')}",
-        f"- **输入类型**: {config.get('input_type', '')}",
-        f"- **运行模式**: {config.get('spec_mode', '')}",
-        f"- **迭代次数**: {config.get('iterations', 0)}",
+        f"- **SPEC版本**: {config.get('spec_config', {}).get('spec_name', '')}",
+        f"- **优化级别**: {config.get('spec_config', {}).get('tune_type', '')}",
+        f"- **输入类型**: {config.get('spec_config', {}).get('input_type', '')}",
+        f"- **运行模式**: {config.get('spec_config', {}).get('spec_mode', '')}",
+        f"- **迭代次数**: {config.get('spec_config', {}).get('iterations', 0)}",
         "",
         "## 测试结果",
         "",
@@ -1209,7 +1224,7 @@ def build_qemu_command(input_type: InputType,
     from src.pack_spec.pack_config import ConfigError
     
     if not QEMU_CMD:
-        raise ConfigError("未配置QEMU_CMD环境变量，请在set_env.sh中设置")
+        raise ConfigError("未配置QEMU_CMD环境变量，请在.env中设置")
     
     try:
         qemu_cmd_parts = shlex.split(QEMU_CMD)

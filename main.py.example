@@ -1,5 +1,5 @@
 from src.pack_spec.pack_spec import PackSPEC
-from src.pack_spec.pack_config import SPECName, TuneType, InputType, SPECMode
+from src.pack_spec.pack_config import SPECName, TuneType, InputType, SPECMode, RunMode
 
 if __name__ == "__main__":
     """
@@ -9,12 +9,34 @@ if __name__ == "__main__":
     """
     
     config = {
-        # 打包名称
-        "pack_name": "<name this packspec>",
-        # SPEC cfg 文件绝对路径
-        "spec_cfg_path": "<your spec config path>",
+        # 任务配置
+        "task": {
+            # 打包任务名称
+            "pack_name": "riscv_llvm22_base_ldstdensity",
+
+            # 是否setup SPEC CPU 2006/2017
+            # 也就是是否编译SPEC基准测试，默认为 False
+            "setup_spec": False,
+
+            # 是否打包二进制文件，默认为 True
+            "pack_binaries": True,
+
+            # 是否打包完整测试环境，默认为 True
+            # 包含输入数据集、运行脚本、验证脚本等
+            "pack_benches": True,
+
+            # 运行模式，默认为 RunMode.pack（打包模式）
+            # 可选值：
+            #   RunMode.pack: 打包模式，根据 task 配置执行打包操作
+            #   RunMode.direct: 直接运行模式，直接运行 SPEC 测试，跳过打包操作
+            # 当设置为 RunMode.direct 时，会调用 run_spec() 方法直接运行 SPEC 测试
+            "run_mode": RunMode.pack,
+        },
         # SPEC基准测试相关配置
         "spec_config": {
+            # SPEC cfg 文件绝对路径
+            "spec_cfg_path": "example.cfg",
+
             # SPEC基准测试版本选择
             # 可选值：
             #   SPECName.spec2006: SPEC2006基准套件
@@ -56,7 +78,7 @@ if __name__ == "__main__":
 
             # 运行测试的迭代次数
             # 主要用于生成运行脚本，不影响二进制打包
-            "iterations": 3,
+            "iterations": 1,
 
             # 是否重新构建基准测试，默认为 False
             # 如果为 True, 程序将在打包前重新构建基准测试
@@ -81,16 +103,18 @@ if __name__ == "__main__":
             # 且生成的打包目录会以极简目录形式生成，且不包含日期
             "auto_mode": False,
 
-            # 是否以HOST模式运行，默认为 False
-            # 仅在打包SPEC2017基准测试625.x264_s的时生效
-            # HOST模式下，打包SPEC2017的625.x264_s的例子将不会单独生成input
-            "host_mode": False,
+            # 测试报告格式，默认为 json
+            # 可选值：
+            #   "json": JSON 格式报告
+            #   "markdown": Markdown 格式报告
+            # 仅在 run_mode 为 RunMode.direct 时生效
+            "report_format": "json",
 
             # 是否开启QEMU验证模式，默认为 False
-            # 开启后可调用 pack_qemu_verify() 生成QEMU验证脚本
+            # 开启后生成QEMU验证脚本
             # 用于验证编译出的二进制文件是否正确
-            # 需要在 set_env.sh 中配置 QEMU_PATH 环境变量
-            "verify_mode": False,
+            # 需要在 .env 中配置 QEMU_PATH 环境变量
+            "verify_mode": True,
 
             # 是否开启极简模式，默认为 False
             # 开启后生成的脚本使用 POSIX 兼容语法，降低对运行环境的要求
@@ -101,22 +125,27 @@ if __name__ == "__main__":
             # - 使用 POSIX 兼容的循环语法
             "minimal_mode": False,
         },
+        # 消息发送相关配置
+        "msg_config": {
+            # 是否开启消息发送，默认为 False
+            # 开启后会在测试完成后发送消息通知用户
+            # 需要在 .env 中配置 BOSC_AT_USER、BOSC_AT_TOKEN 环境变量
+            "enable": True,
+        },
     }
 
     # 创建SPEC2006整数基准测试打包实例
     packer = PackSPEC(config)
 
-    # 使用spec进行编译并设置好运行目录
-    packer.setup_spec()
+    # 根据配置自动执行相应操作
+    # run() 方法会根据配置自动调用相应的内部方法：
+    # - 当 run_mode == RunMode.pack（默认）时：
+    #   - 根据 task.setup_spec 配置决定是否调用 setup_spec()
+    #   - 根据 task.pack_binaries 配置决定是否调用 pack_binaries()
+    #   - 根据 task.pack_benches 配置决定是否调用 pack_benches_cfg()
+    #   - 根据 pack_config.verify_mode 配置决定是否调用 pack_qemu_verify()
+    # - 当 run_mode == RunMode.direct 时：
+    #   - 调用 run_spec() 直接运行 SPEC 测试
+    #   - 跳过所有打包相关操作
+    packer.run()
 
-    # 打包二进制文件
-    packer.pack_binaries()
-
-    # 打包完整测试环境
-    packer.pack_benches_cfg()
-
-    # 打包完整测试环境（附带build目录）
-    # packer.pack_benches_cfg(spec_config, with_build=True)
-
-    # QEMU验证模式（需要配置QEMU_PATH环境变量并设置verify_mode=True）
-    # packer.pack_qemu_verify()
