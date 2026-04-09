@@ -184,7 +184,8 @@ config = {
     },
     # 消息发送相关配置
     "msg_config": {
-        "enable": False,
+        "enable_dingtalk_message": False,
+        "log_language": "zh",
     },
 }
 
@@ -246,7 +247,37 @@ packer.run()
 
 | 参数 | 类型 | 说明 | 默认值 |
 |------|------|------|--------|
-| `enable` | bool | 是否开启消息发送 | False |
+| `enable_dingtalk_message` | bool | 是否开启钉钉消息发送 | False |
+| `log_language` | str | 日志输出语言（zh/en） | zh |
+
+### 日志语言设置
+
+PackSPEC 支持中英文日志输出，通过 `msg_config.log_language` 参数配置。
+
+**可选值：**
+
+| 值 | 说明 |
+|----|------|
+| `"zh"` 或 `"chinese"` 或 `"cn"` | 中文输出 |
+| `"en"` 或 `"english"` | 英文输出 |
+
+**使用示例：**
+
+```python
+config = {
+    "task": {...},
+    "spec_config": {...},
+    "msg_config": {
+        "enable_dingtalk_message": False,
+        "log_language": "zh",  # 中文输出
+    },
+}
+```
+
+**注意事项：**
+- 默认使用中文输出
+- 所有日志消息（info、warning、error、debug）都会根据语言设置输出对应语言
+- 错误消息和异常信息也会使用配置的语言
 
 ### spec_benches 参数格式
 

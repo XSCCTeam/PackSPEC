@@ -125,10 +125,16 @@ if __name__ == "__main__":
         },
         # 消息发送相关配置
         "msg_config": {
-            # 是否开启消息发送，默认为 False
+            # 是否开启钉钉消息发送，默认为 False
             # 开启后会在测试完成后发送消息通知用户
             # 需要在 .env 中配置 BOSC_AT_USER、BOSC_AT_TOKEN 环境变量
-            "enable": True,
+            "enable_dingtalk_message": True,
+
+            # 日志输出语言，默认为 "zh"（中文）
+            # 可选值：
+            #   "zh" 或 "chinese": 中文输出
+            #   "en" 或 "english": 英文输出
+            "log_language": "cn",
         },
     }
 

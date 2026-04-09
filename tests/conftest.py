@@ -50,7 +50,8 @@ def base_config():
             "report_format": DEFAULT_REPORT_FORMAT,
         },
         "msg_config": {
-            "enable": False,
+            "enable_dingtalk_message": False,
+            "log_language": "zh",
         },
     }
 

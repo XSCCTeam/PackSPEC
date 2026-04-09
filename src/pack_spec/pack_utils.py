@@ -31,7 +31,8 @@ from src.pack_spec.pack_config import (
     PackSPECError, FileOperationError, CommandExecutionError,
     CURRENT_DATE, DEFAULT_CORE_NUM, DEFAULT_LLVM_PROFDATA_PATH,
     DEFAULT_AUTO_MODE,
-    SCRIPTS_PATH, GENERATED_FILES_PATH, logger, QEMU_CMD
+    SCRIPTS_PATH, GENERATED_FILES_PATH, logger, QEMU_CMD,
+    LogLanguage, LogMessages, get_log_messages, DEFAULT_LOG_LANGUAGE
 )
 import subprocess
 import shutil
@@ -277,10 +278,21 @@ class PackUtils:
         # 支持新的配置结构（task配置块）和旧的配置结构（顶层pack_name）
         task_config = config.get('task', {})
         pack_config = config.get('pack_config', {})
+        msg_config = config.get('msg_config', {})
         self.pack_name = task_config.get('pack_name', config.get('pack_name', 'packspec'))
         self.auto_mode = pack_config.get('auto_mode', DEFAULT_AUTO_MODE)
         self.logger = logger
         self.init_date = config.get('date', CURRENT_DATE)
+        
+        # 日志语言配置
+        language_str = msg_config.get('log_language', 'zh').lower()
+        if language_str in ('zh', 'chinese', 'cn'):
+            self.log_language = LogLanguage.zh
+        elif language_str in ('en', 'english'):
+            self.log_language = LogLanguage.en
+        else:
+            self.log_language = DEFAULT_LOG_LANGUAGE
+        self.msg = get_log_messages(self.log_language)
 
     def save_pack_spec_cfg(self, pack_spec_cfg: dict):
         """
@@ -290,7 +302,7 @@ class PackUtils:
         pack_spec_cfg["date"] = self.init_date
         with open(pack_spec_cfg_path, "w") as f:
             json.dump(pack_spec_cfg, f, indent=4, cls=EnumEncoder)
-        self.logger.info(f"PackSPEC config file saved to: {pack_spec_cfg_path}")
+        self.logger.info(self.msg.get("config_saved", path=pack_spec_cfg_path))
 
 
     def get_bench_dir(self, bench_name: str, bench_dirs: List[str]) -> str:
@@ -310,7 +322,7 @@ class PackUtils:
                     os.path.dirname(bench_dir)))
             if dir_bench_name == bench_name:
                 return bench_dir
-        self.logger.warning(f"Failed to find bench dir for {bench_name}.")
+        self.logger.warning(self.msg.get("bench_dir_not_found", bench_name=bench_name))
         return ""
 
     def get_dest_dir(self, profile_gen: bool, auto_mode: bool, pack_mode: PACKMode,
@@ -364,12 +376,12 @@ class PackUtils:
                 spec_log = f.readlines()
             for spec_log_line in spec_log:
                 if spec_log_line.startswith(marked_line):
-                    self.logger.debug(f"Find spec log from '{spec_log_file}'")
+                    self.logger.debug(self.msg.get("spec_log_found", file=spec_log_file))
                     return spec_log_line.replace("The log for this run is in ", "").strip()
-            self.logger.debug(f"Failed find spec log from '{spec_log_file}': marked line not found.")
+            self.logger.debug(self.msg.get("spec_log_marked_line_not_found", file=spec_log_file))
             return ""
         except Exception as e:
-            self.logger.debug(f"Failed find spec log from '{spec_log_file}': {str(e)}")
+            self.logger.debug(self.msg.get("spec_log_parse_error", file=spec_log_file, error=str(e)))
             return ""
     
     def get_run_script_name(self, profile_gen: bool, input_type: InputType, suffix: str = "") -> str:
@@ -437,23 +449,23 @@ class PackUtils:
         创建生成的文件目录
         """
         os.makedirs(GENERATED_FILES_PATH, exist_ok=True)
-        self.logger.info(f"Created generated files dir: {GENERATED_FILES_PATH}")
+        self.logger.info(self.msg.get("generated_dir_created", path=GENERATED_FILES_PATH))
         pack_generated_dir_path = self.get_pack_generated_dir_path()
         # 检查目录是否已存在
         if os.path.exists(pack_generated_dir_path):
-            self.logger.warning(f"Pack generated files dir {pack_generated_dir_path} already exists.")
+            self.logger.warning(self.msg.get("pack_dir_exists", path=pack_generated_dir_path))
             if not auto_mode:
-                self.logger.debug(f"Do you want to continue? (y/n): ")
-                choice = input(f"Do you want to continue? (y/n): ")
+                self.logger.debug(self.msg.get("continue_prompt"))
+                choice = input(self.msg.get("continue_prompt"))
             if auto_mode == True or choice.lower() == 'y':
                 os.makedirs(pack_generated_dir_path, exist_ok=True)
-                self.logger.info(f"Created pack generated files dir: {pack_generated_dir_path}")
+                self.logger.info(self.msg.get("pack_dir_created", path=pack_generated_dir_path))
             else:
-                self.logger.error("User canceled the operation. ")
-                raise PackSPECError("User canceled the operation. ")
+                self.logger.error(self.msg.get("operation_canceled"))
+                raise PackSPECError(self.msg.get("operation_canceled"))
         else:
             os.makedirs(pack_generated_dir_path, exist_ok=False)
-            self.logger.info(f"Created pack generated files dir: {pack_generated_dir_path}")
+            self.logger.info(self.msg.get("pack_dir_created", path=pack_generated_dir_path))
         
         return pack_generated_dir_path
 
@@ -519,19 +531,19 @@ class PackUtils:
         dest_bench_dir = self.get_dest_dir(profile_gen, auto_mode, pack_mode,
                                            spec_name, tune_type, input_type, spec_mode)
         if os.path.exists(dest_bench_dir):
-            self.logger.warning(f"Directory {dest_bench_dir} already exists.")
+            self.logger.warning(self.msg.get("dest_dir_exists", path=dest_bench_dir))
             if not auto_mode:
-                self.logger.debug(f"Do you want to overwrite it? (y/n): ")
-                choice = input(f"Do you want to overwrite it? (y/n): ")
+                self.logger.debug(self.msg.get("overwrite_prompt"))
+                choice = input(self.msg.get("overwrite_prompt"))
             if auto_mode == True or choice.lower() == 'y':
-                self.logger.debug(f"Overwriting directory {dest_bench_dir} ")
+                self.logger.debug(self.msg.get("overwriting_dir", path=dest_bench_dir))
                 shutil.rmtree(dest_bench_dir)
                 os.makedirs(dest_bench_dir, exist_ok=False)
             else:
-                self.logger.error("User canceled the operation. Directory not overwritten.")
-                raise PackSPECError("User canceled the operation. Directory not overwritten.")
+                self.logger.error(self.msg.get("operation_canceled_not_overwritten"))
+                raise PackSPECError(self.msg.get("operation_canceled_not_overwritten"))
         else:
-            self.logger.debug(f"Creating directory {dest_bench_dir} ")
+            self.logger.debug(self.msg.get("creating_dir", path=dest_bench_dir))
             os.makedirs(dest_bench_dir, exist_ok=False)
         return dest_bench_dir
 
@@ -544,14 +556,14 @@ class PackUtils:
             env_name (str): 环境文件名称（不带后缀）
         """
         try:
-            self.logger.info(f"Create {env_name}.env to record compile environment.")
+            self.logger.info(self.msg.get("env_file_created", name=env_name))
             with open(os.path.join(dest_dir, f"{env_name}.env"), 'w') as f:
                 # 将当前环境变量写入文件
                 for key, value in os.environ.items():
                     if key not in ["BOSC_API_KEY", "BOSC_AT_USER"]:
                         f.write(f"{key}={value}\n")
         except Exception as e:
-            self.logger.error(f"Failed to create compile.env: {str(e)}")
+            self.logger.error(self.msg.get("env_file_failed", error=str(e)))
 
 
     def execute_commands(self, command: str, work_dir: str) -> List[str]:
@@ -570,7 +582,7 @@ class PackUtils:
         """
         try:
             # 执行命令并捕获输出
-            self.logger.debug(f"Executing command: {command}")
+            self.logger.debug(self.msg.get("executing_command", command=command))
             result = subprocess.run(
                 command.split(),
                 cwd=work_dir,
@@ -582,11 +594,11 @@ class PackUtils:
             bash_result = result.stdout.split("\n")
             return bash_result
         except subprocess.CalledProcessError as e:
-            self.logger.error(f"Command failed with error: {e.stderr}")
-            raise CommandExecutionError(f"Command failed with error: {e.stderr}")
+            self.logger.error(self.msg.get("command_failed", error=e.stderr))
+            raise CommandExecutionError(self.msg.get("command_failed", error=e.stderr))
         except Exception as e:
-            self.logger.error(f"Failed to execute command: {str(e)}")
-            raise CommandExecutionError(f"Failed to execute command: {str(e)}")
+            self.logger.error(self.msg.get("command_execute_failed", error=str(e)))
+            raise CommandExecutionError(self.msg.get("command_execute_failed", error=str(e)))
         
     def copy_file_to_target_dir(self, src_path: str, dest_path: str, file_info: str="", error_info: str="") -> bool:
         """
@@ -604,14 +616,13 @@ class PackUtils:
             src_file_name = os.path.basename(src_path)
             dest_file_name = os.path.basename(dest_path)
             shutil.copy2(src_path, dest_path)
-            self.logger.debug(f"Copie {file_info} file '{src_file_name}' to '{dest_file_name}'.")
-            self.logger.debug(f"Copying {src_file_name}\n\tFrom {src_path} -to-> {dest_path}")
+            self.logger.debug(self.msg.get("file_copied", info=file_info, src=src_file_name, dest=dest_file_name))
+            self.logger.debug(self.msg.get("copying_file", src=src_file_name, from_path=src_path, to_path=dest_path))
             return True
         except Exception as e:
-            self.logger.warning(f"Failed to copy {file_info} file '{src_path}' to '{dest_path}': {str(e)}")
+            self.logger.warning(self.msg.get("copy_failed", info=file_info, src=src_path, dest=dest_path, error=str(e)))
             if error_info != "":
                 self.logger.warning(f"{error_info}")
-                # self.logger.warning(f"If you didn't use this tool for setup, {file_info} will not be generated. Please ignore this warning.")
             return False
 
     def copy_script_file_to_target_dir(self, script_name: str, script_target_path: str) -> bool:
@@ -669,10 +680,10 @@ class PackUtils:
             with open(os.path.join(script_target_dir, script_name), "w") as f:
                 f.write(template)
             os.chmod(os.path.join(script_target_dir, script_name), 0o700)
-            self.logger.debug(f"Create script {script_name} from template {template_name} to {script_target_dir}.")
+            self.logger.debug(self.msg.get("script_created", template=template_name, name=script_name, dir=script_target_dir))
         except Exception as e:
-            self.logger.error(f"Failed to create script {script_name} from template {template_name} to {script_target_dir}: {str(e)}")
-            raise CommandExecutionError(f"Failed to create script {script_name} from template {template_name} to {script_target_dir}: {str(e)}")
+            self.logger.error(self.msg.get("script_create_failed", template=template_name, name=script_name, dir=script_target_dir, error=str(e)))
+            raise CommandExecutionError(self.msg.get("script_create_failed", template=template_name, name=script_name, dir=script_target_dir, error=str(e)))
 
     def copy_spec_cfg_and_logs_to_target_dir(self, spec_dir: str, spec_cfg: str, dest_dir: str,
                                              tune_type: TuneType, input_type: InputType) -> None:
@@ -693,7 +704,7 @@ class PackUtils:
         # 复制setup log至目标目录
         spec_log_path = self.get_spec_setup_log_path(spec_cfg, tune_type, input_type)
         self.copy_file_to_target_dir(spec_log_path, dest_dir, "spec_setup log", 
-                                    "If you didn't use this tool for setup, spec_setup log will not be generated. Please ignore this warning.")
+                                    self.msg.get("spec_setup_log_warning"))
 
         # 复制spec log至目标目录
         spec_log_file_path = self.get_spec_log_file_path(spec_dir, spec_log_path)
@@ -734,7 +745,7 @@ class PackUtils:
         else:
             commands.append(f"./{script_name} $LOG_FILE {test_clock_rate} | tee {score_file}")
         commands.append("")
-        self.logger.debug(f"Add cal score commands.")
+        self.logger.debug(self.msg.get("add_cal_score_commands"))
         return commands
 
     def commands_to_send_message(self, message: str) -> List[str]:
@@ -761,7 +772,7 @@ class PackUtils:
             f'     -d "{{\\"content\\": \\"{message}\\\\n【来自李扬的 HUAWEI Pure 70 Pro Max】\\", \\"at_user_ids\\": [\\"$BOSC_AT_USER\\"]}}"',
             ""
         ]
-        self.logger.debug(f"Add send message commands.")
+        self.logger.debug(self.msg.get("add_send_message_commands"))
         return commands
 
     def commands_to_send_md_message(self, script_target_dir:str, title_message: str, text_message: str, md_path: str) -> List[str]:
@@ -795,7 +806,7 @@ class PackUtils:
             '     --at_mobiles "$BOSC_AT_USER"',
             ""
         ]
-        self.logger.debug(f"Add send md message commands.")
+        self.logger.debug(self.msg.get("add_send_md_message_commands"))
         return commands
     
     def commands_to_collect_profiles(self, script_target_dir: str) -> List[str]:
@@ -820,7 +831,7 @@ class PackUtils:
             f"./collect_profiles.sh",
             ""
         ]
-        self.logger.debug(f"Add collect profiles commands.")
+        self.logger.debug(self.msg.get("add_collect_profiles_commands"))
         return commands
 
     def commands_to_prepare_run(self, log_name: str, core_num: int, iterations: int, 
@@ -956,7 +967,7 @@ class PackUtils:
         return commands
 
 
-def parse_spec_results(result_dir: str, spec_name: 'SPECName') -> Dict:
+def parse_spec_results(result_dir: str, spec_name: 'SPECName', language: LogLanguage = DEFAULT_LOG_LANGUAGE) -> Dict:
     """
     解析SPEC测试结果
     
@@ -965,6 +976,7 @@ def parse_spec_results(result_dir: str, spec_name: 'SPECName') -> Dict:
     Args:
         result_dir (str): SPEC测试结果目录路径
         spec_name (SPECName): SPEC版本枚举值
+        language (LogLanguage): 日志语言配置，默认为中文
         
     Returns:
         Dict: 包含以下键的结果字典：
@@ -978,6 +990,8 @@ def parse_spec_results(result_dir: str, spec_name: 'SPECName') -> Dict:
     """
     from src.pack_spec.pack_config import logger
     
+    msg = get_log_messages(language)
+    
     results = {
         "benchmarks": {},
         "int_score": 0.0,
@@ -987,12 +1001,12 @@ def parse_spec_results(result_dir: str, spec_name: 'SPECName') -> Dict:
     
     result_path = os.path.join(result_dir, "result")
     if not os.path.isdir(result_path):
-        logger.warning(f"结果目录不存在: {result_path}")
+        logger.warning(msg.get("result_dir_not_found", path=result_path))
         return results
     
     sum_files = [f for f in os.listdir(result_path) if f.endswith('.sum')]
     if not sum_files:
-        logger.warning(f"未找到 .sum 文件: {result_path}")
+        logger.warning(msg.get("sum_file_not_found", path=result_path))
         return results
     
     for sum_file in sum_files:
@@ -1017,7 +1031,7 @@ def parse_spec_results(result_dir: str, spec_name: 'SPECName') -> Dict:
                         except (ValueError, IndexError):
                             continue
         except Exception as e:
-            logger.warning(f"解析 {sum_path} 失败: {e}")
+            logger.warning(msg.get("sum_parse_failed", path=sum_path, error=str(e)))
     
     results["int_score"] = calculate_spec_score(
         results["benchmarks"], "int", spec_name

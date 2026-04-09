@@ -25,7 +25,7 @@ import subprocess
 from src.pack_spec.pack_config import (
     SPECName, TuneType, InputType, SPECMode, ActionType,
     PackSPECError, ConfigError, FileOperationError, CommandExecutionError,
-    P_PATH, logger
+    P_PATH, logger, LogLanguage, LogMessages, get_log_messages, DEFAULT_LOG_LANGUAGE
 )
 from src.pack_spec.pack_utils import PackUtils
 from typing import Dict, List, Optional
@@ -101,6 +101,7 @@ class SPECDriver:
         self.rebuild = rebuild
         self.debug_mode = debug_mode
         self.utils = utils
+        self.msg = utils.msg  # 使用 PackUtils 中的消息管理器
         self.label = self.analyze_spec_config()
     
     def get_spec_info(self) -> Dict[str, str]:
@@ -163,10 +164,10 @@ class SPECDriver:
                 spec_log = f.readlines()
             for spec_log_line in spec_log:
                 if spec_log_line.startswith(marked_line):
-                    logger.debug(f"Find spec log from '{spec_log_file}'")
+                    logger.debug(self.msg.get("spec_log_found", file=spec_log_file))
                     return spec_log_line.replace("The log for this run is in ", "").strip()
         except Exception as e:
-            logger.debug(f"Failed find spec log from '{spec_log_file}': {str(e)}")
+            logger.debug(self.msg.get("spec_log_parse_error", file=spec_log_file, error=str(e)))
             return ""
 
     def analyze_spec_config(self) -> str:
@@ -213,8 +214,8 @@ class SPECDriver:
 
                 for line in file:
                     if line.strip().startswith('basepeak') and 'yes' in line:
-                        logger.warning(f"'basepeak' is set to yes in {self.spec_cfg_path}.")
-                        logger.warning(f"Set 'basepeak' to yes means:")
+                        logger.warning(self.msg.get("basepeak_set_to_yes", path=self.spec_cfg_path))
+                        logger.warning(self.msg.get("basepeak_meaning"))
                         logger.warning(
                             "\tUse base binary and/or base result for peak. "
                             "If applied to the whole suite (in the header section), "
@@ -227,14 +228,14 @@ class SPECDriver:
                         )
                         choice = input(f"Are you sure you use it right? (y/n): ")
                         if choice.lower() == 'y':
-                            logger.warning("Process continue with 'basepeak' setting.")
+                            logger.warning(self.msg.get("continue_with_basepeak"))
                         else:
-                            logger.error("Aborted by user.")
-                            raise PackSPECError("Aborted by user.")
+                            logger.error(self.msg.get("aborted_by_user"))
+                            raise PackSPECError(self.msg.get("aborted_by_user"))
                         
         except FileNotFoundError:
-            logger.error(f"File {self.spec_cfg_path} not found.")
-            raise ConfigError(f"File {self.spec_cfg_path} not found.")
+            logger.error(self.msg.get("config_file_not_found", path=self.spec_cfg_path))
+            raise ConfigError(self.msg.get("config_file_not_found", path=self.spec_cfg_path))
         if self.spec_name in [SPECName.spec2006, SPECName.spec2006v1p01]:
             assert label != "", f"Ext not found in file {self.spec_cfg_path}."
         elif self.spec_name == SPECName.spec2017:
@@ -281,8 +282,8 @@ class SPECDriver:
 
         try:
             # 执行setup_spec脚本并实时输出
-            logger.info(f"Setting up spec from config: {self.spec_cfg_path}")
-            logger.debug(f"Executing command: {spec_setup_cmd}")
+            logger.info(self.msg.get("setting_up_spec", path=self.spec_cfg_path))
+            logger.debug(self.msg.get("executing_command_debug", cmd=spec_setup_cmd))
             
             process = subprocess.Popen(
                 spec_setup_cmd,
@@ -312,21 +313,21 @@ class SPECDriver:
             # 检查返回码
             return_code = process.wait()
             if return_code != 0:
-                logger.error(f"Command failed with return code: {return_code}")
-                raise CommandExecutionError(f"Command failed with return code: {return_code}")
+                logger.error(self.msg.get("command_failed_return_code", code=return_code))
+                raise CommandExecutionError(self.msg.get("command_failed_return_code", code=return_code))
 
-            logger.success(f"Successfully setup spec with {tune_type}_{input_type} from config: {self.spec_cfg_path}")
+            logger.success(self.msg.get("successfully_setup_spec", path=self.spec_cfg_path, tune_type=tune_type.name, input_type=input_type.name))
 
             spec_log_path = self.utils.create_spec_setup_log_path(output_log, 
                 self.spec_cfg_path, tune_type, input_type)
             return spec_log_path
             
         except subprocess.CalledProcessError as e:
-            logger.error(f"Command failed with error: {e.stderr}")
-            raise CommandExecutionError(f"Command failed with error: {e.stderr}")
+            logger.error(self.msg.get("command_failed", error=e.stderr))
+            raise CommandExecutionError(self.msg.get("command_failed", error=e.stderr))
         except Exception as e:
-            logger.error(f"Failed to execute command: {str(e)}")
-            raise CommandExecutionError(f"Failed to execute command: {str(e)}")
+            logger.error(self.msg.get("command_execute_failed", error=str(e)))
+            raise CommandExecutionError(self.msg.get("command_execute_failed", error=str(e)))
 
 
     def execute_specinvoke(self, src_dir: str, dest_dir: str, input_type: InputType, binary_name_map: tuple = ("", "")) -> bool:
@@ -371,7 +372,7 @@ class SPECDriver:
         if start_index != -1:
             commands = commands[start_index:]
         else:
-            logger.warning("No '# Starting run' found in command output")
+            logger.warning(self.msg.get("no_starting_run_found"))
 
         # 替换路径和目录名
         processed_commands = []
@@ -397,7 +398,7 @@ class SPECDriver:
         # 添加执行权限
         os.chmod(output_file, 0o755)
 
-        logger.success(f"Successfully created {output_file}")
+        logger.success(self.msg.get("successfully_created_file", path=output_file))
         
         return True
 
@@ -423,9 +424,9 @@ class SPECDriver:
             spec_cmd = os.path.join(self.spec_dir, "bin", "runcpu")
         
         if not os.path.isfile(spec_cmd):
-            raise CommandExecutionError(f"SPEC命令不存在: {spec_cmd}")
+            raise CommandExecutionError(self.msg.get("spec_cmd_not_exist", path=spec_cmd))
         
-        logger.debug(f"SPEC环境检查通过: {self.spec_dir}")
+        logger.debug(self.msg.get("spec_env_check_passed", path=self.spec_dir))
         return True
 
     def _build_run_command(self) -> List[str]:
@@ -441,7 +442,7 @@ class SPECDriver:
         Note:
             此方法应由子类重写，基类返回空列表
         """
-        logger.warning("_build_run_command() 应由子类重写")
+        logger.warning(self.msg.get("build_run_command_should_override"))
         return []
 
     def run_spec_directly(self, output_dir: Optional[str] = None) -> Dict:
@@ -491,8 +492,8 @@ class SPECDriver:
             "error_message": ""
         }
         
-        logger.info(f"开始运行SPEC测试: {' '.join(spec_cmd)}")
-        logger.info(f"结果输出目录: {output_dir}")
+        logger.info(self.msg.get("start_running_spec", cmd=' '.join(spec_cmd)))
+        logger.info(self.msg.get("result_output_dir", path=output_dir))
         
         process = None
         try:
@@ -522,22 +523,22 @@ class SPECDriver:
                 
                 if return_code == 0:
                     result["success"] = True
-                    logger.success(f"SPEC测试完成: {output_dir}")
+                    logger.success(self.msg.get("spec_test_completed", path=output_dir))
                 else:
-                    result["error_message"] = f"命令返回非零退出码: {return_code}"
+                    result["error_message"] = self.msg.get("command_failed_return_code", code=return_code)
                     logger.error(result["error_message"])
                     
         except KeyboardInterrupt:
             if process:
                 process.terminate()
                 process.wait()
-            result["error_message"] = "用户中断测试"
-            logger.warning("用户中断测试")
-            raise CommandExecutionError("用户中断测试")
+            result["error_message"] = self.msg.get("user_interrupted_test")
+            logger.warning(self.msg.get("user_interrupted_test"))
+            raise CommandExecutionError(self.msg.get("user_interrupted_test"))
         except Exception as e:
             result["error_message"] = str(e)
-            logger.error(f"执行SPEC命令失败: {e}")
-            raise CommandExecutionError(f"执行SPEC命令失败: {e}")
+            logger.error(self.msg.get("spec_command_failed", error=str(e)))
+            raise CommandExecutionError(self.msg.get("spec_command_failed", error=str(e)))
         
         return result
 

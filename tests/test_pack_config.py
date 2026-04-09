@@ -10,14 +10,15 @@ from unittest.mock import patch
 
 from src.pack_spec.pack_config import (
     ActionType, TuneType, InputType, SPECName, SPECSubBench,
-    SPECMode, PACKMode, RunMode,
+    SPECMode, PACKMode, RunMode, LogLanguage,
     PackSPECError, ConfigError, FileOperationError,
     CommandExecutionError, BenchmarkError,
     DEFAULT_CORE_NUM, DEFAULT_ITERATIONS, DEFAULT_CLOCK_RATE,
     DEFAULT_REBUILD, DEFAULT_PROFILE_GEN, DEFAULT_AUTO_MODE,
     DEFAULT_VERIFY_MODE, DEFAULT_MINIMAL_MODE, DEFAULT_RUN_MODE,
-    DEFAULT_REPORT_FORMAT, RANDOM_SUFFIX_LENGTH,
+    DEFAULT_REPORT_FORMAT, DEFAULT_LOG_LANGUAGE, RANDOM_SUFFIX_LENGTH,
     P_PATH, SCRIPTS_PATH, GENERATED_FILES_PATH,
+    LogMessages, get_log_messages,
 )
 
 
@@ -123,6 +124,56 @@ class TestRunMode:
 
     def test_direct_value(self):
         assert RunMode.direct.value == 2
+
+
+class TestLogLanguage:
+    """LogLanguage 枚举测试"""
+
+    def test_zh_value(self):
+        assert LogLanguage.zh.value == 1
+
+    def test_en_value(self):
+        assert LogLanguage.en.value == 2
+
+    def test_enum_count(self):
+        assert len(LogLanguage) == 2
+
+
+class TestLogMessages:
+    """LogMessages 类测试"""
+
+    def test_default_language(self):
+        msg = LogMessages()
+        assert msg.language == DEFAULT_LOG_LANGUAGE
+
+    def test_zh_language(self):
+        msg = LogMessages(LogLanguage.zh)
+        assert msg.language == LogLanguage.zh
+
+    def test_en_language(self):
+        msg = LogMessages(LogLanguage.en)
+        assert msg.language == LogLanguage.en
+
+    def test_get_message_zh(self):
+        msg = LogMessages(LogLanguage.zh)
+        result = msg.get("config_saved", path="/test/path")
+        assert "PackSPEC 配置文件已保存到" in result
+        assert "/test/path" in result
+
+    def test_get_message_en(self):
+        msg = LogMessages(LogLanguage.en)
+        result = msg.get("config_saved", path="/test/path")
+        assert "PackSPEC config file saved to" in result
+        assert "/test/path" in result
+
+    def test_get_message_unknown_key(self):
+        msg = LogMessages(LogLanguage.zh)
+        result = msg.get("unknown_key")
+        assert result == "unknown_key"
+
+    def test_get_log_messages_function(self):
+        msg = get_log_messages(LogLanguage.en)
+        assert msg.language == LogLanguage.en
 
 
 class TestExceptions:

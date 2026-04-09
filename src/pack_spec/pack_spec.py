@@ -51,7 +51,8 @@ from src.pack_spec.pack_config import (
     DEFAULT_AUTO_MODE, DEFAULT_LLVM_PROFDATA_PATH,
     DEFAULT_RUN_MODE, DEFAULT_REPORT_FORMAT, RESULTS_OUTPUT_PATH,
     QEMU_PATH, DEFAULT_VERIFY_MODE, DEFAULT_MINIMAL_MODE,
-    BOSC_API_KEY, BOSC_AT_USER, P_PATH, logger, GENERATED_FILES_PATH
+    BOSC_API_KEY, BOSC_AT_USER, P_PATH, logger, GENERATED_FILES_PATH,
+    LogLanguage, LogMessages, get_log_messages, DEFAULT_LOG_LANGUAGE
 )
 from src.pack_spec.pack_utils import PackUtils, load_pack_spec_cfg, parse_spec_results, generate_json_report, generate_markdown_report, generate_qemu_verify_script, generate_qemu_verify_all_script
 from src.pack_spec.spec_2006_driver import SPEC2006Driver, SPEC2006V1P01Driver
@@ -197,7 +198,17 @@ class PackSPEC:
         
         # 消息发送配置
         msg_config = config.get('msg_config', {})
-        self.msg_enabled = msg_config.get('enable', False)
+        self.msg_enabled = msg_config.get('enable_dingtalk_message', False)
+        
+        # 日志语言配置
+        language_str = msg_config.get('log_language', 'zh').lower()
+        if language_str in ('zh', 'chinese', 'cn'):
+            self.log_language = LogLanguage.zh
+        elif language_str in ('en', 'english'):
+            self.log_language = LogLanguage.en
+        else:
+            self.log_language = DEFAULT_LOG_LANGUAGE
+        self.msg = get_log_messages(self.log_language)
         
         if self.profile_gen:
             self.iterations = 1
@@ -229,11 +240,12 @@ class PackSPEC:
         """
         logger.info(" ")
         logger.info("="*80)
-        logger.info(f"Start Packing {self.spec_name.name}")
-        logger.info(f"Current Time: {CURRENT_TIME}")
+        logger.info(self.msg.get("start_packing", name=self.spec_name.name))
+        logger.info(self.msg.get("current_time", time=CURRENT_TIME))
         logger.info("-"*80)
-        logger.info(f"{self.spec_driver.get_spec_info()['spec_name']} Version: {self.spec_driver.get_spec_info()['spec_version']}")
-        logger.info(f"Path: {self.spec_driver.get_spec_info()['spec_path']}")
+        spec_info = self.spec_driver.get_spec_info()
+        logger.info(self.msg.get("spec_version", name=spec_info['spec_name'], version=spec_info['spec_version']))
+        logger.info(self.msg.get("spec_path", path=spec_info['spec_path']))
         logger.info("="*80)
         logger.info(" ")
         
@@ -282,10 +294,10 @@ class PackSPEC:
             self.utils.copy_file_to_target_dir(binary_path, dest_path, f"{bench_name} binary")
             copy_num += 1
         if copy_num != 0:
-            logger.success(f"Successfully copied {copy_num} files.")
+            logger.success(self.msg.get("successfully_copied_files", count=copy_num))
         else:
-            logger.error(f"No binary to copy.")
-            raise FileOperationError("No binary to copy.")
+            logger.error(self.msg.get("no_binary_to_copy"))
+            raise FileOperationError(self.msg.get("no_binary_to_copy"))
 
         # 复制配置文件及相关日志至目标目录
         self.utils.copy_spec_cfg_and_logs_to_target_dir(
@@ -340,42 +352,42 @@ class PackSPEC:
             if with_build:
                 src_build_dir = self.utils.get_bench_dir(bench_name, src_build_bench_dir)
                 if src_build_dir == "":
-                    logger.warning(f"Cannot match '{bench_name}' from '{src_build_bench_dir}'")
+                    logger.warning(self.msg.get("cannot_match_bench", bench=bench_name, dir=src_build_bench_dir))
                     continue
 
             src_run_dir = self.utils.get_bench_dir(bench_name, src_run_bench_dir)
             if src_run_dir == "":
-                logger.warning(f"Cannot match '{bench_name}' from '{src_run_bench_dir}'")
+                logger.warning(self.msg.get("cannot_match_bench", bench=bench_name, dir=src_run_bench_dir))
                 continue
 
             dest_dir = os.path.join(dest_bench_dir, bench_name)
-            logger.info(f"Copying {bench_name}...")
+            logger.info(self.msg.get("copying_bench", bench=bench_name))
             try:
                 if with_build:
-                    logger.info(f"\tFrom {src_build_dir} -to-> {dest_dir}")
+                    logger.info(self.msg.get("copy_from_to", from_path=src_build_dir, to_path=dest_dir))
                     shutil.copytree(src_build_dir, dest_dir, symlinks=True)
-                    logger.debug(f"Copie {bench_name} build dir done.")
-                logger.info(f"\tFrom {src_run_dir} -to-> {dest_dir}")
+                    logger.debug(self.msg.get("copy_bench_done", bench=bench_name))
+                logger.info(self.msg.get("copy_from_to", from_path=src_run_dir, to_path=dest_dir))
                 shutil.copytree(src_run_dir, dest_dir, symlinks=True, dirs_exist_ok=True)
-                logger.debug(f"Copie {bench_name} run dir done.")
+                logger.debug(self.msg.get("copy_bench_done", bench=bench_name))
                 dest_dir_list.append(dest_dir)
             except Exception as e:
-                logger.error(f"Failed to copy {bench_name}: {str(e)}")
-                raise FileOperationError(f"Failed to copy {bench_name}: {str(e)}")
+                logger.error(self.msg.get("copy_bench_failed", bench=bench_name, error=str(e)))
+                raise FileOperationError(self.msg.get("copy_bench_failed", bench=bench_name, error=str(e)))
 
             if self.spec_driver.execute_specinvoke(src_run_dir, dest_dir, input_type):
-                logger.success(f"Successfully generated run_{input_type.name}.sh in {dest_dir}")
+                logger.success(self.msg.get("run_script_created", path=dest_dir, name=f"run_{input_type.name}.sh"))
             else:
-                logger.error(f"Failed to generate run_test.sh in {dest_dir}")
-                raise CommandExecutionError(f"Failed to generate run_test.sh in {dest_dir}")
+                logger.error(self.msg.get("run_test_script_failed", dir=dest_dir))
+                raise CommandExecutionError(self.msg.get("run_test_script_failed", dir=dest_dir))
 
             self.create_test_script(self.spec_driver.label, bench_name, self.test_core_num, dest_dir, tune_type, input_type)
 
         if dest_dir_list != []:
-            logger.success(f"Successfully copied {len(dest_dir_list)} benches.")
+            logger.success(self.msg.get("successfully_copied_benches", count=len(dest_dir_list)))
         else:
-            logger.error(f"No benches to copy.")
-            raise FileOperationError("No benches to copy.")
+            logger.error(self.msg.get("no_benches_to_copy"))
+            raise FileOperationError(self.msg.get("no_benches_to_copy"))
         
         self.create_run_all_script(self.spec_driver.label, self.test_core_num, dest_dir_list, tune_type, input_type)
 
@@ -462,7 +474,7 @@ class PackSPEC:
         
         # 添加执行权限
         os.chmod(run_test_script, 0o700)
-        logger.info(f"Created {self.utils.get_run_script_name(self.profile_gen, input_type)} script at {run_test_script}")
+        logger.info(self.msg.get("created_script_at", path=run_test_script, name=self.utils.get_run_script_name(self.profile_gen, input_type)))
         
 
     def create_run_all_script(self, label: str, core_num: int, buildrun_bench_dir_list: list, 
@@ -487,7 +499,7 @@ class PackSPEC:
             - 会计算并输出所有基准测试的总分
         """
         if not buildrun_bench_dir_list:
-            logger.warning("No benchmark directories to run")
+            logger.warning(self.msg.get("no_benchmark_dirs_to_run"))
             return
             
         if iterations == 0:
@@ -717,31 +729,32 @@ class PackSPEC:
             >>> print(f"INT分数: {result['results']['int_score']}")
         """
         logger.info("="*80)
-        logger.info("开始直接运行SPEC测试")
+        logger.info(self.msg.get("start_direct_run"))
         logger.info("="*80)
         
         try:
             run_result = self.spec_driver.run_spec_directly(output_dir)
         except FileOperationError as e:
-            logger.error(f"SPEC环境检查失败: {e}")
+            logger.error(self.msg.get("spec_env_check_failed", error=str(e)))
             raise
         except CommandExecutionError as e:
-            logger.error(f"SPEC测试执行失败: {e}")
+            logger.error(self.msg.get("spec_test_failed", error=str(e)))
             raise
         except Exception as e:
-            logger.error(f"运行SPEC测试时发生未知错误: {e}")
-            raise CommandExecutionError(f"运行SPEC测试时发生未知错误: {e}")
+            logger.error(self.msg.get("spec_test_unknown_error", error=str(e)))
+            raise CommandExecutionError(self.msg.get("spec_test_unknown_error", error=str(e)))
         
         if not run_result["success"]:
-            logger.error(f"SPEC测试执行失败: {run_result.get('error_message', '未知错误')}")
+            logger.error(self.msg.get("spec_test_execution_failed", error=run_result.get('error_message', 'Unknown error')))
             return run_result
         
         if generate_report:
-            logger.info("解析测试结果...")
+            logger.info(self.msg.get("parsing_results"))
             
             results = parse_spec_results(
                 run_result["output_dir"],
-                self.spec_name
+                self.spec_name,
+                self.log_language
             )
             run_result["results"] = results
             
@@ -770,7 +783,7 @@ class PackSPEC:
             logger.success(f"测试报告已生成: {report_path}")
             
             logger.info("="*80)
-            logger.info("测试结果摘要")
+            logger.info(self.msg.get("test_result_summary"))
             logger.info("="*80)
             
             if results and isinstance(results, dict):
@@ -781,13 +794,13 @@ class PackSPEC:
                 fp_score = 0
             
             if int_score > 0:
-                logger.info(f"整数测试(INT)分数: {int_score:.2f}")
+                logger.info(self.msg.get("int_score", score=int_score))
             else:
-                logger.warning("整数测试(INT)分数: 解析失败或无有效数据")
+                logger.warning(self.msg.get("int_score_failed"))
             if fp_score > 0:
-                logger.info(f"浮点测试(FP)分数: {fp_score:.2f}")
+                logger.info(self.msg.get("fp_score", score=fp_score))
             else:
-                logger.warning("浮点测试(FP)分数: 解析失败或无有效数据")
+                logger.warning(self.msg.get("fp_score_failed"))
             logger.info("="*80)
         
         return run_result
@@ -831,21 +844,21 @@ class PackSPEC:
             >>> result = packer.pack_qemu_verify()
         """
         if not QEMU_PATH:
-            raise ConfigError("未配置QEMU路径，请在.env中设置QEMU_PATH环境变量")
+            raise ConfigError(self.msg.get("qemu_path_not_configured"))
         
         if not self.verify_mode:
-            raise ConfigError("未开启验证模式，请设置verify_mode=True")
+            raise ConfigError(self.msg.get("verify_mode_not_enabled"))
         
         if not os.path.isdir(QEMU_PATH):
-            raise ConfigError(f"QEMU目录不存在: {QEMU_PATH}")
+            raise ConfigError(self.msg.get("qemu_dir_not_exist", path=QEMU_PATH))
         
         logger.info("="*80)
-        logger.info("生成QEMU验证脚本")
+        logger.info(self.msg.get("generating_qemu_verify_script"))
         logger.info("="*80)
-        logger.info(f"QEMU目录: {QEMU_PATH}")
-        logger.info(f"SPEC版本: {self.spec_name.name}")
-        logger.info(f"优化级别: {self.tune_type.name}")
-        logger.info(f"输入类型: {self.input_type.name}")
+        logger.info(self.msg.get("qemu_dir", path=QEMU_PATH))
+        logger.info(self.msg.get("spec_version_info", version=self.spec_name.name))
+        logger.info(self.msg.get("tune_type_info", type=self.tune_type.name))
+        logger.info(self.msg.get("input_type_info", type=self.input_type.name))
         
         if output_dir is None:
             # 直接获取目录路径，添加 _qemu_verify 后缀
@@ -858,15 +871,15 @@ class PackSPEC:
             # 检查 _qemu_verify 目录是否存在
             if os.path.exists(output_dir):
                 if self.auto_mode:
-                    logger.info(f"目录 {output_dir} 已存在，自动模式下将覆盖")
+                    logger.info(self.msg.get("dir_exists_auto_overwrite", path=output_dir))
                     shutil.rmtree(output_dir)
                 else:
-                    logger.warning(f"目录 {output_dir} 已存在")
-                    choice = input(f"目录 {output_dir} 已存在，是否覆盖？(y/n): ")
+                    logger.warning(self.msg.get("dir_exists", path=output_dir))
+                    choice = input(self.msg.get("overwrite_prompt"))
                     if choice.lower() == 'y':
                         shutil.rmtree(output_dir)
                     else:
-                        raise FileOperationError(f"用户取消操作，目录 {output_dir} 未被覆盖")
+                        raise FileOperationError(self.msg.get("operation_canceled_not_overwritten"))
             
             os.makedirs(output_dir, exist_ok=False)
         
@@ -882,11 +895,11 @@ class PackSPEC:
         for bench_name in self.spec_driver.spec_bench_list:
             src_run_dir = self.utils.get_bench_dir(bench_name, src_run_bench_dir)
             if src_run_dir == "":
-                logger.warning(f"无法找到基准测试目录: {bench_name}")
+                logger.warning(self.msg.get("bench_dir_not_found_qemu", bench=bench_name))
                 continue
             
             dest_bench_dir = os.path.join(output_dir, bench_name)
-            logger.info(f"复制 {bench_name}...")
+            logger.info(self.msg.get("copying_bench_qemu", bench=bench_name))
             
             try:
                 if os.path.exists(dest_bench_dir):
@@ -894,8 +907,8 @@ class PackSPEC:
                     shutil.rmtree(dest_bench_dir)
                 shutil.copytree(src_run_dir, dest_bench_dir, symlinks=True)
             except Exception as e:
-                logger.error(f"复制 {bench_name} 失败: {str(e)}")
-                raise FileOperationError(f"复制 {bench_name} 失败: {str(e)}")
+                logger.error(self.msg.get("copy_bench_qemu_failed", bench=bench_name, error=str(e)))
+                raise FileOperationError(self.msg.get("copy_bench_qemu_failed", bench=bench_name, error=str(e)))
             
             script_path = generate_qemu_verify_script(
                 bench_name=bench_name,
@@ -909,7 +922,7 @@ class PackSPEC:
                 minimal_mode=self.minimal_mode
             )
             generated_scripts.append(script_path)
-            logger.success(f"生成验证脚本: {script_path}")
+            logger.success(self.msg.get("verify_script_generated", path=script_path))
         
         all_script_path = generate_qemu_verify_all_script(
             bench_list=self.spec_driver.spec_bench_list,
@@ -922,7 +935,7 @@ class PackSPEC:
             minimal_mode=self.minimal_mode
         )
         generated_scripts.append(all_script_path)
-        logger.success(f"生成批量验证脚本: {all_script_path}")
+        logger.success(self.msg.get("batch_verify_script_generated", path=all_script_path))
         
         self.utils.copy_spec_cfg_and_logs_to_target_dir(
             self.spec_driver.spec_dir, self.spec_cfg_path,
@@ -930,9 +943,9 @@ class PackSPEC:
         )
         
         logger.info("="*80)
-        logger.info("QEMU验证脚本生成完成")
-        logger.info(f"输出目录: {output_dir}")
-        logger.info(f"生成脚本数量: {len(generated_scripts)}")
+        logger.info(self.msg.get("qemu_verify_script_done"))
+        logger.info(self.msg.get("output_dir", path=output_dir))
+        logger.info(self.msg.get("scripts_generated", count=len(generated_scripts)))
         logger.info("="*80)
         
         return {
@@ -974,42 +987,42 @@ class PackSPEC:
         # 根据 run_mode 决定执行模式
         if self.run_mode == RunMode.direct:
             # 直接运行模式：调用 run_spec() 直接运行 SPEC 测试
-            logger.info("运行模式: 直接运行 (RunMode.direct)")
-            logger.info("执行 run_spec()...")
+            logger.info(self.msg.get("run_mode_direct"))
+            logger.info(self.msg.get("executing_run_spec"))
             run_result = self.run_spec()
             result["steps"].append("run_spec")
             result["run_spec_result"] = run_result
         else:
             # 打包模式（默认）：根据 task 配置执行打包操作
-            logger.info("运行模式: 打包模式 (RunMode.pack)")
+            logger.info(self.msg.get("run_mode_pack"))
             
             # 根据 setup_spec 配置执行编译
             if self.setup_spec_enabled:
-                logger.info("执行 setup_spec()...")
+                logger.info(self.msg.get("executing_setup_spec"))
                 self.setup_spec()
                 result["steps"].append("setup_spec")
             
             # 根据 pack_binaries 配置打包二进制文件
             if self.pack_binaries_enabled:
-                logger.info("执行 pack_binaries()...")
+                logger.info(self.msg.get("executing_pack_binaries"))
                 self.pack_binaries()
                 result["steps"].append("pack_binaries")
             
             # 根据 pack_benches 配置打包完整测试环境
             if self.pack_benches_enabled:
-                logger.info("执行 pack_benches_cfg()...")
+                logger.info(self.msg.get("executing_pack_benches_cfg"))
                 self.pack_benches_cfg()
                 result["steps"].append("pack_benches_cfg")
             
             # 根据 verify_mode 配置生成 QEMU 验证脚本
             if self.verify_mode:
-                logger.info("执行 pack_qemu_verify()...")
+                logger.info(self.msg.get("executing_pack_qemu_verify"))
                 self.pack_qemu_verify()
                 result["steps"].append("pack_qemu_verify")
         
         logger.info("="*80)
-        logger.info("所有任务执行完成")
-        logger.info(f"执行步骤: {', '.join(result['steps'])}")
+        logger.info(self.msg.get("all_tasks_completed"))
+        logger.info(self.msg.get("executed_steps", steps=', '.join(result['steps'])))
         logger.info("="*80)
         
         return result

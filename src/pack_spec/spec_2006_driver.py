@@ -22,7 +22,8 @@ import re
 from src.pack_spec.pack_config import (
     SPECName, TuneType, InputType, SPECMode, ActionType,
     FileOperationError, BenchmarkError,
-    SPEC2006_PATH, SPEC2006_BENCH_PATH, SCRIPTS_PATH, logger
+    SPEC2006_PATH, SPEC2006_BENCH_PATH, SCRIPTS_PATH, logger,
+    LogLanguage, LogMessages, get_log_messages, DEFAULT_LOG_LANGUAGE
 )
 from .spec_driver import SPECDriver
 from src.pack_spec.pack_utils import PackUtils, is_numeric
@@ -59,7 +60,8 @@ SPEC2006_BIN_MAP = {
 """SPEC2006基准测试名称到二进制文件名的映射字典"""
 
 if SPEC2006_PATH == None:
-    logger.error("SPEC2006_PATH is not set")
+    _default_msg = get_log_messages(DEFAULT_LOG_LANGUAGE)
+    logger.error(_default_msg.get("spec_path_not_set"))
     exit(1)
 
 
@@ -159,12 +161,12 @@ class SPEC2006Driver(SPECDriver):
                 x.split('.')[0]))
 
         if spec_bench_list == []:
-            logger.error(f"No bench selected from {self.spec_benches} in {self.spec_name.name}.")
-            raise BenchmarkError(f"No bench selected from {self.spec_benches} in {self.spec_name.name}.")
+            logger.error(self.msg.get("no_bench_selected", benches=self.spec_benches, spec_name=self.spec_name.name))
+            raise BenchmarkError(self.msg.get("no_bench_selected", benches=self.spec_benches, spec_name=self.spec_name.name))
         else:
-            logger.info(f"Selected {len(spec_bench_list)} benches from {self.spec_benches} in {self.spec_name.name}.")
+            logger.info(self.msg.get("selected_benches", count=len(spec_bench_list), benches=self.spec_benches, spec_name=self.spec_name.name))
             for spec_bench in spec_bench_list:
-                logger.debug(f"Selected {spec_bench}.")
+                logger.debug(self.msg.get("selected_bench", bench=spec_bench))
         return spec_bench_list
 
     def get_ref_time(self, bench_name: str, input_type: InputType) -> str:
@@ -192,13 +194,13 @@ class SPEC2006Driver(SPECDriver):
         reftime_path = os.path.join(self.spec_bench_path, bench_name, "data", 
                                     input_type.name, "reftime")
         try:
-            logger.debug(f"Get reftime {bench_name}.{input_type.name} from {reftime_path}.")
+            logger.debug(self.msg.get("get_reftime_from", path=reftime_path, bench=bench_name, input_type=input_type.name))
             with open(reftime_path, 'r') as f:
                 reftime = f.readlines()
             reftime_result = reftime[1].strip()
         except Exception as e:
-            logger.error(f"Failed to get reftime from '{reftime_path}': {str(e)}")
-            raise FileOperationError(f"Failed to get reftime from '{reftime_path}': {str(e)}")
+            logger.error(self.msg.get("get_reftime_error", path=reftime_path, error=str(e)))
+            raise FileOperationError(self.msg.get("get_reftime_error", path=reftime_path, error=str(e)))
 
         if not is_numeric(reftime_result):
             raise FileOperationError(
@@ -233,11 +235,11 @@ class SPEC2006Driver(SPECDriver):
         """
         
         if self.debug_mode:
-            logger.debug(f"Get bench dir with:")
-            logger.debug(f"  action_type: {action_type.name}")
-            logger.debug(f"  tune_type: {tune_type.name}")
-            logger.debug(f"  input_type: {input_type.name}")
-            logger.debug(f"  spec_mode: {spec_mode.name}")
+            logger.debug(self.msg.get("get_bench_dir_with"))
+            logger.debug(self.msg.get("action_type_info", value=action_type.name))
+            logger.debug(self.msg.get("tune_type_info_debug", value=tune_type.name))
+            logger.debug(self.msg.get("input_type_info_debug", value=input_type.name))
+            logger.debug(self.msg.get("spec_mode_info_debug", value=spec_mode.name))
 
         # 确保变量在所有情况下都有值
         if action_type == ActionType.build:
@@ -258,7 +260,7 @@ class SPEC2006Driver(SPECDriver):
                 # 根据动作类型构建完整路径（build或run目录）
                 bench_run_dir = os.path.join(self.spec_bench_path, bench_dir, bench_parent_dir)
                 if self.debug_mode:
-                    logger.debug(f"Bench {bench_dir} run dir: {bench_run_dir}")
+                    logger.debug(self.msg.get("bench_run_dir", bench=bench_dir, path=bench_run_dir))
                     
                 run_dir_path_list = []
 
@@ -266,7 +268,7 @@ class SPEC2006Driver(SPECDriver):
                 
                 # 判断 bench_run_dir 目录是否存在
                 if not os.path.isdir(bench_run_dir):
-                    logger.warning(f"Directory {bench_run_dir} not exist.")
+                    logger.warning(self.msg.get("directory_not_exist", path=bench_run_dir))
                     continue
 
                 # 查找符合前缀的目录
@@ -277,12 +279,12 @@ class SPEC2006Driver(SPECDriver):
                 # 处理查找结果
                 if len(run_dir_path_list) == 0:
                     # 未找到符合条件的目录
-                    logger.warning(f"Bench {os.path.basename(bench_dir)} not found in {bench_dir_perfix}.")
+                    logger.warning(self.msg.get("bench_not_found_in", bench=os.path.basename(bench_dir), prefix=bench_dir_perfix))
                 elif len(run_dir_path_list) > 1:
                     # 找到多个符合条件的目录，选择编号最大的那个（最新的）
-                    logger.warning(f"Bench {os.path.basename(bench_dir)} found in more than one {bench_dir_perfix}.")
+                    logger.warning(self.msg.get("bench_found_multiple", bench=os.path.basename(bench_dir), prefix=bench_dir_perfix))
                     for run_dir_path in run_dir_path_list:
-                        logger.debug(f"Found {run_dir_path}")
+                        logger.debug(self.msg.get("found_path", path=run_dir_path))
                     max = 0
                     selected = run_dir_path_list[0]
                     for run_dir_perfix in run_dir_path_list:
@@ -292,11 +294,11 @@ class SPEC2006Driver(SPECDriver):
                                 max = int(run_dir_perfix.split(".")[-1])
                                 selected = run_dir_perfix
                     selected_bench_dir.append(selected)
-                    logger.warning(f"Bench {os.path.basename(bench_dir)} using {selected}")
+                    logger.warning(self.msg.get("bench_using", bench=os.path.basename(bench_dir), selected=selected))
                 else:
                     # 只找到一个符合条件的目录
                     selected_bench_dir.append(run_dir_path_list[0])
-                    logger.debug(f"Bench {os.path.basename(bench_dir)} using {run_dir_path_list[0]}")
+                    logger.debug(self.msg.get("bench_using", bench=os.path.basename(bench_dir), selected=run_dir_path_list[0]))
 
         return selected_bench_dir
 
@@ -327,14 +329,14 @@ class SPEC2006Driver(SPECDriver):
             binary_name = self.spec_bench_map[bench_name]
             exe_dir = os.path.join(self.spec_bench_path, bench_name, 'exe')
             if not os.path.isdir(exe_dir):
-                logger.warning(f"Directory {exe_dir} not exist.")
+                logger.warning(self.msg.get("directory_not_exist", path=exe_dir))
                 continue
             target_binary = f"{binary_name}_{tune_type.name}.{self.label}"
             binary_path = os.path.join(exe_dir, target_binary)
             if os.path.isfile(binary_path):
                 binary_path_map[bench_name] = binary_path
             else:
-                logger.warning(f"Binary {target_binary} not found in {exe_dir}")
+                logger.warning(self.msg.get("binary_not_found", binary=target_binary, dir=exe_dir))
         return binary_path_map
 
     def _build_run_command(self) -> List[str]:
@@ -376,7 +378,7 @@ class SPEC2006Driver(SPECDriver):
         
         cmd.extend(self.spec_bench_list)
         
-        logger.debug(f"构建runspec命令: {' '.join(cmd)}")
+        logger.debug(self.msg.get("build_runspec_cmd", cmd=' '.join(cmd)))
         return cmd
 
 

@@ -11,6 +11,7 @@ from unittest.mock import MagicMock, patch
 from src.pack_spec.pack_config import (
     SPECName, TuneType, InputType, SPECMode, ActionType,
     PackSPECError, ConfigError, SPEC2006_PATH, SPEC2006_BENCH_PATH,
+    LogLanguage, get_log_messages, DEFAULT_LOG_LANGUAGE,
 )
 from src.pack_spec.pack_utils import PackUtils
 
@@ -44,6 +45,7 @@ class TestSPEC2006DriverBenchSelection:
             driver = SPEC2006Driver.__new__(SPEC2006Driver)
             driver.spec_benches = spec_benches
             driver.spec_name = SPECName.spec2006
+            driver.msg = get_log_messages(DEFAULT_LOG_LANGUAGE)
             driver.spec_bench_list = driver.get_bench_list()
         return driver
 
