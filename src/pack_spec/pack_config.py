@@ -700,6 +700,10 @@ class LogMessages:
             "zh": "无法找到基准测试目录: {bench}",
             "en": "Cannot find benchmark directory: {bench}"
         },
+        "run_dir_not_found_for_qemu": {
+            "zh": "未找到运行目录 {path}，请先执行 pack_run() 生成运行脚本",
+            "en": "Run directory {path} not found, please run pack_run() first to generate run scripts"
+        },
         "copying_bench_qemu": {
             "zh": "复制 {bench}...",
             "en": "Copying {bench}..."

@@ -630,6 +630,12 @@ class TestGenerateQemuVerifyScript:
     """generate_qemu_verify_script 函数测试"""
 
     def test_basic_script(self, temp_dir, spec_bench_map):
+        run_script_path = os.path.join(temp_dir, "run_test.sh")
+        with open(run_script_path, 'w') as f:
+            f.write("#!/bin/bash\n")
+            f.write("# Starting run for copy #0\n")
+            f.write("./perlbench_base.test_label < /dev/null\n")
+        
         with patch('src.pack_spec.pack_utils.QEMU_CMD', 'qemu-aarch64'):
             script_path = generate_qemu_verify_script(
                 "400.perlbench", temp_dir, spec_bench_map,
@@ -640,25 +646,33 @@ class TestGenerateQemuVerifyScript:
         with open(script_path) as f:
             content = f.read()
         assert "perlbench" in content
-        assert "qemu-aarch64" in content
+        assert "$QEMU_CMD ./perlbench_base.test_label" in content
 
-    def test_minimal_mode_script(self, temp_dir, spec_bench_map):
+    def test_script_without_run_file(self, temp_dir, spec_bench_map):
         with patch('src.pack_spec.pack_utils.QEMU_CMD', 'qemu-aarch64'):
             script_path = generate_qemu_verify_script(
                 "400.perlbench", temp_dir, spec_bench_map,
                 TuneType.base, "test_label", InputType.test,
-                "data", temp_dir, minimal_mode=True
+                "data", temp_dir
             )
         assert os.path.exists(script_path)
         with open(script_path) as f:
             content = f.read()
-        assert "#!/bin/sh" in content
+        assert "警告: 未找到 run_test.sh" in content
 
 
 class TestGenerateQemuVerifyAllScript:
     """generate_qemu_verify_all_script 函数测试"""
 
     def test_basic_all_script(self, temp_dir, spec_bench_map):
+        for bench in ["400.perlbench", "401.bzip2"]:
+            bench_dir = os.path.join(temp_dir, bench)
+            os.makedirs(bench_dir, exist_ok=True)
+            run_script_path = os.path.join(bench_dir, "run_test.sh")
+            with open(run_script_path, 'w') as f:
+                f.write("#!/bin/bash\n")
+                f.write(f"./{bench.split('.')[1]}_base.test_label < /dev/null\n")
+        
         with patch('src.pack_spec.pack_utils.QEMU_CMD', 'qemu-aarch64'):
             script_path = generate_qemu_verify_all_script(
                 ["400.perlbench", "401.bzip2"], temp_dir, spec_bench_map,
@@ -669,18 +683,22 @@ class TestGenerateQemuVerifyAllScript:
             content = f.read()
         assert "perlbench" in content
         assert "bzip2" in content
+        assert "$QEMU_CMD" in content
 
-    def test_minimal_mode_all_script(self, temp_dir, spec_bench_map):
+    def test_all_script_without_run_files(self, temp_dir, spec_bench_map):
+        for bench in ["400.perlbench"]:
+            bench_dir = os.path.join(temp_dir, bench)
+            os.makedirs(bench_dir, exist_ok=True)
+        
         with patch('src.pack_spec.pack_utils.QEMU_CMD', 'qemu-aarch64'):
             script_path = generate_qemu_verify_all_script(
                 ["400.perlbench"], temp_dir, spec_bench_map,
-                TuneType.base, "test_label", InputType.test, temp_dir,
-                minimal_mode=True
+                TuneType.base, "test_label", InputType.test, temp_dir
             )
         assert os.path.exists(script_path)
         with open(script_path) as f:
             content = f.read()
-        assert "#!/bin/sh" in content
+        assert "警告: 未找到 run_test.sh" in content
 
 
 class TestPackUtilsExtended:

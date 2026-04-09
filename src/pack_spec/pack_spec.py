@@ -888,13 +888,17 @@ class PackSPEC:
         
         generated_scripts = []
         
-        src_run_bench_dir = self.spec_driver.get_bench_path(
-            ActionType.run, self.tune_type, self.input_type, self.spec_mode
+        src_run_bench_dir = self.utils.get_dest_dir(
+            False, self.auto_mode, PACKMode.run,
+            self.spec_name, self.tune_type, self.input_type, self.spec_mode
         )
         
+        if not os.path.exists(src_run_bench_dir):
+            raise FileOperationError(self.msg.get("run_dir_not_found_for_qemu", path=src_run_bench_dir))
+        
         for bench_name in self.spec_driver.spec_bench_list:
-            src_run_dir = self.utils.get_bench_dir(bench_name, src_run_bench_dir)
-            if src_run_dir == "":
+            src_run_dir = os.path.join(src_run_bench_dir, bench_name)
+            if not os.path.exists(src_run_dir):
                 logger.warning(self.msg.get("bench_dir_not_found_qemu", bench=bench_name))
                 continue
             

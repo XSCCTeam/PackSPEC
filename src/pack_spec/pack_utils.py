@@ -31,7 +31,7 @@ from src.pack_spec.pack_config import (
     PackSPECError, FileOperationError, CommandExecutionError,
     CURRENT_DATE, DEFAULT_CORE_NUM, DEFAULT_LLVM_PROFDATA_PATH,
     DEFAULT_AUTO_MODE,
-    SCRIPTS_PATH, GENERATED_FILES_PATH, logger, QEMU_CMD,
+    SCRIPTS_PATH, GENERATED_FILES_PATH, logger, QEMU_CMD, QEMU_PATH,
     LogLanguage, LogMessages, get_log_messages, DEFAULT_LOG_LANGUAGE
 )
 import subprocess
@@ -1210,6 +1210,47 @@ def generate_markdown_report(results: Dict, config: Dict, output_path: str) -> s
     return output_path
 
 
+def get_qemu_cmd_absolute() -> str:
+    """
+    获取QEMU命令的绝对路径
+    
+    将QEMU_CMD环境变量转换为绝对路径，确保生成的脚本可以在任何目录执行。
+    如果设置了QEMU_PATH，则使用QEMU_PATH作为QEMU命令的前缀目录。
+    
+    Returns:
+        str: QEMU命令的绝对路径
+        
+    Note:
+        如果设置了QEMU_PATH，则使用 {QEMU_PATH}/{qemu_binary} 作为命令路径
+        如果QEMU_CMD已经是绝对路径，则直接返回
+        如果QEMU_CMD是相对路径或命令名，则使用which查找绝对路径
+    """
+    if not QEMU_CMD:
+        return ""
+    
+    qemu_cmd_parts = shlex.split(QEMU_CMD)
+    qemu_binary = qemu_cmd_parts[0]
+    
+    if QEMU_PATH:
+        qemu_absolute = os.path.join(QEMU_PATH, qemu_binary)
+        if os.path.isfile(qemu_absolute):
+            qemu_cmd_parts[0] = qemu_absolute
+            return ' '.join(qemu_cmd_parts)
+    
+    if os.path.isabs(qemu_binary):
+        return QEMU_CMD
+    
+    try:
+        absolute_path = shutil.which(qemu_binary)
+        if absolute_path:
+            qemu_cmd_parts[0] = absolute_path
+            return ' '.join(qemu_cmd_parts)
+    except Exception:
+        pass
+    
+    return QEMU_CMD
+
+
 def build_qemu_command(input_type: InputType, 
                        bench_name: str, spec_bench_map: dict, tune_type: TuneType, 
                        label: str, minimal_mode: bool = False) -> List[str]:
@@ -1254,13 +1295,14 @@ def build_qemu_command(input_type: InputType,
     
     commands = []
     
-    commands.append(f"# QEMU模拟器命令（从环境变量QEMU_CMD获取）")
-    commands.append(f"QEMU_CMD=\"{QEMU_CMD}\"")
+    commands.append(f"# QEMU模拟器配置")
+    commands.append(f"QEMU_PATH=\"{QEMU_PATH if QEMU_PATH else ''}\"")
+    commands.append(f"QEMU_CMD=\"{QEMU_CMD if QEMU_CMD else ''}\"")
     
     commands.extend([
         "",
         "# 运行二进制文件",
-        f"$QEMU_CMD ./{spec_bench_map[bench_name]}_{tune_type.name}.{label} < /dev/null"
+        f"$QEMU_PATH/$QEMU_CMD ./{spec_bench_map[bench_name]}_{tune_type.name}.{label} < /dev/null"
     ])
     
     return commands
@@ -1274,7 +1316,7 @@ def generate_qemu_verify_script(bench_name: str, dest_dir: str,
     """
     生成单个基准测试的QEMU验证脚本
     
-    生成一个bash脚本，使用QEMU模拟器运行编译出的二进制文件，
+    读取现有的 run_{input_type}.sh 脚本，将二进制执行命令替换为使用 QEMU 运行，
     用于验证二进制文件的正确性，不统计运行时间。
     
     Args:
@@ -1296,85 +1338,81 @@ def generate_qemu_verify_script(bench_name: str, dest_dir: str,
         输出日志格式: {output_dir}/{bench_name}_verify.log
     """
     script_path = os.path.join(dest_dir, f"verify_{input_type.name}.sh")
+    run_script_path = os.path.join(dest_dir, f"run_{input_type.name}.sh")
     
-    if minimal_mode:
-        script_content = [
-            "#!/bin/sh",
-            "",
-            "# QEMU验证脚本 - 用于验证编译出的二进制文件是否正确",
-            "# 注意: 此脚本不统计运行时间，仅验证程序能否正确执行",
-            "",
-            "set -e",
-            "",
-            "# 获取脚本所在目录",
-            "SCRIPT_DIR=$(cd \"$(dirname \"$0\")\" && pwd)",
-            "cd \"$SCRIPT_DIR\"",
-            "",
-            "# 定义日志文件（使用相对路径）",
-            "LOG_FILE=\"$SCRIPT_DIR/logs/{}_verify.log\"".format(bench_name),
-            "",
-            "printf \"========================================\\n\" | tee \"$LOG_FILE\"",
-            f"printf \"QEMU验证测试: {bench_name}\\n\" | tee -a \"$LOG_FILE\"",
-            f"printf \"输入类型: {input_type.name}\\n\" | tee -a \"$LOG_FILE\"",
-            f"printf \"优化级别: {tune_type.name}\\n\" | tee -a \"$LOG_FILE\"",
-            "printf \"========================================\\n\" | tee -a \"$LOG_FILE\"",
-            "",
-            "# 解除栈限制",
-            "ulimit -s unlimited",
-            "",
-            "# 创建输出目录",
-            "mkdir -p \"$SCRIPT_DIR/logs\"",
-            "",
-        ]
+    script_header = [
+        "#!/bin/bash",
+        "",
+        "# QEMU验证脚本 - 用于验证编译出的二进制文件是否正确",
+        "# 注意: 此脚本不统计运行时间，仅验证程序能否正确执行",
+        "",
+        "set -e",
+        "",
+        "# 获取脚本所在目录",
+        "SCRIPT_DIR=$(cd \"$(dirname \"$0\")\" && pwd)",
+        "cd \"$SCRIPT_DIR\"",
+        "",
+        "# 定义日志文件（使用相对路径）",
+        "LOG_FILE=\"$SCRIPT_DIR/logs/{}_verify.log\"".format(bench_name),
+        "",
+        "echo \"========================================\" | tee \"$LOG_FILE\"",
+        f"echo \"QEMU验证测试: {bench_name}\" | tee -a \"$LOG_FILE\"",
+        f"echo \"输入类型: {input_type.name}\" | tee -a \"$LOG_FILE\"",
+        f"echo \"优化级别: {tune_type.name}\" | tee -a \"$LOG_FILE\"",
+        "echo \"========================================\" | tee -a \"$LOG_FILE\"",
+        "",
+        "# 解除栈限制",
+        "ulimit -s unlimited",
+        "",
+        "# 创建输出目录",
+        "mkdir -p \"$SCRIPT_DIR/logs\"",
+        "",
+        "# QEMU模拟器配置",
+        f"QEMU_PATH=\"{QEMU_PATH if QEMU_PATH else ''}\"",
+        f"QEMU_CMD=\"{QEMU_CMD if QEMU_CMD else ''}\"",
+        "",
+    ]
+    
+    script_footer = [
+        "",
+        "echo \"\" | tee -a \"$LOG_FILE\"",
+        f"echo \"验证完成: {bench_name}\" | tee -a \"$LOG_FILE\"",
+        "echo \"日志已保存到: $LOG_FILE\"",
+    ]
+    
+    if os.path.exists(run_script_path):
+        with open(run_script_path, 'r', encoding='utf-8') as f:
+            run_script_lines = f.readlines()
+        
+        script_content = script_header.copy()
+        script_content.append("# 以下命令从 run_{}.sh 转换而来，使用 QEMU 运行二进制文件".format(input_type.name))
+        script_content.append("")
+        
+        for line in run_script_lines:
+            stripped = line.strip()
+            if stripped.startswith("#!") or stripped == "":
+                continue
+            if stripped.startswith("./"):
+                qemu_line = "$QEMU_PATH/$QEMU_CMD " + stripped
+                script_content.append(qemu_line)
+            else:
+                script_content.append(stripped)
+        
+        script_content.extend(script_footer)
     else:
-        script_content = [
-            "#!/bin/bash",
-            "",
-            "# QEMU验证脚本 - 用于验证编译出的二进制文件是否正确",
-            "# 注意: 此脚本不统计运行时间，仅验证程序能否正确执行",
-            "",
-            "set -e",
-            "",
-            "# 获取脚本所在目录",
-            "SCRIPT_DIR=$(cd \"$(dirname \"$0\")\" && pwd)",
-            "cd \"$SCRIPT_DIR\"",
-            "",
-            "# 定义日志文件（使用相对路径）",
-            "LOG_FILE=\"$SCRIPT_DIR/logs/{}_verify.log\"".format(bench_name),
-            "",
-            "echo \"========================================\" | tee \"$LOG_FILE\"",
-            f"echo \"QEMU验证测试: {bench_name}\" | tee -a \"$LOG_FILE\"",
-            f"echo \"输入类型: {input_type.name}\" | tee -a \"$LOG_FILE\"",
-            f"echo \"优化级别: {tune_type.name}\" | tee -a \"$LOG_FILE\"",
-            "echo \"========================================\" | tee -a \"$LOG_FILE\"",
-            "",
-            "# 解除栈限制",
-            "ulimit -s unlimited",
-            "",
-            "# 创建输出目录",
-            "mkdir -p \"$SCRIPT_DIR/logs\"",
-            "",
-        ]
-    
-    qemu_commands = build_qemu_command(
-        input_type, bench_name, spec_bench_map, tune_type, label, minimal_mode
-    )
-    script_content.extend(qemu_commands)
-    
-    if minimal_mode:
-        script_content.extend([
-            "",
-            "printf \"\\n\" | tee -a \"$LOG_FILE\"",
-            f"printf \"验证完成: {bench_name}\\n\" | tee -a \"$LOG_FILE\"",
-            "printf \"日志已保存到: %s\\n\" \"$LOG_FILE\"",
-        ])
-    else:
-        script_content.extend([
-            "",
-            "echo \"\" | tee -a \"$LOG_FILE\"",
-            f"echo \"验证完成: {bench_name}\" | tee -a \"$LOG_FILE\"",
-            "echo \"日志已保存到: $LOG_FILE\"",
-        ])
+        script_content = script_header.copy()
+        script_content.append(f"# 警告: 未找到 run_{input_type.name}.sh，使用简化命令")
+        script_content.append("")
+        
+        qemu_commands = build_qemu_command(
+            input_type, bench_name, spec_bench_map, tune_type, label, minimal_mode
+        )
+        for cmd in qemu_commands:
+            if cmd.startswith("#") or cmd == "":
+                script_content.append(cmd)
+            else:
+                script_content.append(cmd)
+        script_content.extend(script_footer)
     
     with open(script_path, 'w', encoding='utf-8') as f:
         f.write('\n'.join(script_content))
@@ -1392,7 +1430,7 @@ def generate_qemu_verify_all_script(bench_list: List[str],
     """
     生成批量QEMU验证脚本
     
-    生成一个统一的脚本，使用QEMU模拟器依次运行所有基准测试，
+    读取每个基准测试的 run_{input_type}.sh 脚本，将二进制执行命令替换为使用 QEMU 运行，
     用于验证所有编译出的二进制文件是否正确。
     
     Args:
@@ -1414,107 +1452,82 @@ def generate_qemu_verify_all_script(bench_list: List[str],
     """
     script_path = os.path.join(dest_dir, f"verify_{input_type.name}_all.sh")
     
-    if minimal_mode:
-        script_content = [
-            "#!/bin/sh",
-            "",
-            "# QEMU批量验证脚本 - 用于验证所有编译出的二进制文件是否正确",
-            "# 注意: 此脚本不统计运行时间，仅验证程序能否正确执行",
-            "",
-            "set -e",
-            "",
-            "# 获取脚本所在目录",
-            "SCRIPT_DIR=$(cd \"$(dirname \"$0\")\" && pwd)",
-            "cd \"$SCRIPT_DIR\"",
-            "",
-            "# 定义总日志文件（使用相对路径）",
-            "TOTAL_LOG=\"$SCRIPT_DIR/logs/verify_all.log\"",
-            "",
-            "printf \"========================================\\n\" | tee \"$TOTAL_LOG\"",
-            f"printf \"QEMU批量验证测试\\n\" | tee -a \"$TOTAL_LOG\"",
-            f"printf \"输入类型: {input_type.name}\\n\" | tee -a \"$TOTAL_LOG\"",
-            f"printf \"优化级别: {tune_type.name}\\n\" | tee -a \"$TOTAL_LOG\"",
-            f"printf \"基准测试数量: {len(bench_list)}\\n\" | tee -a \"$TOTAL_LOG\"",
-            "printf \"========================================\\n\" | tee -a \"$TOTAL_LOG\"",
-            "",
-            "# 解除栈限制",
-            "ulimit -s unlimited",
-            "",
-            "# 创建输出目录",
-            "mkdir -p \"$SCRIPT_DIR/logs\"",
-            "",
-            "# 记录开始时间",
-            "START_TIME=$(date +%s)",
-            "",
-            "# 验证结果统计",
-            "TOTAL_COUNT=0",
-            "SUCCESS_COUNT=0",
-            "FAIL_COUNT=0",
-            "",
-        ]
-    else:
-        script_content = [
-            "#!/bin/bash",
-            "",
-            "# QEMU批量验证脚本 - 用于验证所有编译出的二进制文件是否正确",
-            "# 注意: 此脚本不统计运行时间，仅验证程序能否正确执行",
-            "",
-            "set -e",
-            "",
-            "# 获取脚本所在目录",
-            "SCRIPT_DIR=$(cd \"$(dirname \"$0\")\" && pwd)",
-            "cd \"$SCRIPT_DIR\"",
-            "",
-            "# 定义总日志文件（使用相对路径）",
-            "TOTAL_LOG=\"$SCRIPT_DIR/logs/verify_all.log\"",
-            "",
-            "echo \"========================================\" | tee \"$TOTAL_LOG\"",
-            f"echo \"QEMU批量验证测试\" | tee -a \"$TOTAL_LOG\"",
-            f"echo \"输入类型: {input_type.name}\" | tee -a \"$TOTAL_LOG\"",
-            f"echo \"优化级别: {tune_type.name}\" | tee -a \"$TOTAL_LOG\"",
-            f"echo \"基准测试数量: {len(bench_list)}\" | tee -a \"$TOTAL_LOG\"",
-            "echo \"========================================\" | tee -a \"$TOTAL_LOG\"",
-            "",
-            "# 解除栈限制",
-            "ulimit -s unlimited",
-            "",
-            "# 创建输出目录",
-            "mkdir -p \"$SCRIPT_DIR/logs\"",
-            "",
-            "# 记录开始时间",
-            "START_TIME=$(date +%s)",
-            "",
-            "# 验证结果统计",
-            "TOTAL_COUNT=0",
-            "SUCCESS_COUNT=0",
-            "FAIL_COUNT=0",
-            "",
-        ]
+    script_content = [
+        "#!/bin/bash",
+        "",
+        "# QEMU批量验证脚本 - 用于验证所有编译出的二进制文件是否正确",
+        "# 注意: 此脚本不统计运行时间，仅验证程序能否正确执行",
+        "",
+        "set -e",
+        "",
+        "# 获取脚本所在目录",
+        "SCRIPT_DIR=$(cd \"$(dirname \"$0\")\" && pwd)",
+        "cd \"$SCRIPT_DIR\"",
+        "",
+        "# 定义总日志文件（使用相对路径）",
+        "TOTAL_LOG=\"$SCRIPT_DIR/logs/verify_all.log\"",
+        "",
+        "echo \"========================================\" | tee \"$TOTAL_LOG\"",
+        f"echo \"QEMU批量验证测试\" | tee -a \"$TOTAL_LOG\"",
+        f"echo \"输入类型: {input_type.name}\" | tee -a \"$TOTAL_LOG\"",
+        f"echo \"优化级别: {tune_type.name}\" | tee -a \"$TOTAL_LOG\"",
+        f"echo \"基准测试数量: {len(bench_list)}\" | tee -a \"$TOTAL_LOG\"",
+        "echo \"========================================\" | tee -a \"$TOTAL_LOG\"",
+        "",
+        "# 解除栈限制",
+        "ulimit -s unlimited",
+        "",
+        "# 创建输出目录",
+        "mkdir -p \"$SCRIPT_DIR/logs\"",
+        "",
+        "# QEMU模拟器配置",
+        f"QEMU_PATH=\"{QEMU_PATH if QEMU_PATH else ''}\"",
+        f"QEMU_CMD=\"{QEMU_CMD if QEMU_CMD else ''}\"",
+        "",
+        "# 记录开始时间",
+        "START_TIME=$(date +%s)",
+        "",
+        "# 验证结果统计",
+        "TOTAL_COUNT=0",
+        "SUCCESS_COUNT=0",
+        "FAIL_COUNT=0",
+        "",
+    ]
     
     for bench_name in bench_list:
-        if minimal_mode:
-            script_content.extend([
-                f"# 验证 {bench_name}",
-                f"printf \"\\n\" | tee -a \"$TOTAL_LOG\"",
-                f"printf \"验证 {bench_name}...\\n\" | tee -a \"$TOTAL_LOG\"",
-                f"cd \"$SCRIPT_DIR/{bench_name}\"",
-                "",
-            ])
+        run_script_path = os.path.join(dest_dir, bench_name, f"run_{input_type.name}.sh")
+        
+        script_content.extend([
+            f"# 验证 {bench_name}",
+            f"echo \"\" | tee -a \"$TOTAL_LOG\"",
+            f"echo \"验证 {bench_name}...\" | tee -a \"$TOTAL_LOG\"",
+            f"cd \"$SCRIPT_DIR/{bench_name}\"",
+            "",
+        ])
+        
+        if os.path.exists(run_script_path):
+            with open(run_script_path, 'r', encoding='utf-8') as f:
+                run_script_lines = f.readlines()
+            
+            for line in run_script_lines:
+                stripped = line.strip()
+                if stripped.startswith("#!") or stripped == "":
+                    continue
+                if stripped.startswith("./"):
+                    qemu_line = "$QEMU_PATH/$QEMU_CMD " + stripped + " | tee -a \"$TOTAL_LOG\""
+                    script_content.append(qemu_line)
+                else:
+                    script_content.append(stripped)
         else:
-            script_content.extend([
-                f"# 验证 {bench_name}",
-                f"echo \"\" | tee -a \"$TOTAL_LOG\"",
-                f"echo \"验证 {bench_name}...\" | tee -a \"$TOTAL_LOG\"",
-                f"cd \"$SCRIPT_DIR/{bench_name}\"",
-                "",
-            ])
-        
-        qemu_commands = build_qemu_command(
-            input_type, bench_name, spec_bench_map, tune_type, label, minimal_mode
-        )
-        
-        for cmd in qemu_commands:
-            script_content.append(f"{cmd} | tee -a \"$TOTAL_LOG\"")
+            script_content.append(f"# 警告: 未找到 run_{input_type.name}.sh，使用简化命令")
+            qemu_commands = build_qemu_command(
+                input_type, bench_name, spec_bench_map, tune_type, label, minimal_mode
+            )
+            for cmd in qemu_commands:
+                if cmd.startswith("#") or cmd == "":
+                    script_content.append(cmd)
+                else:
+                    script_content.append(f"{cmd} | tee -a \"$TOTAL_LOG\"")
         
         script_content.extend([
             "cd \"$SCRIPT_DIR\"",
@@ -1522,32 +1535,18 @@ def generate_qemu_verify_all_script(bench_list: List[str],
             "",
         ])
     
-    if minimal_mode:
-        script_content.extend([
-            "# 记录结束时间",
-            "END_TIME=$(date +%s)",
-            "ELAPSED_TIME=$((END_TIME - START_TIME))",
-            "",
-            "printf \"\\n\" | tee -a \"$TOTAL_LOG\"",
-            "printf \"========================================\\n\" | tee -a \"$TOTAL_LOG\"",
-            "printf \"验证完成\\n\" | tee -a \"$TOTAL_LOG\"",
-            "printf \"总测试数: %d\\n\" $TOTAL_COUNT | tee -a \"$TOTAL_LOG\"",
-            "printf \"总耗时: %d 秒\\n\" $ELAPSED_TIME | tee -a \"$TOTAL_LOG\"",
-            "printf \"========================================\\n\" | tee -a \"$TOTAL_LOG\"",
-        ])
-    else:
-        script_content.extend([
-            "# 记录结束时间",
-            "END_TIME=$(date +%s)",
-            "ELAPSED_TIME=$((END_TIME - START_TIME))",
-            "",
-            "echo \"\" | tee -a \"$TOTAL_LOG\"",
-            "echo \"========================================\" | tee -a \"$TOTAL_LOG\"",
-            "echo \"验证完成\" | tee -a \"$TOTAL_LOG\"",
-            "echo \"总测试数: $TOTAL_COUNT\" | tee -a \"$TOTAL_LOG\"",
-            "echo \"总耗时: $ELAPSED_TIME 秒\" | tee -a \"$TOTAL_LOG\"",
-            "echo \"========================================\" | tee -a \"$TOTAL_LOG\"",
-        ])
+    script_content.extend([
+        "# 记录结束时间",
+        "END_TIME=$(date +%s)",
+        "ELAPSED_TIME=$((END_TIME - START_TIME))",
+        "",
+        "echo \"\" | tee -a \"$TOTAL_LOG\"",
+        "echo \"========================================\" | tee -a \"$TOTAL_LOG\"",
+        "echo \"验证完成\" | tee -a \"$TOTAL_LOG\"",
+        "echo \"总测试数: $TOTAL_COUNT\" | tee -a \"$TOTAL_LOG\"",
+        "echo \"总耗时: $ELAPSED_TIME 秒\" | tee -a \"$TOTAL_LOG\"",
+        "echo \"========================================\" | tee -a \"$TOTAL_LOG\"",
+    ])
     
     with open(script_path, 'w', encoding='utf-8') as f:
         f.write('\n'.join(script_content))

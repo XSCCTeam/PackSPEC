@@ -12,7 +12,7 @@ if __name__ == "__main__":
         # 任务配置
         "task": {
             # 打包任务名称
-            "pack_name": "riscv_llvm22_base_ldstdensity",
+            "pack_name": "riscv_llvm22_base",
 
             # 是否setup SPEC CPU 2006/2017
             # 也就是是否编译SPEC基准测试，默认为 False
