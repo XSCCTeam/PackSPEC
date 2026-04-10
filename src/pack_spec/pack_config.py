@@ -58,17 +58,42 @@ CURRENT_TIME = datetime.now().strftime("%y%m%d_%H%M%S")
 HOME_PATH = os.path.expanduser("~")
 """用户主目录路径"""
 
-LOGGER_PATH = os.path.join(P_PATH, "log", f"PackSpec_{CURRENT_TIME}.log")
-"""日志文件路径"""
+def setup_logger(pack_generated_dir: str) -> str:
+    """
+    配置日志记录器，设置日志文件路径
+    
+    Args:
+        pack_generated_dir (str): 打包生成的目录路径（如 generated_files/{date}_{pack_name} 或 generated_files/{pack_name}）
+        
+    Returns:
+        str: 日志文件路径
+        
+    Note:
+        日志文件路径格式: {pack_generated_dir}/log/PackSpec_{CURRENT_TIME}.log
+    """
+    global CURRENT_TIME
+    
+    CURRENT_TIME = datetime.now().strftime("%y%m%d_%H%M%S")
+    
+    log_dir = os.path.join(pack_generated_dir, "log")
+    os.makedirs(log_dir, exist_ok=True)
+    
+    log_path = os.path.join(log_dir, f"PackSpec_{CURRENT_TIME}.log")
+    
+    logger.remove()
+    logger.add(sys.stderr, level="INFO")
+    logger.add(
+        log_path,
+        level="DEBUG",
+        rotation="8 MB",
+    )
+    
+    return log_path
+
 
 logger.remove()
 logger.add(sys.stderr, level="INFO")
-logger.add(
-    LOGGER_PATH,
-    level="DEBUG",
-    rotation="8 MB",
-)
-"""配置loguru日志记录器"""
+"""默认配置loguru日志记录器，仅输出到stderr，等待setup_logger设置文件输出"""
 
 PACK_PATH = os.path.join(P_PATH, "packed_files")
 """打包输出目录路径"""
@@ -435,6 +460,10 @@ class LogMessages:
         "config_saved": {
             "zh": "PackSPEC 配置文件已保存到: {path}",
             "en": "PackSPEC config file saved to: {path}"
+        },
+        "cfg_copied_to": {
+            "zh": "配置文件已复制: {src} -> {dest}",
+            "en": "Config file copied: {src} -> {dest}"
         },
         "bench_dir_not_found": {
             "zh": "未找到基准测试目录: {bench_name}",

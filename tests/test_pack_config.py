@@ -18,7 +18,7 @@ from src.pack_spec.pack_config import (
     DEFAULT_VERIFY_MODE, DEFAULT_MINIMAL_MODE, DEFAULT_RUN_MODE,
     DEFAULT_REPORT_FORMAT, DEFAULT_LOG_LANGUAGE, RANDOM_SUFFIX_LENGTH,
     P_PATH, SCRIPTS_PATH, GENERATED_FILES_PATH,
-    LogMessages, get_log_messages,
+    LogMessages, get_log_messages, setup_logger,
 )
 
 
@@ -288,3 +288,52 @@ class TestEnvLoading:
     def test_qemu_path_type(self):
         from src.pack_spec.pack_config import QEMU_PATH
         assert QEMU_PATH is None or isinstance(QEMU_PATH, str)
+
+
+class TestSetupLogger:
+    """setup_logger 函数测试"""
+
+    def test_setup_logger_returns_log_path(self):
+        import tempfile
+        
+        with tempfile.TemporaryDirectory() as tmpdir:
+            pack_dir = os.path.join(tmpdir, "test_pack")
+            log_path = setup_logger(pack_dir)
+            assert log_path is not None
+            assert "test_pack" in log_path
+            assert "log" in log_path
+            assert "PackSpec_" in log_path
+
+    def test_setup_logger_creates_log_dir(self):
+        import tempfile
+        
+        with tempfile.TemporaryDirectory() as tmpdir:
+            pack_dir = os.path.join(tmpdir, "test_pack")
+            log_dir = os.path.join(pack_dir, "log")
+            assert not os.path.exists(log_dir)
+            
+            log_path = setup_logger(pack_dir)
+            
+            assert os.path.exists(log_dir)
+            assert os.path.dirname(log_path) == log_dir
+
+    def test_setup_logger_log_path_format(self):
+        import tempfile
+        
+        with tempfile.TemporaryDirectory() as tmpdir:
+            pack_dir = os.path.join(tmpdir, "260409_my_test_pack")
+            log_path = setup_logger(pack_dir)
+            
+            assert log_path.endswith(".log")
+            assert "260409_my_test_pack" in log_path
+            assert "PackSpec_" in log_path
+
+    def test_setup_logger_with_date_prefix(self):
+        import tempfile
+        
+        with tempfile.TemporaryDirectory() as tmpdir:
+            pack_dir = os.path.join(tmpdir, "260409_test_pack")
+            log_path = setup_logger(pack_dir)
+            
+            assert "260409_test_pack" in log_path
+            assert "log" in log_path

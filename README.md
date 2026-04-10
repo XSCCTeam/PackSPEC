@@ -231,6 +231,8 @@ packer.run()
 | `iterations` | int | 测试迭代次数 | 3 |
 | `rebuild` | bool | 是否重新构建 | False |
 
+**注意：** 为保护源配置文件不被修改，setup 操作前会自动将 cfg 文件复制到 `generated_files/{pack_name}/cfg/` 目录，然后使用复制后的文件进行 setup 操作。
+
 #### pack_config 配置项
 
 | 参数 | 类型 | 说明 | 默认值 |
@@ -240,6 +242,7 @@ packer.run()
 | `profile_gen` | bool | Profile 生成模式 | False |
 | `auto_mode` | bool | 自动模式，无需确认 | False |
 | `verify_mode` | bool | QEMU 验证模式 | False |
+| `qemu_verify_parallel_jobs` | int | QEMU 验证并行任务数，0 表示使用 CPU 核心数-2 | 0 |
 | `minimal_mode` | bool | 极简模式 | False |
 | `report_format` | str | 报告格式（json/markdown） | json |
 
@@ -356,6 +359,10 @@ packer.run()  # 根据配置自动执行相应操作
 generated_files/
 └── {date}_{pack_name}/
     ├── {date}_{pack_name}.json          # 配置文件
+    ├── log/
+    │   └── PackSpec_{time}.log          # 日志文件
+    ├── cfg/
+    │   └── {config}.cfg                 # 复制的配置文件
     ├── bin/
     │   └── spec2017_bin_{pack_name}.{tune_type}_{input_type}_{spec_mode}/
     │       ├── 600.perlbench_s/
@@ -380,6 +387,10 @@ generated_files/
 generated_files/
 └── {pack_name}/
     ├── {pack_name}.json                 # 配置文件
+    ├── log/
+    │   └── PackSpec_{time}.log          # 日志文件
+    ├── cfg/
+    │   └── {config}.cfg                 # 复制的配置文件
     ├── bin/
     │   └── ...
     └── run/

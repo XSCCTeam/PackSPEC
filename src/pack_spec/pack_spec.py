@@ -52,7 +52,8 @@ from src.pack_spec.pack_config import (
     DEFAULT_RUN_MODE, DEFAULT_REPORT_FORMAT, RESULTS_OUTPUT_PATH,
     QEMU_PATH, DEFAULT_VERIFY_MODE, DEFAULT_MINIMAL_MODE,
     BOSC_API_KEY, BOSC_AT_USER, P_PATH, logger, GENERATED_FILES_PATH,
-    LogLanguage, LogMessages, get_log_messages, DEFAULT_LOG_LANGUAGE
+    LogLanguage, LogMessages, get_log_messages, DEFAULT_LOG_LANGUAGE,
+    setup_logger
 )
 from src.pack_spec.pack_utils import PackUtils, load_pack_spec_cfg, parse_spec_results, generate_json_report, generate_markdown_report, generate_qemu_verify_script, generate_qemu_verify_all_script
 from src.pack_spec.spec_2006_driver import SPEC2006Driver, SPEC2006V1P01Driver
@@ -137,6 +138,7 @@ class PackSPEC:
             print(config["spec_config"]["spec_benches"])
             self.init_date = config.get('date', CURRENT_DATE)
             self.init_pack_spec(config)
+            self.log_path = setup_logger(self.utils.get_pack_generated_dir_path())
             
             
         elif isinstance(config, dict):
@@ -144,6 +146,7 @@ class PackSPEC:
             self.init_pack_spec(config)
             # 从配置字典中提取参数，设置默认值
             self.pack_generated_files_path = self.utils.create_generated_dir(self.auto_mode)
+            self.log_path = setup_logger(self.utils.get_pack_generated_dir_path())
             config['date'] = self.init_date
             self.utils.save_pack_spec_cfg(config)
         else:
@@ -195,6 +198,7 @@ class PackSPEC:
         self.report_format = pack_config.get('report_format', DEFAULT_REPORT_FORMAT)
         self.verify_mode = pack_config.get('verify_mode', DEFAULT_VERIFY_MODE)
         self.minimal_mode = pack_config.get('minimal_mode', DEFAULT_MINIMAL_MODE)
+        self.qemu_verify_parallel_jobs = pack_config.get('qemu_verify_parallel_jobs', 0)
         
         # 消息发送配置
         msg_config = config.get('msg_config', {})
@@ -596,13 +600,30 @@ class PackSPEC:
         执行SPEC基准测试的编译和设置
         
         调用SPEC驱动执行setup操作，包括：
+        - 将cfg文件复制到generated_files目录（保护源文件）
         - 解析SPEC配置文件
         - 编译基准测试二进制文件
         - 准备运行目录和输入数据
         
         该方法是对spec_driver.run_setup_spec的封装，
         使用实例初始化时配置的tune_type、input_type和rebuild参数。
+        
+        Note:
+            为保护源cfg文件不被修改，setup前会将cfg文件复制到
+            generated_files目录，然后使用复制后的文件进行setup操作。
         """
+        src_cfg_path = self.spec_cfg_path
+        cfg_filename = os.path.basename(src_cfg_path)
+        
+        dest_cfg_dir = os.path.join(self.utils.get_pack_generated_dir_path(), "cfg")
+        os.makedirs(dest_cfg_dir, exist_ok=True)
+        dest_cfg_path = os.path.join(dest_cfg_dir, cfg_filename)
+        
+        import shutil
+        shutil.copy2(src_cfg_path, dest_cfg_path)
+        logger.info(self.msg.get("cfg_copied_to", src=src_cfg_path, dest=dest_cfg_path))
+        
+        self.spec_driver.spec_cfg_path = dest_cfg_path
         self.spec_driver.run_setup_spec(self.tune_type, self.input_type, rebuild=self.rebuild)
 
     def _process_tune_input_combinations(self, func, *args, **kwargs):
@@ -936,7 +957,8 @@ class PackSPEC:
             label=self.spec_driver.label,
             input_type=self.input_type,
             output_dir=logs_dir,
-            minimal_mode=self.minimal_mode
+            minimal_mode=self.minimal_mode,
+            parallel_jobs=self.qemu_verify_parallel_jobs
         )
         generated_scripts.append(all_script_path)
         logger.success(self.msg.get("batch_verify_script_generated", path=all_script_path))

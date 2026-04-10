@@ -260,6 +260,7 @@ class PackUtils:
         pack_name (str): 打包任务名称
         logger (Any): 日志记录器实例
         init_date (str): 初始化日期
+        overwrite_confirmed (bool): 用户是否已确认覆盖
         
     Example:
         >>> utils = PackUtils(config, logger)
@@ -283,6 +284,7 @@ class PackUtils:
         self.auto_mode = pack_config.get('auto_mode', DEFAULT_AUTO_MODE)
         self.logger = logger
         self.init_date = config.get('date', CURRENT_DATE)
+        self.overwrite_confirmed = False
         
         # 日志语言配置
         language_str = msg_config.get('log_language', 'zh').lower()
@@ -343,10 +345,15 @@ class PackUtils:
             str: 目标目录路径
             
         Note:
-            输出目录格式: {GENERATED_FILES_PATH}/{date}_{pack_name}/{bin|run}/{spec_name}_{pack_mode}_{pack_name}.{tune_type}_{input_type}_{spec_mode}
+            输出目录格式:
+            - auto_mode=True: {GENERATED_FILES_PATH}/{pack_name}/{bin|run}/{spec_name}_{pack_mode}_{pack_name}.{tune_type}_{input_type}_{spec_mode}
+            - auto_mode=False: {GENERATED_FILES_PATH}/{date}_{pack_name}/{bin|run}/{date}_{spec_name}_{pack_mode}_{pack_name}.{tune_type}_{input_type}_{spec_mode}
         """
         test_name = f"{self.pack_name}.{tune_type.name}_{input_type.name}_{spec_mode.name}"
         dest_bench_name = f"{spec_name.name}_{pack_mode.name}_{test_name}"
+        
+        if not auto_mode:
+            dest_bench_name = f"{self.init_date}_{dest_bench_name}"
         
         if profile_gen:
             dest_bench_name = f"{dest_bench_name}_profilegen"
@@ -454,10 +461,11 @@ class PackUtils:
         # 检查目录是否已存在
         if os.path.exists(pack_generated_dir_path):
             self.logger.warning(self.msg.get("pack_dir_exists", path=pack_generated_dir_path))
-            if not auto_mode:
+            if not auto_mode and not self.overwrite_confirmed:
                 self.logger.debug(self.msg.get("continue_prompt"))
                 choice = input(self.msg.get("continue_prompt"))
-            if auto_mode == True or choice.lower() == 'y':
+            if auto_mode == True or self.overwrite_confirmed or choice.lower() == 'y':
+                self.overwrite_confirmed = True
                 os.makedirs(pack_generated_dir_path, exist_ok=True)
                 self.logger.info(self.msg.get("pack_dir_created", path=pack_generated_dir_path))
             else:
@@ -532,10 +540,11 @@ class PackUtils:
                                            spec_name, tune_type, input_type, spec_mode)
         if os.path.exists(dest_bench_dir):
             self.logger.warning(self.msg.get("dest_dir_exists", path=dest_bench_dir))
-            if not auto_mode:
+            if not auto_mode and not self.overwrite_confirmed:
                 self.logger.debug(self.msg.get("overwrite_prompt"))
                 choice = input(self.msg.get("overwrite_prompt"))
-            if auto_mode == True or choice.lower() == 'y':
+            if auto_mode == True or self.overwrite_confirmed or choice.lower() == 'y':
+                self.overwrite_confirmed = True
                 self.logger.debug(self.msg.get("overwriting_dir", path=dest_bench_dir))
                 shutil.rmtree(dest_bench_dir)
                 os.makedirs(dest_bench_dir, exist_ok=False)
@@ -1426,9 +1435,10 @@ def generate_qemu_verify_all_script(bench_list: List[str],
                                     dest_dir: str, spec_bench_map: dict,
                                     tune_type: TuneType, label: str, 
                                     input_type: InputType, output_dir: str,
-                                    minimal_mode: bool = False) -> str:
+                                    minimal_mode: bool = False,
+                                    parallel_jobs: int = 0) -> str:
     """
-    生成批量QEMU验证脚本
+    生成批量QEMU验证脚本（支持并行执行）
     
     读取每个基准测试的 run_{input_type}.sh 脚本，将二进制执行命令替换为使用 QEMU 运行，
     用于验证所有编译出的二进制文件是否正确。
@@ -1442,6 +1452,7 @@ def generate_qemu_verify_all_script(bench_list: List[str],
         input_type (InputType): 输入数据集类型
         output_dir (str): 输出日志目录
         minimal_mode (bool): 是否启用极简模式，默认为False
+        parallel_jobs (int): 并行任务数，0表示使用CPU核心数，默认为0
         
     Returns:
         str: 生成的脚本文件路径
@@ -1449,14 +1460,21 @@ def generate_qemu_verify_all_script(bench_list: List[str],
     Note:
         脚本名称格式: verify_{input_type}_all.sh
         每个基准测试的输出保存在各自的日志文件中
+        并行执行可大幅提高验证效率
     """
     script_path = os.path.join(dest_dir, f"verify_{input_type.name}_all.sh")
+    
+    if parallel_jobs <= 0:
+        parallel_jobs_str = '$(($(nproc) - 2))'
+    else:
+        parallel_jobs_str = str(parallel_jobs)
     
     script_content = [
         "#!/bin/bash",
         "",
         "# QEMU批量验证脚本 - 用于验证所有编译出的二进制文件是否正确",
         "# 注意: 此脚本不统计运行时间，仅验证程序能否正确执行",
+        "# 支持并行执行以提高验证效率",
         "",
         "set -e",
         "",
@@ -1472,6 +1490,7 @@ def generate_qemu_verify_all_script(bench_list: List[str],
         f"echo \"输入类型: {input_type.name}\" | tee -a \"$TOTAL_LOG\"",
         f"echo \"优化级别: {tune_type.name}\" | tee -a \"$TOTAL_LOG\"",
         f"echo \"基准测试数量: {len(bench_list)}\" | tee -a \"$TOTAL_LOG\"",
+        f"echo \"并行任务数: {parallel_jobs_str}\" | tee -a \"$TOTAL_LOG\"",
         "echo \"========================================\" | tee -a \"$TOTAL_LOG\"",
         "",
         "# 解除栈限制",
@@ -1484,6 +1503,9 @@ def generate_qemu_verify_all_script(bench_list: List[str],
         f"QEMU_PATH=\"{QEMU_PATH if QEMU_PATH else ''}\"",
         f"QEMU_CMD=\"{QEMU_CMD if QEMU_CMD else ''}\"",
         "",
+        "# 并行任务数（可通过环境变量覆盖）",
+        f"PARALLEL_JOBS=${{PARALLEL_JOBS:-{parallel_jobs_str}}}",
+        "",
         "# 记录开始时间",
         "START_TIME=$(date +%s)",
         "",
@@ -1492,50 +1514,120 @@ def generate_qemu_verify_all_script(bench_list: List[str],
         "SUCCESS_COUNT=0",
         "FAIL_COUNT=0",
         "",
+        "# 当前运行任务数",
+        "RUNNING_JOBS=0",
+        "",
+        "# 结果目录",
+        "RESULT_DIR=\"$SCRIPT_DIR/logs/results\"",
+        "mkdir -p \"$RESULT_DIR\"",
+        "",
+        "# 运行单个基准测试的函数",
+        "run_bench() {",
+        "    local bench_name=\"$1\"",
+        "    local bench_log=\"$RESULT_DIR/${bench_name}.log\"",
+        "    local bench_status=\"$RESULT_DIR/${bench_name}.status\"",
+        "    ",
+        "    echo \"[$(date '+%H:%M:%S')] 开始验证: $bench_name\" | tee -a \"$TOTAL_LOG\"",
+        "    ",
+        "    cd \"$SCRIPT_DIR/$bench_name\"",
+        "    ",
+        "    if $QEMU_PATH/$QEMU_CMD ./{binary} > \"$bench_log\" 2>&1; then",
+        "        echo \"success\" > \"$bench_status\"",
+        "        echo \"[$(date '+%H:%M:%S')] ✓ 完成: $bench_name\" | tee -a \"$TOTAL_LOG\"",
+        "    else",
+        "        echo \"failed\" > \"$bench_status\"",
+        "        echo \"[$(date '+%H:%M:%S')] ✗ 失败: $bench_name\" | tee -a \"$TOTAL_LOG\"",
+        "    fi",
+        "    ",
+        "    cd \"$SCRIPT_DIR\"",
+        "}",
+        "",
+        "# 等待任务槽位可用",
+        "wait_for_slot() {",
+        "    while [ $RUNNING_JOBS -ge $PARALLEL_JOBS ]; do",
+        "        wait -n 2>/dev/null || true",
+        "        RUNNING_JOBS=$((RUNNING_JOBS - 1))",
+        "    done",
+        "}",
+        "",
+        "# 收集所有后台任务",
+        "collect_results() {",
+        "    wait",
+        "    RUNNING_JOBS=0",
+        "}",
+        "",
     ]
     
     for bench_name in bench_list:
         run_script_path = os.path.join(dest_dir, bench_name, f"run_{input_type.name}.sh")
+        binary_name = f"{spec_bench_map.get(bench_name, bench_name)}_{tune_type.name}.{label}"
         
         script_content.extend([
             f"# 验证 {bench_name}",
-            f"echo \"\" | tee -a \"$TOTAL_LOG\"",
-            f"echo \"验证 {bench_name}...\" | tee -a \"$TOTAL_LOG\"",
-            f"cd \"$SCRIPT_DIR/{bench_name}\"",
-            "",
+            "wait_for_slot",
+            f"(",
+            f"    bench_name=\"{bench_name}\"",
+            f"    bench_log=\"$RESULT_DIR/{bench_name}.log\"",
+            f"    bench_status=\"$RESULT_DIR/{bench_name}.status\"",
+            f"    ",
+            f"    echo \"[$(date '+%H:%M:%S')] 开始验证: $bench_name\" | tee -a \"$TOTAL_LOG\"",
+            f"    ",
+            f"    cd \"$SCRIPT_DIR/{bench_name}\"",
         ])
         
         if os.path.exists(run_script_path):
             with open(run_script_path, 'r', encoding='utf-8') as f:
                 run_script_lines = f.readlines()
             
+            script_content.append(f"    if (")
             for line in run_script_lines:
                 stripped = line.strip()
                 if stripped.startswith("#!") or stripped == "":
                     continue
                 if stripped.startswith("./"):
-                    qemu_line = "$QEMU_PATH/$QEMU_CMD " + stripped + " | tee -a \"$TOTAL_LOG\""
+                    qemu_line = "        $QEMU_PATH/$QEMU_CMD " + stripped[2:]
                     script_content.append(qemu_line)
                 else:
-                    script_content.append(stripped)
+                    script_content.append(f"    {stripped}")
+            script_content.append(f"    ) > \"$bench_log\" 2>&1; then")
         else:
-            script_content.append(f"# 警告: 未找到 run_{input_type.name}.sh，使用简化命令")
-            qemu_commands = build_qemu_command(
-                input_type, bench_name, spec_bench_map, tune_type, label, minimal_mode
-            )
-            for cmd in qemu_commands:
-                if cmd.startswith("#") or cmd == "":
-                    script_content.append(cmd)
-                else:
-                    script_content.append(f"{cmd} | tee -a \"$TOTAL_LOG\"")
+            script_content.append(f"    # 警告: 未找到 run_{input_type.name}.sh，使用简化命令")
+            script_content.append(f"    if $QEMU_PATH/$QEMU_CMD ./{binary_name} > \"$bench_log\" 2>&1; then")
         
         script_content.extend([
-            "cd \"$SCRIPT_DIR\"",
-            "TOTAL_COUNT=$((TOTAL_COUNT + 1))",
-            "",
+            f"        echo \"success\" > \"$bench_status\"",
+            f"        echo \"[$(date '+%H:%M:%S')] ✓ 完成: $bench_name\" | tee -a \"$TOTAL_LOG\"",
+            f"    else",
+            f"        echo \"failed\" > \"$bench_status\"",
+            f"        echo \"[$(date '+%H:%M:%S')] ✗ 失败: $bench_name\" | tee -a \"$TOTAL_LOG\"",
+            f"    fi",
+            f"    ",
+            f"    cd \"$SCRIPT_DIR\"",
+            f") &",
+            f"RUNNING_JOBS=$((RUNNING_JOBS + 1))",
+            f"TOTAL_COUNT=$((TOTAL_COUNT + 1))",
+            f"echo \"进度: $TOTAL_COUNT/{len(bench_list)} (运行中: $RUNNING_JOBS)\"",
+            f"",
         ])
     
     script_content.extend([
+        "# 等待所有任务完成",
+        "echo \"\"",
+        "echo \"等待所有任务完成...\"",
+        "wait",
+        "",
+        "# 统计结果",
+        "for status_file in \"$RESULT_DIR\"/*.status; do",
+        "    if [ -f \"$status_file\" ]; then",
+        "        status=$(cat \"$status_file\")",
+        "        if [ \"$status\" = \"success\" ]; then",
+        "            SUCCESS_COUNT=$((SUCCESS_COUNT + 1))",
+        "        else",
+        "            FAIL_COUNT=$((FAIL_COUNT + 1))",
+        "        fi",
+        "    fi",
+        "done",
+        "",
         "# 记录结束时间",
         "END_TIME=$(date +%s)",
         "ELAPSED_TIME=$((END_TIME - START_TIME))",
@@ -1544,8 +1636,23 @@ def generate_qemu_verify_all_script(bench_list: List[str],
         "echo \"========================================\" | tee -a \"$TOTAL_LOG\"",
         "echo \"验证完成\" | tee -a \"$TOTAL_LOG\"",
         "echo \"总测试数: $TOTAL_COUNT\" | tee -a \"$TOTAL_LOG\"",
+        "echo \"成功: $SUCCESS_COUNT\" | tee -a \"$TOTAL_LOG\"",
+        "echo \"失败: $FAIL_COUNT\" | tee -a \"$TOTAL_LOG\"",
         "echo \"总耗时: $ELAPSED_TIME 秒\" | tee -a \"$TOTAL_LOG\"",
         "echo \"========================================\" | tee -a \"$TOTAL_LOG\"",
+        "",
+        "# 显示失败的测试",
+        "if [ $FAIL_COUNT -gt 0 ]; then",
+        "    echo \"\"",
+        "    echo \"失败的测试:\" | tee -a \"$TOTAL_LOG\"",
+        "    for status_file in \"$RESULT_DIR\"/*.status; do",
+        "        status=$(cat \"$status_file\")",
+        "        if [ \"$status\" = \"failed\" ]; then",
+        "            bench_name=$(basename \"$status_file\" .status)",
+        "            echo \"  - $bench_name\" | tee -a \"$TOTAL_LOG\"",
+        "        fi",
+        "    done",
+        "fi",
     ])
     
     with open(script_path, 'w', encoding='utf-8') as f:

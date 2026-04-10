@@ -700,6 +700,78 @@ class TestGenerateQemuVerifyAllScript:
             content = f.read()
         assert "警告: 未找到 run_test.sh" in content
 
+    def test_parallel_script_generation(self, temp_dir, spec_bench_map):
+        """测试并行脚本生成功能"""
+        for bench in ["400.perlbench", "401.bzip2", "403.gcc"]:
+            bench_dir = os.path.join(temp_dir, bench)
+            os.makedirs(bench_dir, exist_ok=True)
+            run_script_path = os.path.join(bench_dir, "run_test.sh")
+            with open(run_script_path, 'w') as f:
+                f.write("#!/bin/bash\n")
+                f.write(f"./{bench.split('.')[1]}_base.test_label < /dev/null\n")
+        
+        with patch('src.pack_spec.pack_utils.QEMU_CMD', 'qemu-aarch64'):
+            script_path = generate_qemu_verify_all_script(
+                ["400.perlbench", "401.bzip2", "403.gcc"], temp_dir, spec_bench_map,
+                TuneType.base, "test_label", InputType.test, temp_dir,
+                parallel_jobs=4
+            )
+        assert os.path.exists(script_path)
+        with open(script_path) as f:
+            content = f.read()
+        assert "PARALLEL_JOBS" in content
+        assert "parallel_jobs=4" not in content
+        assert "PARALLEL_JOBS=4" in content or "PARALLEL_JOBS=${PARALLEL_JOBS:-4}" in content
+        assert "wait_for_slot" in content
+        assert "&" in content
+        assert "wait" in content
+
+    def test_parallel_script_default_jobs(self, temp_dir, spec_bench_map):
+        """测试默认并行数量（使用CPU核心数-2）"""
+        for bench in ["400.perlbench"]:
+            bench_dir = os.path.join(temp_dir, bench)
+            os.makedirs(bench_dir, exist_ok=True)
+            run_script_path = os.path.join(bench_dir, "run_test.sh")
+            with open(run_script_path, 'w') as f:
+                f.write("#!/bin/bash\n")
+                f.write("./perlbench_base.test_label < /dev/null\n")
+        
+        with patch('src.pack_spec.pack_utils.QEMU_CMD', 'qemu-aarch64'):
+            script_path = generate_qemu_verify_all_script(
+                ["400.perlbench"], temp_dir, spec_bench_map,
+                TuneType.base, "test_label", InputType.test, temp_dir,
+                parallel_jobs=0
+            )
+        assert os.path.exists(script_path)
+        with open(script_path) as f:
+            content = f.read()
+        assert "$(nproc)" in content
+        assert "$(($(nproc) - 2))" in content
+
+    def test_parallel_script_result_statistics(self, temp_dir, spec_bench_map):
+        """测试结果统计功能"""
+        for bench in ["400.perlbench"]:
+            bench_dir = os.path.join(temp_dir, bench)
+            os.makedirs(bench_dir, exist_ok=True)
+            run_script_path = os.path.join(bench_dir, "run_test.sh")
+            with open(run_script_path, 'w') as f:
+                f.write("#!/bin/bash\n")
+                f.write("./perlbench_base.test_label < /dev/null\n")
+        
+        with patch('src.pack_spec.pack_utils.QEMU_CMD', 'qemu-aarch64'):
+            script_path = generate_qemu_verify_all_script(
+                ["400.perlbench"], temp_dir, spec_bench_map,
+                TuneType.base, "test_label", InputType.test, temp_dir,
+                parallel_jobs=2
+            )
+        with open(script_path) as f:
+            content = f.read()
+        assert "SUCCESS_COUNT" in content
+        assert "FAIL_COUNT" in content
+        assert "RESULT_DIR" in content
+        assert "成功:" in content or "SUCCESS" in content
+        assert "失败:" in content or "FAIL" in content
+
 
 class TestPackUtilsExtended:
     """PackUtils 扩展方法测试"""

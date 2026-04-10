@@ -229,3 +229,106 @@ class TestPackSPECRun:
         packer.pack_qemu_verify.assert_not_called()
         assert result["steps"] == []
         assert result["success"] is True
+
+
+class TestSetupSpecCfgIsolation:
+    """setup_spec 配置文件隔离测试"""
+
+    @patch('src.pack_spec.pack_spec.setup_logger')
+    @patch('src.pack_spec.pack_spec.SPEC2006Driver')
+    @patch('src.pack_spec.pack_spec.PackUtils')
+    @patch('src.pack_spec.pack_spec.os.makedirs')
+    @patch('src.pack_spec.pack_spec.shutil.copy2')
+    @patch('src.pack_spec.pack_spec.os.path.exists')
+    @patch('src.pack_spec.pack_spec.os.path.join')
+    @patch('src.pack_spec.pack_spec.os.path.basename')
+    def test_setup_spec_copies_cfg_file(
+        self, mock_basename, mock_join, mock_exists, mock_copy2, mock_makedirs,
+        mock_utils_cls, mock_driver_cls, mock_setup_logger
+    ):
+        """测试 setup_spec 会复制 cfg 文件到 generated_files 目录"""
+        mock_basename.return_value = "test.cfg"
+        mock_join.side_effect = lambda *args: "/".join(args)
+        mock_exists.return_value = True
+        mock_setup_logger.return_value = "/tmp/test/log/PackSpec_test.log"
+        
+        mock_utils_instance = MagicMock()
+        mock_utils_instance.create_generated_dir.return_value = "/tmp/test"
+        mock_utils_instance.get_pack_generated_dir_path.return_value = "/tmp/test"
+        mock_utils_instance.save_pack_spec_cfg = MagicMock()
+        mock_utils_instance.msg = MagicMock()
+        mock_utils_instance.msg.get = MagicMock(return_value="test message")
+        mock_utils_cls.return_value = mock_utils_instance
+        
+        mock_driver_instance = MagicMock()
+        mock_driver_instance.spec_cfg_path = "/original/path/test.cfg"
+        mock_driver_cls.return_value = mock_driver_instance
+        
+        config = {
+            "task": {"pack_name": "test"},
+            "spec_config": {
+                "spec_cfg_path": "/original/path/test.cfg",
+                "spec_name": SPECName.spec2006,
+                "tune_type": TuneType.base,
+                "input_type": InputType.test,
+                "spec_mode": SPECMode.speed,
+                "spec_benches": "all",
+            },
+            "pack_config": {"auto_mode": True},
+        }
+        
+        packer = PackSPEC(config)
+        packer.spec_cfg_path = "/original/path/test.cfg"
+        packer.setup_spec()
+        
+        mock_makedirs.assert_called()
+        mock_copy2.assert_called_once()
+
+    @patch('src.pack_spec.pack_spec.setup_logger')
+    @patch('src.pack_spec.pack_spec.SPEC2006Driver')
+    @patch('src.pack_spec.pack_spec.PackUtils')
+    @patch('src.pack_spec.pack_spec.os.makedirs')
+    @patch('src.pack_spec.pack_spec.shutil.copy2')
+    @patch('src.pack_spec.pack_spec.os.path.exists')
+    @patch('src.pack_spec.pack_spec.os.path.join')
+    @patch('src.pack_spec.pack_spec.os.path.basename')
+    def test_setup_spec_uses_copied_cfg(
+        self, mock_basename, mock_join, mock_exists, mock_copy2, mock_makedirs,
+        mock_utils_cls, mock_driver_cls, mock_setup_logger
+    ):
+        """测试 setup_spec 使用复制后的 cfg 文件路径"""
+        mock_basename.return_value = "test.cfg"
+        mock_join.side_effect = lambda *args: "/".join(args)
+        mock_exists.return_value = True
+        mock_setup_logger.return_value = "/tmp/test/log/PackSpec_test.log"
+        
+        mock_utils_instance = MagicMock()
+        mock_utils_instance.create_generated_dir.return_value = "/tmp/test"
+        mock_utils_instance.get_pack_generated_dir_path.return_value = "/tmp/test"
+        mock_utils_instance.save_pack_spec_cfg = MagicMock()
+        mock_utils_instance.msg = MagicMock()
+        mock_utils_instance.msg.get = MagicMock(return_value="test message")
+        mock_utils_cls.return_value = mock_utils_instance
+        
+        mock_driver_instance = MagicMock()
+        mock_driver_instance.spec_cfg_path = "/original/path/test.cfg"
+        mock_driver_cls.return_value = mock_driver_instance
+        
+        config = {
+            "task": {"pack_name": "test"},
+            "spec_config": {
+                "spec_cfg_path": "/original/path/test.cfg",
+                "spec_name": SPECName.spec2006,
+                "tune_type": TuneType.base,
+                "input_type": InputType.test,
+                "spec_mode": SPECMode.speed,
+                "spec_benches": "all",
+            },
+            "pack_config": {"auto_mode": True},
+        }
+        
+        packer = PackSPEC(config)
+        packer.spec_cfg_path = "/original/path/test.cfg"
+        packer.setup_spec()
+        
+        assert mock_driver_instance.spec_cfg_path == "/tmp/test/cfg/test.cfg"

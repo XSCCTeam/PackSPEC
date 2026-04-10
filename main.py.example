@@ -35,6 +35,9 @@ if __name__ == "__main__":
         # SPEC基准测试相关配置
         "spec_config": {
             # SPEC cfg 文件绝对路径
+            # 注意：setup 操作前会自动将 cfg 文件复制到 generated_files/{pack_name}/cfg/ 目录
+            # 以保护源配置文件不被修改
+            # 日志文件会自动保存到 generated_files/{pack_name}/log/ 目录
             "spec_cfg_path": "example.cfg",
 
             # SPEC基准测试版本选择
@@ -86,7 +89,7 @@ if __name__ == "__main__":
         },
         # PackSPEC打包相关配置
         "pack_config": {
-            # 测试运行绑定的核心编号, 不设置则不绑定
+            # 测试运行绑定的核心编号，设置为 -1 则不绑定
             # 仅在生成运行脚本时生效，不影响二进制打包
             "test_core_num": 4,
 
@@ -115,6 +118,12 @@ if __name__ == "__main__":
             # 用于验证编译出的二进制文件是否正确
             # 需要在 .env 中配置 QEMU_PATH 环境变量
             "verify_mode": True,
+
+            # QEMU验证并行任务数，默认为 0（使用 CPU 核心数-2）
+            # 用于并行执行多个测试子项，提高验证效率
+            # 设置为 0 时自动使用系统 CPU 核心数-2，避免占用所有核心导致服务器卡死
+            # 设置为 1 时串行执行
+            "qemu_verify_parallel_jobs": 0,
 
             # 是否开启极简模式，默认为 False
             # 开启后生成的脚本使用 POSIX 兼容语法，降低对运行环境的要求

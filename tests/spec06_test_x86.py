@@ -21,7 +21,7 @@ if __name__ == "__main__":
 
             # 是否setup SPEC CPU 2006/2017
             # 也就是是否编译SPEC基准测试，默认为 False
-            "setup_spec": False,
+            "setup_spec": True,
 
             # 是否打包二进制文件，默认为 True
             "pack_binaries": True,
@@ -113,6 +113,12 @@ if __name__ == "__main__":
             # 用于验证编译出的二进制文件是否正确
             # 需要在 .env 中配置 QEMU_PATH 环境变量
             "verify_mode": False,
+
+            # QEMU验证并行任务数，默认为 0（使用 CPU 核心数-2）
+            # 用于并行执行多个测试子项，提高验证效率
+            # 设置为 0 时自动使用系统 CPU 核心数-2，避免占用所有核心导致服务器卡死
+            # 设置为 1 时串行执行
+            "qemu_verify_parallel_jobs": 0,
 
             # 是否开启极简模式，默认为 False
             # 开启后生成的脚本使用 POSIX 兼容语法，降低对运行环境的要求
