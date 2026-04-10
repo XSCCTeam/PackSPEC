@@ -21,7 +21,7 @@ if __name__ == "__main__":
 
             # 是否setup SPEC CPU 2006/2017
             # 也就是是否编译SPEC基准测试，默认为 False
-            "setup_spec": True,
+            "setup_spec": False,
 
             # 是否打包二进制文件，默认为 True
             "pack_binaries": True,
@@ -62,7 +62,7 @@ if __name__ == "__main__":
             #   InputType.train: 训练输入数据集(中等)
             #   InputType.ref:   参考输入数据集(最大)
             #   InputType.all:   包含所有输入数据集
-            "input_type": InputType.test,
+            "input_type": InputType.ref,
 
             # SPEC基准测试运行模式
             # 可选值：

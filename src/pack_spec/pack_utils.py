@@ -115,11 +115,31 @@ class EnumDecoder(json.JSONDecoder):
     """字段名到枚举类的映射，用于自动转换"""
 
     def __init__(self, *args, **kwargs):
-        """初始化解码器，设置object_hook"""
+        """
+        初始化解码器，设置object_hook
+
+        创建EnumDecoder实例时，自动将_object_hook方法设置为JSON解码的object_hook，
+        以便在解码过程中自动将字符串转换为对应的枚举类型。
+
+        Args:
+            *args: 传递给父类json.JSONDecoder的位置参数
+            **kwargs: 传递给父类json.JSONDecoder的关键字参数
+        """
         super().__init__(*args, object_hook=self._object_hook, **kwargs)
     
     def _object_hook(self, obj: Dict[str, Any]) -> Dict[str, Any]:
-        """对象钩子，处理字典对象"""
+        """
+        对象钩子，处理字典对象
+
+        作为JSON解码的object_hook回调，在解码过程中对每个字典对象
+        调用_convert_enums方法，将其中的枚举字段从字符串转换为对应的枚举类型。
+
+        Args:
+            obj (Dict[str, Any]): JSON解码产生的字典对象
+
+        Returns:
+            Dict[str, Any]: 经过枚举转换处理后的字典对象
+        """
         return self._convert_enums(obj)
     
     def _convert_enums(self, obj: Any, parent_key: str = None) -> Any:
@@ -299,6 +319,15 @@ class PackUtils:
     def save_pack_spec_cfg(self, pack_spec_cfg: dict):
         """
         保存PackSPEC配置文件
+
+        将配置字典以JSON格式保存到打包生成的配置文件路径，
+        自动添加初始化日期字段，并使用EnumEncoder处理枚举类型的序列化。
+
+        Args:
+            pack_spec_cfg (dict): 要保存的配置字典，枚举类型字段会被自动序列化为名称字符串
+
+        Returns:
+            None: 无返回值
         """
         pack_spec_cfg_path = self.get_pack_generated_file_path()
         pack_spec_cfg["date"] = self.init_date
@@ -454,6 +483,20 @@ class PackUtils:
     def create_generated_dir(self, auto_mode: bool = False):
         """
         创建生成的文件目录
+
+        创建GENERATED_FILES_PATH根目录和打包生成的子目录。
+        如果子目录已存在，在非自动模式下会提示用户确认是否覆盖；
+        在自动模式下直接覆盖。
+
+        Args:
+            auto_mode (bool, optional): 是否自动模式，默认为False。
+                自动模式下不提示用户确认，直接覆盖已存在的目录
+
+        Returns:
+            str: 创建的打包生成目录的完整路径
+
+        Raises:
+            PackSPECError: 当非自动模式下用户选择不覆盖已存在的目录时抛出
         """
         os.makedirs(GENERATED_FILES_PATH, exist_ok=True)
         self.logger.info(self.msg.get("generated_dir_created", path=GENERATED_FILES_PATH))

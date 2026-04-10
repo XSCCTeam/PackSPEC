@@ -385,6 +385,8 @@ class PackSPEC:
                 logger.error(self.msg.get("run_test_script_failed", dir=dest_dir))
                 raise CommandExecutionError(self.msg.get("run_test_script_failed", dir=dest_dir))
 
+            self.spec_driver.execute_specdiff(src_run_dir, dest_dir, input_type)
+
             self.create_test_script(self.spec_driver.label, bench_name, self.test_core_num, dest_dir, tune_type, input_type)
 
         if dest_dir_list != []:

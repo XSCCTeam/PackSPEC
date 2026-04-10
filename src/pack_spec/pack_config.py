@@ -36,11 +36,13 @@ from enum import Enum
 from dotenv import load_dotenv
 
 
+# 三级dirname: 当前文件 -> src/pack_spec -> src -> 项目根目录
 P_PATH = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 """项目根目录的绝对路径"""
 
 # 自动加载 .env 文件
 _env_file = os.path.join(P_PATH, ".env")
+# 检查文件存在再加载，避免load_dotenv在文件不存在时抛出异常或产生意外行为
 if os.path.exists(_env_file):
     load_dotenv(_env_file)
 
@@ -73,6 +75,7 @@ def setup_logger(pack_generated_dir: str) -> str:
     """
     global CURRENT_TIME
     
+    # 更新全局变量以获取setup_logger调用时的精确时间戳，确保日志文件名与实际时间一致
     CURRENT_TIME = datetime.now().strftime("%y%m%d_%H%M%S")
     
     log_dir = os.path.join(pack_generated_dir, "log")
@@ -80,6 +83,7 @@ def setup_logger(pack_generated_dir: str) -> str:
     
     log_path = os.path.join(log_dir, f"PackSpec_{CURRENT_TIME}.log")
     
+    # 先移除loguru默认handler，再添加自定义handler，避免日志重复输出
     logger.remove()
     logger.add(sys.stderr, level="INFO")
     logger.add(
@@ -383,6 +387,7 @@ DEFAULT_LLVM_PATH = os.getenv('DEFAULT_LLVM_PATH')
 """默认LLVM安装路径，从环境变量获取"""
 
 if DEFAULT_LLVM_PATH != None:
+    # llvm-profdata用于合并多个profraw文件为单个profdata文件，是Profile Guided Optimization的关键工具
     DEFAULT_LLVM_PROFDATA_PATH = os.path.join(DEFAULT_LLVM_PATH, "bin", "llvm-profdata")
     """llvm-profdata工具路径，用于合并profile文件"""
 else:
@@ -936,6 +941,10 @@ class LogMessages:
         "no_starting_run_found": {
             "zh": "命令输出中未找到 '# Starting run'",
             "en": "No '# Starting run' found in command output"
+        },
+        "no_specdiff_commands_found": {
+            "zh": "compare.cmd 中未找到 specdiff 命令",
+            "en": "No specdiff commands found in compare.cmd"
         },
         "successfully_created_file": {
             "zh": "成功创建文件: {path}",

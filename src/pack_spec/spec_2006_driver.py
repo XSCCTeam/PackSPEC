@@ -402,6 +402,19 @@ class SPEC2006V1P01Driver(SPEC2006Driver):
                  iterations: int = 3,
                  rebuild: bool = False,
                  ):
+        """
+        初始化SPEC2006V1P01Driver实例
+        
+        Args:
+            spec_cfg_path (str): SPEC配置文件的绝对路径
+            tune_type (TuneType): 优化级别(base/peak)
+            input_type (InputType): 输入数据集类型(test/train/ref)
+            spec_mode (SPECMode): 运行模式(speed/rate)
+            spec_benches (str): 基准测试选择字符串，支持"all"/"int"/"fp"或具体编号
+            utils (PackUtils): 工具类实例
+            iterations (int, optional): 测试迭代次数，默认3
+            rebuild (bool, optional): 是否重新构建，默认False
+        """
         super().__init__(spec_cfg_path, tune_type, input_type, spec_mode, 
                          spec_benches, utils, iterations, rebuild)
         # TODO: 目前v1.0.1版本的SPEC2006打包即将被废弃

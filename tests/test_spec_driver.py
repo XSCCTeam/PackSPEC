@@ -96,3 +96,112 @@ class TestSPEC2006DriverAttributes:
         assert driver.spec_mode == SPECMode.speed
         assert driver.iterations == 1
         assert driver.rebuild is False
+
+
+class TestExecuteSpecdiff:
+    """execute_specdiff 方法测试"""
+
+    def test_execute_specdiff_creates_script(self):
+        import tempfile
+        
+        from src.pack_spec.spec_driver import SPECDriver
+        with patch.object(SPECDriver, '__init__', lambda self, *args, **kwargs: None):
+            driver = SPECDriver.__new__(SPECDriver)
+            driver.spec_dir = "/fake/spec"
+            driver.msg = get_log_messages(DEFAULT_LOG_LANGUAGE)
+            driver.utils = MagicMock()
+            driver.utils.execute_commands.return_value = [
+                "# Starting run for copy #0",
+                "cd /path/to/run_dir",
+                "specperl /fake/spec/bin/specdiff -m -l 10 /path/to/ref.out output.out > output.cmp"
+            ]
+            
+            with tempfile.TemporaryDirectory() as tmpdir:
+                result = driver.execute_specdiff("/path/to/src", tmpdir, InputType.test)
+                
+                assert result == True
+                script_path = os.path.join(tmpdir, "specdiff_test.sh")
+                assert os.path.exists(script_path)
+                specdiff_output_dir = os.path.join(tmpdir, "specdiff_output")
+                assert os.path.exists(specdiff_output_dir)
+
+    def test_execute_specdiff_no_commands(self):
+        import tempfile
+        
+        from src.pack_spec.spec_driver import SPECDriver
+        with patch.object(SPECDriver, '__init__', lambda self, *args, **kwargs: None):
+            driver = SPECDriver.__new__(SPECDriver)
+            driver.spec_dir = "/fake/spec"
+            driver.msg = get_log_messages(DEFAULT_LOG_LANGUAGE)
+            driver.utils = MagicMock()
+            driver.utils.execute_commands.return_value = []
+            
+            with tempfile.TemporaryDirectory() as tmpdir:
+                result = driver.execute_specdiff("/path/to/src", tmpdir, InputType.test)
+                
+                assert result == False
+
+    def test_execute_specdiff_processes_commands(self):
+        import tempfile
+        
+        from src.pack_spec.spec_driver import SPECDriver
+        with patch.object(SPECDriver, '__init__', lambda self, *args, **kwargs: None):
+            driver = SPECDriver.__new__(SPECDriver)
+            driver.spec_dir = "/fake/spec"
+            driver.msg = get_log_messages(DEFAULT_LOG_LANGUAGE)
+            driver.utils = MagicMock()
+            driver.utils.execute_commands.return_value = [
+                "# some header",
+                "# Starting run for copy #0",
+                "cd /src/dir",
+                "specperl /fake/spec/bin/specdiff -m -l 10 /ref/out1.out out1.out > out1.cmp",
+                "# Starting run for copy #0",
+                "cd /src/dir",
+                "specperl /fake/spec/bin/specdiff -m -l 10 /ref/out2.out out2.out > out2.cmp",
+            ]
+            
+            with tempfile.TemporaryDirectory() as tmpdir:
+                result = driver.execute_specdiff("/src/dir", tmpdir, InputType.ref)
+                
+                assert result == True
+                script_path = os.path.join(tmpdir, "specdiff_ref.sh")
+                with open(script_path, 'r') as f:
+                    content = f.read()
+                assert "#!/bin/bash" in content
+                assert "specdiff" in content
+                assert "cd /src/dir" not in content
+
+    def test_execute_specdiff_copies_ref_output(self):
+        import tempfile
+        
+        from src.pack_spec.spec_driver import SPECDriver
+        with patch.object(SPECDriver, '__init__', lambda self, *args, **kwargs: None):
+            driver = SPECDriver.__new__(SPECDriver)
+            driver.spec_dir = "/fake/spec"
+            driver.msg = get_log_messages(DEFAULT_LOG_LANGUAGE)
+            driver.utils = MagicMock()
+            
+            with tempfile.TemporaryDirectory() as tmpdir:
+                ref_file = os.path.join(tmpdir, "ref_output.out")
+                with open(ref_file, 'w') as f:
+                    f.write("test reference output")
+                
+                driver.utils.execute_commands.return_value = [
+                    "# Starting run for copy #0",
+                    f"specdiff -m -l 10 {ref_file} output.out > output.cmp"
+                ]
+                
+                dest_dir = os.path.join(tmpdir, "dest")
+                os.makedirs(dest_dir)
+                result = driver.execute_specdiff("/src/dir", dest_dir, InputType.test)
+                
+                assert result == True
+                specdiff_output_dir = os.path.join(dest_dir, "specdiff_output")
+                assert os.path.exists(specdiff_output_dir)
+                copied_file = os.path.join(specdiff_output_dir, "ref_output.out")
+                assert os.path.exists(copied_file)
+                
+                script_path = os.path.join(dest_dir, "specdiff_test.sh")
+                with open(script_path, 'r') as f:
+                    content = f.read()
+                assert "specdiff_output/ref_output.out" in content

@@ -402,6 +402,85 @@ class SPECDriver:
         
         return True
 
+    def execute_specdiff(self, src_dir: str, dest_dir: str, input_type: InputType) -> bool:
+        """
+        执行specinvoke命令解析compare.cmd文件，生成specdiff验证脚本
+        
+        类似于execute_specinvoke，但解析的是compare.cmd文件，
+        提取specdiff命令用于验证测试输出正确性。
+        
+        Args:
+            src_dir (str): 源目录路径，包含compare.cmd文件
+            dest_dir (str): 目标目录路径，生成的脚本将保存在此
+            input_type (InputType): 输入数据集类型
+            
+        Returns:
+            bool: 如果成功创建specdiff脚本文件则返回True
+            
+        Note:
+            - 生成的脚本会去除cd命令和绝对路径引用
+            - 参考输出文件会被复制到specdiff_output目录
+            - 脚本具有可执行权限(0o755)
+        """
+        import shutil
+        
+        specinvoke = os.path.join(self.spec_dir, "bin", "specinvoke")
+        specinvoke_cmd = f"{specinvoke} -nn compare.cmd"
+        
+        src_dir_name = os.path.basename(src_dir)
+        
+        commands = self.utils.execute_commands(specinvoke_cmd, dest_dir)
+        start_index = -1
+        
+        for i, line in enumerate(commands):
+            if line.strip().startswith("# Starting run"):
+                start_index = i
+                break
+        
+        if start_index != -1:
+            commands = commands[start_index:]
+        else:
+            logger.warning(self.msg.get("no_starting_run_found"))
+        
+        specdiff_output_dir = os.path.join(dest_dir, "specdiff_output")
+        os.makedirs(specdiff_output_dir, exist_ok=True)
+        
+        processed_commands = []
+        for line in commands:
+            line = line.replace(f"cd {src_dir}", "")
+            line = line.replace(src_dir, ".")
+            line = line.replace(f"../{src_dir_name}/", f"./")
+            line = line.replace(f"specperl {self.spec_dir}/bin/specdiff", "specdiff")
+            
+            if line.strip().startswith("specdiff") and ">" in line:
+                parts = line.strip().split()
+                for part in parts:
+                    if os.path.isabs(part) and os.path.exists(part):
+                        ref_output_path = part
+                        ref_filename = os.path.basename(ref_output_path)
+                        dest_path = os.path.join(specdiff_output_dir, ref_filename)
+                        shutil.copy2(ref_output_path, dest_path)
+                        line = line.replace(ref_output_path, f"specdiff_output/{ref_filename}")
+                        break
+            
+            if not line.startswith("specinvoke") and line.strip():
+                processed_commands.append(line)
+        
+        if not processed_commands:
+            logger.warning(self.msg.get("no_specdiff_commands_found"))
+            return False
+        
+        output_file = os.path.join(dest_dir, f"specdiff_{input_type.name}.sh")
+        with open(output_file, 'w') as f:
+            f.write("#!/bin/bash\n")
+            f.write("\n".join(processed_commands))
+        
+        os.chmod(output_file, 0o755)
+        
+        logger.success(self.msg.get("successfully_created_file", path=output_file))
+        
+        return True
+
     def _check_spec_environment(self) -> bool:
         """
         检查SPEC环境是否正确配置

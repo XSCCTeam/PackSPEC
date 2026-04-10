@@ -22,9 +22,10 @@ from src.pack_spec.pack_spec import PackSPEC
 class TestPackSPECInit:
     """PackSPEC 类初始化测试"""
 
+    @patch('src.pack_spec.pack_spec.setup_logger')
     @patch('src.pack_spec.pack_spec.SPEC2006Driver')
     @patch('src.pack_spec.pack_spec.PackUtils')
-    def test_init_with_dict_config(self, mock_utils_cls, mock_driver_cls):
+    def test_init_with_dict_config(self, mock_utils_cls, mock_driver_cls, mock_setup_logger):
         config = {
             "task": {"pack_name": "test"},
             "spec_config": {
@@ -39,9 +40,11 @@ class TestPackSPECInit:
         }
         mock_utils_instance = MagicMock()
         mock_utils_instance.create_generated_dir.return_value = "/tmp/test"
+        mock_utils_instance.get_pack_generated_dir_path.return_value = "/tmp/test"
         mock_utils_instance.save_pack_spec_cfg = MagicMock()
         mock_utils_cls.return_value = mock_utils_instance
         mock_driver_cls.return_value = MagicMock()
+        mock_setup_logger.return_value = "/tmp/test/log/test.log"
         packer = PackSPEC(config)
         assert packer.pack_name == "test"
 
@@ -55,10 +58,13 @@ class TestPackSPECInitPackSpec:
 
     def _create_packer(self, config):
         with patch('src.pack_spec.pack_spec.PackUtils') as mock_utils_cls, \
-             patch('src.pack_spec.pack_spec.SPEC2006Driver') as mock_driver:
+             patch('src.pack_spec.pack_spec.SPEC2006Driver') as mock_driver, \
+             patch('src.pack_spec.pack_spec.setup_logger') as mock_setup_logger:
             mock_utils_cls.return_value = MagicMock()
             mock_utils_cls.return_value.create_generated_dir.return_value = "/tmp/test"
+            mock_utils_cls.return_value.get_pack_generated_dir_path.return_value = "/tmp/test"
             mock_utils_cls.return_value.save_pack_spec_cfg = MagicMock()
+            mock_setup_logger.return_value = "/tmp/test/log/test.log"
             return PackSPEC(config)
 
     def test_task_config_parsing(self, base_config):
@@ -144,10 +150,13 @@ class TestPackSPECInitPackSpec:
             "pack_config": {"auto_mode": True},
         }
         with patch('src.pack_spec.pack_spec.PackUtils') as mock_utils_cls, \
-             patch('src.pack_spec.pack_spec.SPEC2017Driver') as mock_driver:
+             patch('src.pack_spec.pack_spec.SPEC2017Driver') as mock_driver, \
+             patch('src.pack_spec.pack_spec.setup_logger') as mock_setup_logger:
             mock_utils_cls.return_value = MagicMock()
             mock_utils_cls.return_value.create_generated_dir.return_value = "/tmp/test"
+            mock_utils_cls.return_value.get_pack_generated_dir_path.return_value = "/tmp/test"
             mock_utils_cls.return_value.save_pack_spec_cfg = MagicMock()
+            mock_setup_logger.return_value = "/tmp/test/log/test.log"
             packer = PackSPEC(config)
             assert packer.spec_name == SPECName.spec2017
 
@@ -157,10 +166,13 @@ class TestPackSPECRun:
 
     def _create_packer_with_mocks(self, config):
         with patch('src.pack_spec.pack_spec.PackUtils') as mock_utils_cls, \
-             patch('src.pack_spec.pack_spec.SPEC2006Driver') as mock_driver:
+             patch('src.pack_spec.pack_spec.SPEC2006Driver') as mock_driver, \
+             patch('src.pack_spec.pack_spec.setup_logger') as mock_setup_logger:
             mock_utils_cls.return_value = MagicMock()
             mock_utils_cls.return_value.create_generated_dir.return_value = "/tmp/test"
+            mock_utils_cls.return_value.get_pack_generated_dir_path.return_value = "/tmp/test"
             mock_utils_cls.return_value.save_pack_spec_cfg = MagicMock()
+            mock_setup_logger.return_value = "/tmp/test/log/test.log"
             packer = PackSPEC(config)
         return packer
 
