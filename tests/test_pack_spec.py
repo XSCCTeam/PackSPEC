@@ -128,8 +128,8 @@ class TestPackSPECInitPackSpec:
         packer = self._create_packer(config)
         assert packer.pack_name == "packspec"
         assert packer.setup_spec_enabled is False
-        assert packer.pack_binaries_enabled is True
-        assert packer.pack_benches_enabled is True
+        assert packer.pack_binaries_enabled is False
+        assert packer.pack_benches_enabled is False
         assert packer.msg_enabled is False
 
     def test_spec2017_driver_creation(self):

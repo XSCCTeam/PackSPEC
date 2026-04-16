@@ -249,19 +249,19 @@ def build_arg_parser() -> argparse.ArgumentParser:
         "--setup-spec",
         dest="setup_spec",
         action="store_true",
-        help="是否执行 setup",
+        help="执行 setup 编译",
     )
     parser.add_argument(
-        "--no-pack-binaries",
-        dest="no_pack_binaries",
+        "--pack-binaries",
+        dest="pack_binaries",
         action="store_true",
-        help="不打包二进制",
+        help="打包二进制文件（需配合 --setup-spec 使用）",
     )
     parser.add_argument(
-        "--no-pack-benches",
-        dest="no_pack_benches",
+        "--pack-benches",
+        dest="pack_benches",
         action="store_true",
-        help="不打包测试环境",
+        help="打包完整测试环境（需配合 --setup-spec 使用）",
     )
     parser.add_argument(
         "--enable-dingtalk-message",
@@ -346,10 +346,10 @@ def build_config(parser: argparse.ArgumentParser, args: argparse.Namespace) -> d
         task_config["pack_name"] = args.pack_name
     if "setup_spec" in explicit:
         task_config["setup_spec"] = args.setup_spec
-    if "no_pack_binaries" in explicit:
-        task_config["pack_binaries"] = not args.no_pack_binaries
-    if "no_pack_benches" in explicit:
-        task_config["pack_benches"] = not args.no_pack_benches
+    if "pack_binaries" in explicit:
+        task_config["pack_binaries"] = args.pack_binaries
+    if "pack_benches" in explicit:
+        task_config["pack_benches"] = args.pack_benches
     if run_mode is not None:
         task_config["run_mode"] = run_mode
 

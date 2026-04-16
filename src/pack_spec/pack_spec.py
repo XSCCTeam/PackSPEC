@@ -16,8 +16,8 @@ PackSPEC - SPEC CPU基准测试打包工具主模块
         "task": {
             "pack_name": "my_test",
             "setup_spec": False,
-            "pack_binaries": True,
-            "pack_benches": True,
+            "pack_binaries": False,
+            "pack_benches": False,
         },
         "spec_config": {
             "spec_cfg_path": "/path/to/config.cfg",
@@ -90,8 +90,8 @@ class PackSPEC:
         ...     "task": {
         ...         "pack_name": "test_pack",
         ...         "setup_spec": False,
-        ...         "pack_binaries": True,
-        ...         "pack_benches": True,
+        ...         "pack_binaries": False,
+        ...         "pack_benches": False,
         ...     },
         ...     "spec_config": {
         ...         "spec_cfg_path": "/path/to/spec.cfg",
@@ -169,8 +169,8 @@ class PackSPEC:
         task_config = config.get('task', {})
         self.pack_name = task_config.get('pack_name', 'packspec')
         self.setup_spec_enabled = task_config.get('setup_spec', False)
-        self.pack_binaries_enabled = task_config.get('pack_binaries', True)
-        self.pack_benches_enabled = task_config.get('pack_benches', True)
+        self.pack_binaries_enabled = task_config.get('pack_binaries', False)
+        self.pack_benches_enabled = task_config.get('pack_benches', False)
         self.run_mode = task_config.get('run_mode', DEFAULT_RUN_MODE)
         
         # SPEC基准测试相关配置
@@ -993,8 +993,8 @@ class PackSPEC:
             ...     "task": {
             ...         "pack_name": "my_test",
             ...         "setup_spec": False,
-            ...         "pack_binaries": True,
-            ...         "pack_benches": True,
+            ...         "pack_binaries": False,
+            ...         "pack_benches": False,
             ...     },
             ...     "spec_config": {...},
             ...     "pack_config": {"verify_mode": True, ...},

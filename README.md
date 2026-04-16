@@ -161,8 +161,8 @@ config = {
     "task": {
         "pack_name": "my_test",
         "setup_spec": False,
-        "pack_binaries": True,
-        "pack_benches": True,
+        "pack_binaries": False,
+        "pack_benches": False,
     },
     # SPEC基准测试相关配置
     "spec_config": {
@@ -214,8 +214,8 @@ packer.run()
 |------|------|------|--------|
 | `pack_name` | str | 打包任务名称 | 必填 |
 | `setup_spec` | bool | 是否执行 SPEC 编译 | False |
-| `pack_binaries` | bool | 是否打包二进制文件 | True |
-| `pack_benches` | bool | 是否打包完整测试环境 | True |
+| `pack_binaries` | bool | 是否打包二进制文件 | False |
+| `pack_benches` | bool | 是否打包完整测试环境 | False |
 | `run_mode` | RunMode | 运行模式（pack/direct） | pack |
 
 #### spec_config 配置项
@@ -307,8 +307,8 @@ config = {
     "task": {
         "pack_name": "my_test",
         "setup_spec": False,
-        "pack_binaries": True,
-        "pack_benches": True,
+        "pack_binaries": False,
+        "pack_benches": False,
     },
     "spec_config": {...},
     "pack_config": {...},
@@ -413,8 +413,8 @@ config = {
     "task": {
         "pack_name": "my_test",
         "setup_spec": False,
-        "pack_binaries": True,
-        "pack_benches": True,
+        "pack_binaries": False,
+        "pack_benches": False,
     },
     # SPEC基准测试相关配置
     "spec_config": {
@@ -495,8 +495,8 @@ config = {
     "task": {
         "pack_name": "verify_test",
         "setup_spec": False,
-        "pack_binaries": True,
-        "pack_benches": True,
+        "pack_binaries": False,
+        "pack_benches": False,
     },
     # SPEC基准测试相关配置
     "spec_config": {

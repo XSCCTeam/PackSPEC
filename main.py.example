@@ -18,12 +18,14 @@ if __name__ == "__main__":
             # 也就是是否编译SPEC基准测试，默认为 False
             "setup_spec": False,
 
-            # 是否打包二进制文件，默认为 True
-            "pack_binaries": True,
+            # 是否打包二进制文件，默认为 False
+            # 需要显式设置为 True 才会执行打包二进制操作
+            "pack_binaries": False,
 
-            # 是否打包完整测试环境，默认为 True
+            # 是否打包完整测试环境，默认为 False
+            # 需要显式设置为 True 才会执行打包测试环境操作
             # 包含输入数据集、运行脚本、验证脚本等
-            "pack_benches": True,
+            "pack_benches": False,
 
             # 运行模式，默认为 RunMode.pack（打包模式）
             # 可选值：
@@ -199,9 +201,9 @@ if __name__ == "__main__":
 #   --iterations      迭代次数（默认: 3）
 #   --pack-name       打包任务名称（默认: packspec）
 #   --run-mode        运行模式（pack/direct，默认: pack）
-#   --setup-spec      是否执行setup
-#   --no-pack-binaries  不打包二进制文件
-#   --no-pack-benches   不打包测试环境
+#   --setup-spec      执行setup编译
+#   --pack-binaries   打包二进制文件（需配合 --setup-spec 使用）
+#   --pack-benches    打包完整测试环境（需配合 --setup-spec 使用）
 #   --profile-gen     Profile生成模式
 #   --auto-mode       自动模式
 #   --verify-mode     QEMU验证模式

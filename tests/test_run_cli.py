@@ -58,8 +58,8 @@ class TestBuildArgParser:
             "--run-mode", "direct",
             "--log-language", "en",
             "--setup-spec",
-            "--no-pack-binaries",
-            "--no-pack-benches",
+            "--pack-binaries",
+            "--pack-benches",
             "--enable-dingtalk-message",
         ])
         assert args.spec_name == "spec2017"
@@ -82,8 +82,8 @@ class TestBuildArgParser:
         assert args.run_mode == "direct"
         assert args.log_language == "en"
         assert args.setup_spec is True
-        assert args.no_pack_binaries is True
-        assert args.no_pack_benches is True
+        assert args.pack_binaries is True
+        assert args.pack_benches is True
         assert args.enable_dingtalk_message is True
 
     def test_默认参数值(self):
@@ -111,8 +111,8 @@ class TestBuildArgParser:
         assert args.run_mode == "pack"
         assert args.log_language == "zh"
         assert args.setup_spec is False
-        assert args.no_pack_binaries is False
-        assert args.no_pack_benches is False
+        assert args.pack_binaries is False
+        assert args.pack_benches is False
         assert args.enable_dingtalk_message is False
 
     def test_store_true参数_rebuild(self):
@@ -157,21 +157,21 @@ class TestBuildArgParser:
         args = parser.parse_args(["--enable-dingtalk-message"])
         assert args.enable_dingtalk_message is True
 
-    def test_no_pack_binaries反向标志(self):
-        """测试 --no-pack-binaries 反向标志"""
+    def test_pack_binaries正向标志(self):
+        """测试 --pack-binaries 正向标志"""
         parser = build_arg_parser()
-        args = parser.parse_args(["--no-pack-binaries"])
-        assert args.no_pack_binaries is True
+        args = parser.parse_args(["--pack-binaries"])
+        assert args.pack_binaries is True
         args_default = parser.parse_args([])
-        assert args_default.no_pack_binaries is False
+        assert args_default.pack_binaries is False
 
-    def test_no_pack_benches反向标志(self):
-        """测试 --no-pack-benches 反向标志"""
+    def test_pack_benches正向标志(self):
+        """测试 --pack-benches 正向标志"""
         parser = build_arg_parser()
-        args = parser.parse_args(["--no-pack-benches"])
-        assert args.no_pack_benches is True
+        args = parser.parse_args(["--pack-benches"])
+        assert args.pack_benches is True
         args_default = parser.parse_args([])
-        assert args_default.no_pack_benches is False
+        assert args_default.pack_benches is False
 
     def test_配置文件参数(self):
         """测试 -c/--config 参数"""
@@ -283,8 +283,8 @@ class TestBuildConfig:
             "run_mode": "pack",
             "log_language": "zh",
             "setup_spec": False,
-            "no_pack_binaries": False,
-            "no_pack_benches": False,
+            "pack_binaries": False,
+            "pack_benches": False,
             "enable_dingtalk_message": False,
         }
         defaults.update(overrides)
@@ -338,29 +338,29 @@ class TestBuildConfig:
         config = build_config(parser, args)
         assert config["task"]["run_mode"] == RunMode.direct
 
-    def test_no_pack_binaries转换为False(self):
-        """测试 build_config() 中 --no-pack-binaries 转换为 pack_binaries=False"""
+    def test_pack_binaries设置为True(self):
+        """测试 build_config() 中 --pack-binaries 设置为 pack_binaries=True"""
         parser = build_arg_parser()
-        args = parser.parse_args(["--spec-name", "spec2017", "--cfg-path", "/p", "--no-pack-binaries"])
+        args = parser.parse_args(["--spec-name", "spec2017", "--cfg-path", "/p", "--pack-binaries"])
         config = build_config(parser, args)
-        assert config["task"]["pack_binaries"] is False
+        assert config["task"]["pack_binaries"] is True
 
-    def test_no_pack_binaries默认为True(self):
-        """测试未指定 --no-pack-binaries 时 pack_binaries 不被设置（保留配置文件值）"""
-        args = self._make_args(no_pack_binaries=False)
+    def test_pack_binaries默认不设置(self):
+        """测试未指定 --pack-binaries 时 pack_binaries 不被设置（保留配置文件值）"""
+        args = self._make_args(pack_binaries=False)
         config = self._build_with_parser(args)
         assert config["task"].get("pack_binaries") is None or "pack_binaries" not in config["task"]
 
-    def test_no_pack_benches转换为False(self):
-        """测试 build_config() 中 --no-pack-benches 转换为 pack_benches=False"""
+    def test_pack_benches设置为True(self):
+        """测试 build_config() 中 --pack-benches 设置为 pack_benches=True"""
         parser = build_arg_parser()
-        args = parser.parse_args(["--spec-name", "spec2017", "--cfg-path", "/p", "--no-pack-benches"])
+        args = parser.parse_args(["--spec-name", "spec2017", "--cfg-path", "/p", "--pack-benches"])
         config = build_config(parser, args)
-        assert config["task"]["pack_benches"] is False
+        assert config["task"]["pack_benches"] is True
 
-    def test_no_pack_benches默认为True(self):
-        """测试未指定 --no-pack-benches 时 pack_benches 不被设置（保留配置文件值）"""
-        args = self._make_args(no_pack_benches=False)
+    def test_pack_benches默认不设置(self):
+        """测试未指定 --pack-benches 时 pack_benches 不被设置（保留配置文件值）"""
+        args = self._make_args(pack_benches=False)
         config = self._build_with_parser(args)
         assert config["task"].get("pack_benches") is None or "pack_benches" not in config["task"]
 
@@ -392,15 +392,15 @@ class TestBuildConfig:
             "--qemu-verify-parallel-jobs", "4",
             "--report-format", "markdown", "--run-mode", "direct",
             "--log-language", "en",
-            "--setup-spec", "--no-pack-binaries", "--no-pack-benches",
+            "--setup-spec", "--pack-binaries", "--pack-benches",
             "--enable-dingtalk-message",
         ])
         config = build_config(parser, args)
         task = config["task"]
         assert task["pack_name"] == "my_pack"
         assert task["setup_spec"] is True
-        assert task["pack_binaries"] is False
-        assert task["pack_benches"] is False
+        assert task["pack_binaries"] is True
+        assert task["pack_benches"] is True
         assert task["run_mode"] == RunMode.direct
         spec = config["spec_config"]
         assert spec["spec_cfg_path"] == "/path/to/config.cfg"
@@ -454,8 +454,8 @@ class TestBuildConfigWithFile:
             "run_mode": "pack",
             "log_language": "zh",
             "setup_spec": False,
-            "no_pack_binaries": False,
-            "no_pack_benches": False,
+            "pack_binaries": False,
+            "pack_benches": False,
             "enable_dingtalk_message": False,
         }
         defaults.update(overrides)

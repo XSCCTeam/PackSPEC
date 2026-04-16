@@ -35,6 +35,8 @@ from src.pack_spec.pack_utils import (
     generate_qemu_verify_all_script,
 )
 
+from src.pack_spec import spec_2006_driver, spec_2017_driver
+
 __all__ = [
     'PackSPEC',
     'SPECName',
