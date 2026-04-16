@@ -18,19 +18,16 @@ Note:
     SPEC2017的参考时间存储位置与SPEC2006不同，需要通过SPEC2017_REFTIME_MAP映射查找
 """
 
-import sys
 import os
-import re
 
 from src.pack_spec.pack_config import (
     SPECName, TuneType, InputType, SPECMode, ActionType,
     FileOperationError, BenchmarkError,
-    SPEC2017_BENCH_PATH, SCRIPTS_PATH, logger,
-    LogLanguage, LogMessages, get_log_messages, DEFAULT_LOG_LANGUAGE
+    SPEC2017_BENCH_PATH, SCRIPTS_PATH, logger
 )
 from .spec_driver import SPECDriver
 from src.pack_spec.pack_utils import PackUtils, is_numeric
-from typing import List, Dict, Tuple, Optional
+from typing import List, Dict
 
 
 #########################################
@@ -101,7 +98,7 @@ class SPEC2017Driver(SPECDriver):
     继承自SPECDriver基类，实现了以下抽象方法：
     - get_bench_list(): 根据spec_benches字符串获取基准测试列表
     - get_ref_time(): 获取基准测试的参考时间
-    - get_bench_path(): 获取基准测试的构建或运行目录
+    - _get_bench_dir_prefix(): 获取基准测试目录前缀（SPEC2017特定格式）
     - get_binary_path_map(): 获取二进制文件路径映射
     
     Attributes:
@@ -118,6 +115,9 @@ class SPEC2017Driver(SPECDriver):
         - 参考时间存储位置不同
         - 运行目录命名格式不同(ref模式下包含speed/rate)
     """
+
+    _spec_name_key = "spec2017"
+    """注册到驱动注册表的键，对应 SPECName.spec2017"""
     def __init__(self, 
                  spec_cfg_path: str,
                  tune_type: TuneType, 
@@ -127,6 +127,7 @@ class SPEC2017Driver(SPECDriver):
                  utils: PackUtils,
                  iterations: int = 3,
                  rebuild: bool = False,
+                 allow_basepeak: bool = False,
                  ):
         """
         初始化SPEC2017Driver实例
@@ -140,10 +141,11 @@ class SPEC2017Driver(SPECDriver):
             utils (PackUtils): 工具类实例
             iterations (int, optional): 测试迭代次数，默认3
             rebuild (bool, optional): 是否重新构建，默认False
+            allow_basepeak (bool, optional): 是否允许basepeak配置，默认False
         """
         super().__init__(spec_cfg_path, SPECName.spec2017, 
                         tune_type, input_type, spec_mode, 
-                        spec_benches, utils, iterations, rebuild)
+                        spec_benches, utils, iterations, rebuild, allow_basepeak=allow_basepeak)
         self.spec_bench_path = SPEC2017_BENCH_PATH
         self.spec_bench_map = SPEC2017_BIN_MAP
         self.spec_build_dir = 'build'
@@ -249,100 +251,35 @@ class SPEC2017Driver(SPECDriver):
             )
         return reftime_result
 
-    def get_bench_path(self, action_type: ActionType, tune_type: TuneType, input_type: InputType, spec_mode: SPECMode) -> List[str]:
+    def _get_bench_dir_prefix(self, action_type: ActionType, tune_type: TuneType,
+                              input_type: InputType, spec_mode: SPECMode) -> str:
         """
-        获取基准测试的构建或运行目录路径列表
-        
-        根据动作类型、优化级别、输入类型等参数，查找并返回匹配的基准测试目录。
-        目录命名格式遵循SPEC2017规范。
-        
+        获取基准测试目录前缀
+
+        重写基类方法以提供SPEC2017特定的目录前缀格式。
+        SPEC2017在ref输入类型时，运行目录前缀包含运行模式(speed/rate)。
+
         Args:
-            action_type (ActionType): 动作类型
-                - ActionType.build: 获取构建目录
-                - ActionType.run: 获取运行目录
+            action_type (ActionType): 动作类型(build/run)
             tune_type (TuneType): 优化级别(base/peak)
             input_type (InputType): 输入数据集类型(test/train/ref)
             spec_mode (SPECMode): 运行模式(speed/rate)
-            
+
         Returns:
-            list: 匹配的基准测试目录绝对路径列表
-            
+            str: 目录前缀字符串
+
         Note:
-            - 构建目录格式: build_{tune_type}_{label}.XXXX
-            - 运行目录格式(ref): run_{tune_type}_{input_type}{spec_mode}_{label}.XXXX
-            - 运行目录格式(非ref): run_{tune_type}_{input_type}_{label}.XXXX
-            - 如果找到多个匹配目录，选择编号最大的(最新的)
+            - 构建目录前缀: build_{tune_type}_{label}
+            - 运行目录前缀(ref): run_{tune_type}_{input_type}{spec_mode}_{label}
+            - 运行目录前缀(非ref): run_{tune_type}_{input_type}_{label}
         """
-        if self.debug_mode:
-            logger.debug(self.msg.get("get_bench_dir_with"))
-            logger.debug(self.msg.get("action_type_info", value=action_type.name))
-            logger.debug(self.msg.get("tune_type_info_debug", value=tune_type.name))
-            logger.debug(self.msg.get("input_type_info_debug", value=input_type.name))
-            logger.debug(self.msg.get("spec_mode_info_debug", value=spec_mode.name))
-
         if action_type == ActionType.build:
-            bench_parent_dir = self.spec_build_dir
-            # 构建目录格式：build_优化类型_标签
-            bench_dir_perfix = f"{action_type.name}_{tune_type.name}_{self.label}"
-        elif action_type == ActionType.run:
-            bench_parent_dir = self.spec_run_dir
-            if self.spec_name == SPECName.spec2006:
-                # 运行目录格式：run_优化类型_输入类型_标签
-                bench_dir_perfix = f"{action_type.name}_{tune_type.name}_{input_type.name}_{self.label}"
-            elif self.spec_name == SPECName.spec2017:
-                if input_type == InputType.ref:
-                    # 运行目录格式：run_优化类型_输入类型+模式_标签
-                    bench_dir_perfix = f"{action_type.name}_{tune_type.name}_{input_type.name}{spec_mode.name}_{self.label}"
-                else:
-                    # 运行目录格式：run_优化类型_输入类型_标签
-                    bench_dir_perfix = f"{action_type.name}_{tune_type.name}_{input_type.name}_{self.label}"
-
-        selected_bench_dir = []
-        
-        # 遍历SPEC2017基准测试目录
-        for bench_dir in os.listdir(self.spec_bench_path):
-            # 检查是否为指定的基准测试集合
-            if bench_dir in self.spec_bench_list:
-                # 根据动作类型构建完整路径（build或run目录）
-                bench_run_dir = os.path.join(self.spec_bench_path, bench_dir, bench_parent_dir)
-                if self.debug_mode:
-                    logger.debug(self.msg.get("bench_run_dir", bench=bench_dir, path=bench_run_dir))
-                    
-                run_dir_path_list = []
-
-                pattern = re.compile(rf"^{re.escape(bench_dir_perfix)}\.\d{{4}}$")
-                
-                # 判断 bench_run_dir 目录是否存在
-                if not os.path.isdir(bench_run_dir):
-                    logger.warning(self.msg.get("directory_not_exist", path=bench_run_dir))
-                    continue
-
-                # 查找符合前缀的目录
-                for run_dir in os.listdir(bench_run_dir):
-                    if pattern.match(run_dir):
-                        run_dir_path_list.append(os.path.join(bench_run_dir, run_dir))
-                        
-                # 处理查找结果
-                if len(run_dir_path_list) == 0:
-                    logger.warning(self.msg.get("bench_not_found_in", bench=os.path.basename(bench_dir), prefix=bench_dir_perfix))
-                elif len(run_dir_path_list) > 1:
-                    logger.warning(self.msg.get("bench_found_multiple", bench=os.path.basename(bench_dir), prefix=bench_dir_perfix))
-                    for run_dir_path in run_dir_path_list:
-                        logger.debug(self.msg.get("found_path", path=run_dir_path))
-                    max = 0
-                    selected = run_dir_path_list[0]
-                    for run_dir_perfix in run_dir_path_list:
-                        if run_dir_perfix.split(".")[-1].isnumeric():
-                            if int(run_dir_perfix.split(".")[-1]) > max:
-                                max = int(run_dir_perfix.split(".")[-1])
-                                selected = run_dir_perfix
-                    selected_bench_dir.append(selected)
-                    logger.warning(self.msg.get("bench_using", bench=os.path.basename(bench_dir), selected=selected))
-                else:
-                    selected_bench_dir.append(run_dir_path_list[0])
-                    logger.debug(self.msg.get("bench_using", bench=os.path.basename(bench_dir), selected=run_dir_path_list[0]))
-
-        return selected_bench_dir
+            return f"{action_type.name}_{tune_type.name}_{self.label}"
+        else:
+            if input_type == InputType.ref:
+                return f"{action_type.name}_{tune_type.name}_{input_type.name}{spec_mode.name}_{self.label}"
+            else:
+                return f"{action_type.name}_{tune_type.name}_{input_type.name}_{self.label}"
 
     def get_binary_path_map(self, tune_type: TuneType, input_type: InputType, spec_mode: SPECMode) -> Dict[str, str]:
         """

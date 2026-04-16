@@ -41,23 +41,18 @@ PackSPEC - SPEC CPU基准测试打包工具主模块
 
 import os
 import shutil
-from typing import Dict, Optional
+from typing import Dict
 
 from src.pack_spec.pack_config import (
     SPECName, TuneType, InputType, SPECMode, ActionType, PACKMode, RunMode,
-    PackSPECError, ConfigError, FileOperationError, CommandExecutionError, BenchmarkError,
-    CURRENT_DATE, CURRENT_TIME, DEFAULT_ITERATIONS, DEFAULT_REBUILD,
+    PackSPECError, ConfigError, FileOperationError, CommandExecutionError, CURRENT_DATE, CURRENT_TIME, DEFAULT_ITERATIONS, DEFAULT_REBUILD,
     DEFAULT_CORE_NUM, DEFAULT_CLOCK_RATE, DEFAULT_PROFILE_GEN,
     DEFAULT_AUTO_MODE, DEFAULT_LLVM_PROFDATA_PATH,
-    DEFAULT_RUN_MODE, DEFAULT_REPORT_FORMAT, RESULTS_OUTPUT_PATH,
-    QEMU_PATH, DEFAULT_VERIFY_MODE, DEFAULT_MINIMAL_MODE,
-    BOSC_API_KEY, BOSC_AT_USER, P_PATH, logger, GENERATED_FILES_PATH,
-    LogLanguage, LogMessages, get_log_messages, DEFAULT_LOG_LANGUAGE,
-    setup_logger
+    DEFAULT_RUN_MODE, DEFAULT_REPORT_FORMAT, QEMU_PATH, DEFAULT_VERIFY_MODE, DEFAULT_MINIMAL_MODE, DEFAULT_ALLOW_BASEPEAK,
+    BOSC_API_KEY, BOSC_AT_USER, logger, parse_log_language, setup_logger
 )
 from src.pack_spec.pack_utils import PackUtils, load_pack_spec_cfg, parse_spec_results, generate_json_report, generate_markdown_report, generate_qemu_verify_script, generate_qemu_verify_all_script
-from src.pack_spec.spec_2006_driver import SPEC2006Driver, SPEC2006V1P01Driver
-from src.pack_spec.spec_2017_driver import SPEC2017Driver
+from src.pack_spec.spec_driver import SPECDriver
 
 
 class PackSPEC:
@@ -135,7 +130,7 @@ class PackSPEC:
         if isinstance(config, str):
             # 从配置文件路径加载配置
             config = load_pack_spec_cfg(config)
-            print(config["spec_config"]["spec_benches"])
+            logger.debug(f"spec_benches: {config['spec_config']['spec_benches']}")
             self.init_date = config.get('date', CURRENT_DATE)
             self.init_pack_spec(config)
             self.log_path = setup_logger(self.utils.get_pack_generated_dir_path())
@@ -199,35 +194,27 @@ class PackSPEC:
         self.verify_mode = pack_config.get('verify_mode', DEFAULT_VERIFY_MODE)
         self.minimal_mode = pack_config.get('minimal_mode', DEFAULT_MINIMAL_MODE)
         self.qemu_verify_parallel_jobs = pack_config.get('qemu_verify_parallel_jobs', 0)
+        self.allow_basepeak = pack_config.get('allow_basepeak', DEFAULT_ALLOW_BASEPEAK)
         
         # 消息发送配置
         msg_config = config.get('msg_config', {})
         self.msg_enabled = msg_config.get('enable_dingtalk_message', False)
         
         # 日志语言配置
-        language_str = msg_config.get('log_language', 'zh').lower()
-        if language_str in ('zh', 'chinese', 'cn'):
-            self.log_language = LogLanguage.zh
-        elif language_str in ('en', 'english'):
-            self.log_language = LogLanguage.en
-        else:
-            self.log_language = DEFAULT_LOG_LANGUAGE
-        self.msg = get_log_messages(self.log_language)
+        self.log_language, self.msg = parse_log_language(
+            msg_config.get('log_language', 'zh')
+        )
         
         if self.profile_gen:
             self.iterations = 1
         
         self.utils = PackUtils(config, logger)
 
-        if self.spec_name == SPECName.spec2006:
-            self.spec_driver = SPEC2006Driver(self.spec_cfg_path, self.tune_type, self.input_type,
-                                              self.spec_mode, self.spec_benches, self.utils, self.iterations, self.rebuild)       
-        elif self.spec_name == SPECName.spec2006v1p01:
-            self.spec_driver = SPEC2006V1P01Driver(self.spec_cfg_path, self.tune_type, self.input_type,
-                                              self.spec_mode, self.spec_benches, self.utils, self.iterations, self.rebuild)       
-        elif self.spec_name == SPECName.spec2017:
-            self.spec_driver = SPEC2017Driver(self.spec_cfg_path, self.tune_type, self.input_type,
-                                              self.spec_mode, self.spec_benches, self.utils, self.iterations, self.rebuild)
+        self.spec_driver = SPECDriver.create(
+            self.spec_name, self.spec_cfg_path, self.tune_type, self.input_type,
+            self.spec_mode, self.spec_benches, self.utils, self.iterations, self.rebuild,
+            allow_basepeak=self.allow_basepeak
+        )
         self.print_info()
 
 
@@ -339,6 +326,8 @@ class PackSPEC:
             - 会自动生成run_{input_type}.sh测试脚本
             - 会自动生成test_{input_type}.sh或profile_gen_{input_type}.sh运行脚本
         """
+        # 初始化构建目录路径，当with_build为False时为None
+        src_build_bench_dir = None
         if with_build:
             src_build_bench_dir = self.spec_driver.get_bench_path(ActionType.build, tune_type, input_type, spec_mode)
         src_run_bench_dir = self.spec_driver.get_bench_path(ActionType.run, tune_type, input_type, spec_mode)
@@ -406,6 +395,59 @@ class PackSPEC:
 
         return dest_dir_list
 
+    def _add_score_and_message_commands(self, script_content: list, score_dir: str,
+                                         label: str, tune_type: TuneType, input_type: InputType,
+                                         name_prefix: str = ""):
+        """
+        向脚本内容中添加分数计算和消息通知命令
+        
+        根据是否配置了钉钉机器人和是否为Profile生成模式，
+        添加不同的消息通知和分数计算命令。该方法是create_test_script和
+        create_run_all_script的公共逻辑提取。
+        
+        Args:
+            script_content (list): 脚本命令列表，会被原地修改
+            score_dir (str): 分数计算的目标目录
+            label (str): 配置标签
+            tune_type (TuneType): 优化级别
+            input_type (InputType): 输入数据集类型
+            name_prefix (str, optional): 消息中的名称前缀，如基准测试名称，默认为空
+            
+        Note:
+            - 当配置了BOSC_API_KEY和BOSC_AT_USER且非极简模式时，会发送钉钉消息
+            - Profile生成模式只发送完成消息，不计算分数
+            - 非Profile模式会计算分数并发送分数消息
+        """
+        full_name = f"{name_prefix}.{label}.{tune_type.name}_{input_type.name}" if name_prefix else f"{label}.{tune_type.name}_{input_type.name}"
+
+        if BOSC_API_KEY is not None and BOSC_AT_USER is not None and not self.minimal_mode:
+            if self.profile_gen:
+                message = f"在 $HOST_NAME 上的 {full_name} Profile 生成完成喵！"
+                script_content.append("HOST_NAME=$(hostname)")
+                script_content.extend(self.utils.commands_to_send_message(message))
+            else:
+                message = f"在 $HOST_NAME 上的 {full_name} 测试完成喵！"
+                script_content.append("HOST_NAME=$(hostname)")
+                script_content.extend(self.utils.commands_to_send_message(message))
+                script_content.extend(self.utils.commands_to_cal_score(score_dir, self.test_clock_rate, "score.txt", self.minimal_mode))
+                title_message = f"{full_name} 测试结果"
+                text_message = f"在 $HOST_NAME 上的 {full_name} 测试结果喵："
+                script_content.extend(self.utils.commands_to_send_md_message(score_dir, title_message, text_message, "score.txt"))
+        else:
+            script_content.extend(self.utils.commands_to_cal_score(score_dir, self.test_clock_rate, minimal_mode=self.minimal_mode))
+
+    def _write_script_file(self, script_path: str, script_content: list):
+        """
+        将脚本内容写入文件并设置执行权限
+        
+        Args:
+            script_path (str): 脚本文件路径
+            script_content (list): 脚本命令列表
+        """
+        with open(script_path, 'w') as f:
+            f.write("\n".join(script_content))
+        os.chmod(script_path, 0o700)
+
     def create_test_script(self, label: str, bench_name: str, core_num: int, 
                             dest_dir: str, tune_type: TuneType, input_type: InputType, iterations: int = 0):
         """
@@ -453,33 +495,9 @@ class PackSPEC:
                 {"<your llvm-profdata abspath>": DEFAULT_LLVM_PROFDATA_PATH}
             )
 
-        if BOSC_API_KEY != None and BOSC_AT_USER != None and not self.minimal_mode:
-            if self.profile_gen:
-                # 发送完成消息
-                message = f"在 $HOST_NAME 上的 {bench_name}.{label}.{tune_type.name}_{input_type.name} Profile 生成完成喵！"
-                script_content.append(f"HOST_NAME=$(hostname)")
-                script_content.extend(self.utils.commands_to_send_message(message))
-            else:
-                # 发送完成消息
-                message = f"在 $HOST_NAME 上的 {bench_name}.{label}.{tune_type.name}_{input_type.name} 测试完成喵！"
-                script_content.append(f"HOST_NAME=$(hostname)")
-                script_content.extend(self.utils.commands_to_send_message(message))
-                # 计算分数
-                script_content.extend(self.utils.commands_to_cal_score(dest_dir, self.test_clock_rate, "score.txt", self.minimal_mode))
-                # 发送分数
-                title_message = f"{bench_name}.{label}.{tune_type.name}_{input_type.name} 测试结果"
-                text_message = f"在 $HOST_NAME 上的 {bench_name}.{label}.{tune_type.name}_{input_type.name} 测试结果喵："
-                script_content.extend(self.utils.commands_to_send_md_message(dest_dir, title_message, text_message, "score.txt"))
-        else:
-            # 计算分数
-            script_content.extend(self.utils.commands_to_cal_score(dest_dir, self.test_clock_rate, minimal_mode=self.minimal_mode))
+        self._add_score_and_message_commands(script_content, dest_dir, label, tune_type, input_type, name_prefix=bench_name)
 
-        # 写入脚本文件
-        with open(run_test_script, 'w') as f:
-            f.write("\n".join(script_content))
-        
-        # 添加执行权限
-        os.chmod(run_test_script, 0o700)
+        self._write_script_file(run_test_script, script_content)
         logger.info(self.msg.get("created_script_at", path=run_test_script, name=self.utils.get_run_script_name(self.profile_gen, input_type)))
         
 
@@ -547,7 +565,7 @@ class PackSPEC:
                                                  tune_type, label, input_type, self.minimal_mode)
             )
             script_content.extend([
-                f"cd $SCRIPT_DIR",
+                "cd $SCRIPT_DIR",
                 ""
             ])
         
@@ -568,33 +586,9 @@ class PackSPEC:
             # 收集profile
             script_content.extend(self.utils.commands_to_collect_profiles(parent_dir))
 
-        if BOSC_API_KEY != None and BOSC_AT_USER != None and not self.minimal_mode:
-            if self.profile_gen:
-                # 发送完成消息
-                message = f"在 $HOST_NAME 上的 {label}.{tune_type.name}_{input_type.name} Profile 生成完成喵！"
-                script_content.append(f"HOST_NAME=$(hostname)")
-                script_content.extend(self.utils.commands_to_send_message(message))
-            else:
-                # 发送完成消息
-                message = f"在 $HOST_NAME 上的 {label}.{tune_type.name}_{input_type.name} 测试完成喵！"
-                script_content.append(f"HOST_NAME=$(hostname)")
-                script_content.extend(self.utils.commands_to_send_message(message))
-                # 计算分数
-                script_content.extend(self.utils.commands_to_cal_score(parent_dir, self.test_clock_rate, "score.txt", self.minimal_mode))
-                # 发送分数
-                title_message = f"{label}.{tune_type.name}_{input_type.name} 测试结果"
-                text_message = f"在 $HOST_NAME 上的 {label}.{tune_type.name}_{input_type.name} 测试结果喵："
-                script_content.extend(self.utils.commands_to_send_md_message(parent_dir, title_message, text_message, "score.txt"))
-        else:
-            # 计算分数
-            script_content.extend(self.utils.commands_to_cal_score(parent_dir, self.test_clock_rate, minimal_mode=self.minimal_mode))
+        self._add_score_and_message_commands(script_content, parent_dir, label, tune_type, input_type)
 
-        # 写入脚本文件
-        with open(run_all_script, 'w') as f:
-            f.write("\n".join(script_content))
-        
-        # 添加执行权限
-        os.chmod(run_all_script, 0o700)
+        self._write_script_file(run_all_script, script_content)
         logger.success(f"Successfully created {self.utils.get_run_script_name(self.profile_gen, input_type, 'all')} script at {run_all_script}")
 
     def setup_spec(self):
@@ -621,7 +615,6 @@ class PackSPEC:
         os.makedirs(dest_cfg_dir, exist_ok=True)
         dest_cfg_path = os.path.join(dest_cfg_dir, cfg_filename)
         
-        import shutil
         shutil.copy2(src_cfg_path, dest_cfg_path)
         logger.info(self.msg.get("cfg_copied_to", src=src_cfg_path, dest=dest_cfg_path))
         
@@ -633,12 +626,15 @@ class PackSPEC:
         处理不同tune_type和input_type组合的通用方法
         
         当tune_type或input_type设置为'all'时，自动展开为所有可能的组合，
-        并对每个组合调用指定的函数。
+        并对每个组合调用指定的函数，收集并返回所有调用的结果。
         
         Args:
             func (callable): 要调用的函数，必须接受tune_type和input_type参数
             *args: 传递给函数的位置参数
             **kwargs: 传递给函数的关键字参数
+            
+        Returns:
+            list: 所有函数调用返回值的列表，每个元素为一次调用的返回值
             
         Note:
             - TuneType.all 会展开为 [base, peak]
@@ -653,9 +649,12 @@ class PackSPEC:
         if self.input_type == InputType.all:
             input_types = [InputType.test, InputType.train, InputType.ref]
         
+        results = []
         for tune_type in tune_types:
             for input_type in input_types:
-                func(*args, tune_type=tune_type, input_type=input_type, **kwargs)
+                result = func(*args, tune_type=tune_type, input_type=input_type, **kwargs)
+                results.append(result)
+        return results
 
     def pack_binaries(self) -> list:
         """
@@ -665,12 +664,12 @@ class PackSPEC:
         如果tune_type或input_type为'all'，会自动处理所有组合。
         
         Returns:
-            list: 目标目录列表
+            list: 所有组合的目标目录列表，每个元素为一次copy_binaries调用的返回值
             
         Note:
             该方法是对copy_binaries的封装，自动处理组合展开
         """
-        self._process_tune_input_combinations(
+        return self._process_tune_input_combinations(
             self.copy_binaries,
             spec_mode=self.spec_mode
         )
@@ -696,17 +695,16 @@ class PackSPEC:
             spec_cfg (str, optional): SPEC配置文件名，为空则不复制配置文件
             
         Returns:
-            list: 目标目录列表
+            list: 所有组合的目标目录列表，每个元素为一次copy_benches调用的返回值（目录路径列表）
             
         Note:
             - 如果tune_type或input_type为'all'，会自动处理所有组合
             - 会自动生成测试运行脚本和分数计算脚本
         """
-        self._process_tune_input_combinations(
+        return self._process_tune_input_combinations(
             self.copy_benches,
             spec_mode=self.spec_mode, with_build=with_build, spec_cfg=spec_cfg
         )
-        return []
 
     def pack_benches_cfg(self, with_build=False):
         """
@@ -898,11 +896,8 @@ class PackSPEC:
                     shutil.rmtree(output_dir)
                 else:
                     logger.warning(self.msg.get("dir_exists", path=output_dir))
-                    choice = input(self.msg.get("overwrite_prompt"))
-                    if choice.lower() == 'y':
-                        shutil.rmtree(output_dir)
-                    else:
-                        raise FileOperationError(self.msg.get("operation_canceled_not_overwritten"))
+                    logger.error(self.msg.get("dir_exists_not_auto_mode", path=output_dir))
+                    raise PackSPECError(self.msg.get("dir_exists_not_auto_mode", path=output_dir))
             
             os.makedirs(output_dir, exist_ok=False)
         

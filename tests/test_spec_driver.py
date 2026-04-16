@@ -1,7 +1,7 @@
 """
 spec_driver.py 单元测试
 
-测试 SPECDriver 基类和 SPEC2006Driver 的配置解析和基准测试选择逻辑
+测试 SPECDriver 基类和 SPEC2006Driver 的配置解析、基准测试选择逻辑、驱动注册表和工厂方法
 """
 
 import os
@@ -10,10 +10,100 @@ from unittest.mock import MagicMock, patch
 
 from src.pack_spec.pack_config import (
     SPECName, TuneType, InputType, SPECMode, ActionType,
-    PackSPECError, ConfigError, SPEC2006_PATH, SPEC2006_BENCH_PATH,
-    LogLanguage, get_log_messages, DEFAULT_LOG_LANGUAGE,
+    ConfigError, FileOperationError,
+    get_log_messages, DEFAULT_LOG_LANGUAGE,
 )
-from src.pack_spec.pack_utils import PackUtils
+
+
+class TestSPECDriverRegistry:
+    """SPECDriver 驱动注册表和工厂方法测试"""
+
+    def test_registry_contains_spec2006(self):
+        """测试注册表中包含 SPEC2006Driver"""
+        from src.pack_spec.spec_driver import SPECDriver
+        from src.pack_spec.spec_2006_driver import SPEC2006Driver
+        assert "spec2006" in SPECDriver._registry
+        assert SPECDriver._registry["spec2006"] is SPEC2006Driver
+
+    def test_registry_contains_spec2006v1p01(self):
+        """测试注册表中包含 SPEC2006V1P01Driver"""
+        from src.pack_spec.spec_driver import SPECDriver
+        from src.pack_spec.spec_2006_driver import SPEC2006V1P01Driver
+        assert "spec2006v1p01" in SPECDriver._registry
+        assert SPECDriver._registry["spec2006v1p01"] is SPEC2006V1P01Driver
+
+    def test_registry_contains_spec2017(self):
+        """测试注册表中包含 SPEC2017Driver"""
+        from src.pack_spec.spec_driver import SPECDriver
+        from src.pack_spec.spec_2017_driver import SPEC2017Driver
+        assert "spec2017" in SPECDriver._registry
+        assert SPECDriver._registry["spec2017"] is SPEC2017Driver
+
+    def test_create_returns_spec2006_driver(self):
+        """测试 create 工厂方法根据 SPECName.spec2006 返回 SPEC2006Driver 实例"""
+        from src.pack_spec.spec_driver import SPECDriver
+        from src.pack_spec.spec_2006_driver import SPEC2006Driver
+        with patch('src.pack_spec.spec_2006_driver.SPEC2006_PATH', '/fake/spec2006'), \
+             patch('src.pack_spec.spec_2006_driver.SPEC2006_BENCH_PATH', '/fake/spec2006/benchspec/CPU2006'), \
+             patch('src.pack_spec.spec_2006_driver.SCRIPTS_PATH', '/fake/scripts'), \
+             patch.object(SPECDriver, '__init__', lambda self, *args, **kwargs: None), \
+             patch.object(SPEC2006Driver, '__init__', lambda self, *args, **kwargs: None):
+            driver = SPECDriver.create(
+                spec_name=SPECName.spec2006,
+                spec_cfg_path="/fake/config.cfg",
+                tune_type=TuneType.base,
+                input_type=InputType.test,
+                spec_mode=SPECMode.speed,
+                spec_benches="all",
+                utils=MagicMock(),
+            )
+            assert isinstance(driver, SPEC2006Driver)
+
+    def test_create_returns_spec2017_driver(self):
+        """测试 create 工厂方法根据 SPECName.spec2017 返回 SPEC2017Driver 实例"""
+        from src.pack_spec.spec_driver import SPECDriver
+        from src.pack_spec.spec_2017_driver import SPEC2017Driver
+        with patch.object(SPECDriver, '__init__', lambda self, *args, **kwargs: None), \
+             patch.object(SPEC2017Driver, '__init__', lambda self, *args, **kwargs: None):
+            driver = SPECDriver.create(
+                spec_name=SPECName.spec2017,
+                spec_cfg_path="/fake/config.cfg",
+                tune_type=TuneType.base,
+                input_type=InputType.test,
+                spec_mode=SPECMode.speed,
+                spec_benches="all",
+                utils=MagicMock(),
+            )
+            assert isinstance(driver, SPEC2017Driver)
+
+    def test_create_raises_value_error_for_unknown_spec_name(self):
+        """测试 create 工厂方法对未注册的 SPECName 抛出 ValueError"""
+        from src.pack_spec.spec_driver import SPECDriver
+        mock_spec_name = MagicMock()
+        mock_spec_name.name = "unknown_spec"
+        with pytest.raises(ValueError, match="未找到"):
+            SPECDriver.create(
+                spec_name=mock_spec_name,
+                spec_cfg_path="/fake/config.cfg",
+                tune_type=TuneType.base,
+                input_type=InputType.test,
+                spec_mode=SPECMode.speed,
+                spec_benches="all",
+                utils=MagicMock(),
+            )
+
+    def test_subclass_spec_name_key(self):
+        """测试子类的 _spec_name_key 属性正确设置"""
+        from src.pack_spec.spec_2006_driver import SPEC2006Driver, SPEC2006V1P01Driver
+        from src.pack_spec.spec_2017_driver import SPEC2017Driver
+        assert SPEC2006Driver._spec_name_key == "spec2006"
+        assert SPEC2006V1P01Driver._spec_name_key == "spec2006v1p01"
+        assert SPEC2017Driver._spec_name_key == "spec2017"
+
+    def test_base_class_spec_name_key_is_none(self):
+        """测试基类的 _spec_name_key 为 None，不会注册到注册表"""
+        from src.pack_spec.spec_driver import SPECDriver
+        assert SPECDriver._spec_name_key is None
 
 
 class TestSPECDriverBase:
@@ -34,6 +124,14 @@ class TestSPECDriverBase:
             driver.spec_cfg_path = "/home/user/spec/config/my.config.v2.cfg"
             driver.spec_cfg = os.path.basename(driver.spec_cfg_path)
         assert driver.spec_cfg == "my.config.v2.cfg"
+
+    def test_build_run_command_raises_not_implemented_error(self):
+        """测试基类 _build_run_command 方法抛出 NotImplementedError"""
+        from src.pack_spec.spec_driver import SPECDriver
+        with patch.object(SPECDriver, '__init__', lambda self, *args, **kwargs: None):
+            driver = SPECDriver.__new__(SPECDriver)
+            with pytest.raises(NotImplementedError, match="子类必须实现 _build_run_command 方法"):
+                driver._build_run_command()
 
 
 class TestSPEC2006DriverBenchSelection:
@@ -74,9 +172,8 @@ class TestSPEC2006DriverBenchSelection:
         assert len(driver.spec_bench_list) > 0
 
     def test_empty_benches_raises(self):
-        from src.pack_spec.spec_2006_driver import SPEC2006Driver
         with pytest.raises(Exception):
-            driver = self._create_driver("999")
+            self._create_driver("999")
 
 
 class TestSPEC2006DriverAttributes:
@@ -96,6 +193,43 @@ class TestSPEC2006DriverAttributes:
         assert driver.spec_mode == SPECMode.speed
         assert driver.iterations == 1
         assert driver.rebuild is False
+
+
+class TestSPEC2006DriverConfigError:
+    """SPEC2006Driver 配置错误延迟检查测试"""
+
+    def test_init_raises_config_error_when_spec2006_path_is_none(self):
+        from src.pack_spec.spec_2006_driver import SPEC2006Driver
+        with patch('src.pack_spec.spec_2006_driver.SPEC2006_PATH', None):
+            with pytest.raises(ConfigError):
+                SPEC2006Driver(
+                    spec_cfg_path="/fake/config.cfg",
+                    tune_type=TuneType.base,
+                    input_type=InputType.test,
+                    spec_mode=SPECMode.speed,
+                    spec_benches="all",
+                    utils=MagicMock(),
+                )
+
+    def test_init_does_not_raise_when_spec2006_path_is_set(self):
+        from src.pack_spec.spec_2006_driver import SPEC2006Driver
+        from src.pack_spec.spec_driver import SPECDriver
+        with patch('src.pack_spec.spec_2006_driver.SPEC2006_PATH', '/fake/spec2006'), \
+             patch('src.pack_spec.spec_2006_driver.SPEC2006_BENCH_PATH', '/fake/spec2006/benchspec/CPU2006'), \
+             patch('src.pack_spec.spec_2006_driver.SCRIPTS_PATH', '/fake/scripts'), \
+             patch.object(SPECDriver, '__init__', lambda self, *args, **kwargs: None), \
+             patch.object(SPEC2006Driver, 'get_bench_list', return_value=["400.perlbench"]):
+            driver = SPEC2006Driver.__new__(SPEC2006Driver)
+            SPEC2006Driver.__init__(
+                driver,
+                spec_cfg_path="/fake/config.cfg",
+                tune_type=TuneType.base,
+                input_type=InputType.test,
+                spec_mode=SPECMode.speed,
+                spec_benches="all",
+                utils=MagicMock(),
+            )
+            assert driver.spec_dir == '/fake/spec2006'
 
 
 class TestExecuteSpecdiff:
@@ -119,7 +253,7 @@ class TestExecuteSpecdiff:
             with tempfile.TemporaryDirectory() as tmpdir:
                 result = driver.execute_specdiff("/path/to/src", tmpdir, InputType.test)
                 
-                assert result == True
+                assert result
                 script_path = os.path.join(tmpdir, "specdiff_test.sh")
                 assert os.path.exists(script_path)
                 specdiff_output_dir = os.path.join(tmpdir, "specdiff_output")
@@ -139,7 +273,7 @@ class TestExecuteSpecdiff:
             with tempfile.TemporaryDirectory() as tmpdir:
                 result = driver.execute_specdiff("/path/to/src", tmpdir, InputType.test)
                 
-                assert result == False
+                assert not result
 
     def test_execute_specdiff_processes_commands(self):
         import tempfile
@@ -163,7 +297,7 @@ class TestExecuteSpecdiff:
             with tempfile.TemporaryDirectory() as tmpdir:
                 result = driver.execute_specdiff("/src/dir", tmpdir, InputType.ref)
                 
-                assert result == True
+                assert result
                 script_path = os.path.join(tmpdir, "specdiff_ref.sh")
                 with open(script_path, 'r') as f:
                     content = f.read()
@@ -195,7 +329,7 @@ class TestExecuteSpecdiff:
                 os.makedirs(dest_dir)
                 result = driver.execute_specdiff("/src/dir", dest_dir, InputType.test)
                 
-                assert result == True
+                assert result
                 specdiff_output_dir = os.path.join(dest_dir, "specdiff_output")
                 assert os.path.exists(specdiff_output_dir)
                 copied_file = os.path.join(specdiff_output_dir, "ref_output.out")
@@ -205,3 +339,493 @@ class TestExecuteSpecdiff:
                 with open(script_path, 'r') as f:
                     content = f.read()
                 assert "specdiff_output/ref_output.out" in content
+
+
+class TestAnalyzeSpecConfig:
+    """analyze_spec_config 方法异常测试"""
+
+    def test_spec2006_no_ext_raises_config_error(self):
+        import tempfile
+
+        from src.pack_spec.spec_driver import SPECDriver
+        with patch.object(SPECDriver, '__init__', lambda self, *args, **kwargs: None):
+            driver = SPECDriver.__new__(SPECDriver)
+            driver.spec_name = SPECName.spec2006
+            driver.msg = get_log_messages(DEFAULT_LOG_LANGUAGE)
+
+            with tempfile.NamedTemporaryFile(mode='w', suffix='.cfg', delete=False) as f:
+                f.write("# 注释行\n")
+                f.write("some_other_key = value\n")
+                cfg_path = f.name
+
+            try:
+                driver.spec_cfg_path = cfg_path
+                with pytest.raises(ConfigError, match="Ext not found"):
+                    driver.analyze_spec_config()
+            finally:
+                os.unlink(cfg_path)
+
+    def test_spec2017_no_label_raises_config_error(self):
+        import tempfile
+
+        from src.pack_spec.spec_driver import SPECDriver
+        with patch.object(SPECDriver, '__init__', lambda self, *args, **kwargs: None):
+            driver = SPECDriver.__new__(SPECDriver)
+            driver.spec_name = SPECName.spec2017
+            driver.msg = get_log_messages(DEFAULT_LOG_LANGUAGE)
+
+            with tempfile.NamedTemporaryFile(mode='w', suffix='.cfg', delete=False) as f:
+                f.write("# 注释行\n")
+                f.write("some_other_key = value\n")
+                cfg_path = f.name
+
+            try:
+                driver.spec_cfg_path = cfg_path
+                with pytest.raises(ConfigError, match="Label not found"):
+                    driver.analyze_spec_config()
+            finally:
+                os.unlink(cfg_path)
+
+    def test_spec2006_with_ext_returns_label(self):
+        import tempfile
+
+        from src.pack_spec.spec_driver import SPECDriver
+        with patch.object(SPECDriver, '__init__', lambda self, *args, **kwargs: None):
+            driver = SPECDriver.__new__(SPECDriver)
+            driver.spec_name = SPECName.spec2006
+            driver.msg = get_log_messages(DEFAULT_LOG_LANGUAGE)
+
+            with tempfile.NamedTemporaryFile(mode='w', suffix='.cfg', delete=False) as f:
+                f.write("ext = my_label\n")
+                cfg_path = f.name
+
+            try:
+                driver.spec_cfg_path = cfg_path
+                label = driver.analyze_spec_config()
+                assert label == "my_label"
+            finally:
+                os.unlink(cfg_path)
+
+    def test_spec2017_with_label_returns_label(self):
+        import tempfile
+
+        from src.pack_spec.spec_driver import SPECDriver
+        with patch.object(SPECDriver, '__init__', lambda self, *args, **kwargs: None):
+            driver = SPECDriver.__new__(SPECDriver)
+            driver.spec_name = SPECName.spec2017
+            driver.msg = get_log_messages(DEFAULT_LOG_LANGUAGE)
+
+            with tempfile.NamedTemporaryFile(mode='w', suffix='.cfg', delete=False) as f:
+                f.write("label = my_label\n")
+                cfg_path = f.name
+
+            try:
+                driver.spec_cfg_path = cfg_path
+                label = driver.analyze_spec_config()
+                assert label == "my_label"
+            finally:
+                os.unlink(cfg_path)
+
+    def test_config_file_not_found_raises_config_error(self):
+        from src.pack_spec.spec_driver import SPECDriver
+        with patch.object(SPECDriver, '__init__', lambda self, *args, **kwargs: None):
+            driver = SPECDriver.__new__(SPECDriver)
+            driver.spec_name = SPECName.spec2006
+            driver.msg = get_log_messages(DEFAULT_LOG_LANGUAGE)
+            driver.spec_cfg_path = "/nonexistent/path/config.cfg"
+
+            with pytest.raises(ConfigError):
+                driver.analyze_spec_config()
+
+    def test_basepeak_not_allowed_raises_config_error(self):
+        """测试配置文件中设置basepeak=yes但allow_basepeak=False时抛出ConfigError"""
+        import tempfile
+
+        from src.pack_spec.spec_driver import SPECDriver
+        with patch.object(SPECDriver, '__init__', lambda self, *args, **kwargs: None):
+            driver = SPECDriver.__new__(SPECDriver)
+            driver.spec_name = SPECName.spec2006
+            driver.msg = get_log_messages(DEFAULT_LOG_LANGUAGE)
+            driver.allow_basepeak = False
+
+            with tempfile.NamedTemporaryFile(mode='w', suffix='.cfg', delete=False) as f:
+                f.write("ext = my_label\n")
+                f.write("basepeak = yes\n")
+                cfg_path = f.name
+
+            try:
+                driver.spec_cfg_path = cfg_path
+                with pytest.raises(ConfigError):
+                    driver.analyze_spec_config()
+            finally:
+                os.unlink(cfg_path)
+
+    def test_basepeak_allowed_returns_label(self):
+        """测试配置文件中设置basepeak=yes且allow_basepeak=True时正常返回标签"""
+        import tempfile
+
+        from src.pack_spec.spec_driver import SPECDriver
+        with patch.object(SPECDriver, '__init__', lambda self, *args, **kwargs: None):
+            driver = SPECDriver.__new__(SPECDriver)
+            driver.spec_name = SPECName.spec2006
+            driver.msg = get_log_messages(DEFAULT_LOG_LANGUAGE)
+            driver.allow_basepeak = True
+
+            with tempfile.NamedTemporaryFile(mode='w', suffix='.cfg', delete=False) as f:
+                f.write("ext = my_label\n")
+                f.write("basepeak = yes\n")
+                cfg_path = f.name
+
+            try:
+                driver.spec_cfg_path = cfg_path
+                label = driver.analyze_spec_config()
+                assert label == "my_label"
+            finally:
+                os.unlink(cfg_path)
+
+
+class TestGetRefTime:
+    """get_ref_time 方法异常测试"""
+
+    def test_non_numeric_reftime_raises_file_operation_error(self):
+        import tempfile
+
+        from src.pack_spec.spec_2006_driver import SPEC2006Driver
+        with patch.object(SPEC2006Driver, '__init__', lambda self, *args, **kwargs: None):
+            driver = SPEC2006Driver.__new__(SPEC2006Driver)
+            driver.spec_bench_path = "/fake/bench"
+            driver.msg = get_log_messages(DEFAULT_LOG_LANGUAGE)
+
+            with tempfile.TemporaryDirectory() as tmpdir:
+                reftime_dir = os.path.join(tmpdir, "400.perlbench", "data", "ref")
+                os.makedirs(reftime_dir)
+                reftime_path = os.path.join(reftime_dir, "reftime")
+                with open(reftime_path, 'w') as f:
+                    f.write("header\n")
+                    f.write("not_a_number\n")
+
+                driver.spec_bench_path = tmpdir
+                with pytest.raises(FileOperationError, match="Expect a numeric"):
+                    driver.get_ref_time("400.perlbench", InputType.ref)
+
+    def test_valid_reftime_returns_value(self):
+        import tempfile
+
+        from src.pack_spec.spec_2006_driver import SPEC2006Driver
+        with patch.object(SPEC2006Driver, '__init__', lambda self, *args, **kwargs: None):
+            driver = SPEC2006Driver.__new__(SPEC2006Driver)
+            driver.msg = get_log_messages(DEFAULT_LOG_LANGUAGE)
+
+            with tempfile.TemporaryDirectory() as tmpdir:
+                reftime_dir = os.path.join(tmpdir, "400.perlbench", "data", "ref")
+                os.makedirs(reftime_dir)
+                reftime_path = os.path.join(reftime_dir, "reftime")
+                with open(reftime_path, 'w') as f:
+                    f.write("header\n")
+                    f.write("12345\n")
+
+                driver.spec_bench_path = tmpdir
+                result = driver.get_ref_time("400.perlbench", InputType.ref)
+                assert result == "12345"
+
+    def test_missing_reftime_file_raises_file_operation_error(self):
+        from src.pack_spec.spec_2006_driver import SPEC2006Driver
+        with patch.object(SPEC2006Driver, '__init__', lambda self, *args, **kwargs: None):
+            driver = SPEC2006Driver.__new__(SPEC2006Driver)
+            driver.spec_bench_path = "/nonexistent/path"
+            driver.msg = get_log_messages(DEFAULT_LOG_LANGUAGE)
+
+            with pytest.raises(FileOperationError):
+                driver.get_ref_time("400.perlbench", InputType.ref)
+
+
+class TestGetBenchPathMaxNum:
+    """get_bench_path 方法中选择最大编号目录的逻辑测试"""
+
+    def _create_2006_driver(self):
+        from src.pack_spec.spec_2006_driver import SPEC2006Driver
+        with patch.object(SPEC2006Driver, '__init__', lambda self, *args, **kwargs: None):
+            driver = SPEC2006Driver.__new__(SPEC2006Driver)
+            driver.spec_name = SPECName.spec2006
+            driver.spec_bench_list = ["400.perlbench"]
+            driver.spec_build_dir = "build"
+            driver.spec_run_dir = "run"
+            driver.label = "test_label"
+            driver.debug_mode = False
+            driver.msg = get_log_messages(DEFAULT_LOG_LANGUAGE)
+        return driver
+
+    def _create_2017_driver(self):
+        from src.pack_spec.spec_2017_driver import SPEC2017Driver
+        with patch.object(SPEC2017Driver, '__init__', lambda self, *args, **kwargs: None):
+            driver = SPEC2017Driver.__new__(SPEC2017Driver)
+            driver.spec_name = SPECName.spec2017
+            driver.spec_bench_list = ["600.perlbench_s"]
+            driver.spec_build_dir = "build"
+            driver.spec_run_dir = "run"
+            driver.label = "test_label"
+            driver.debug_mode = False
+            driver.msg = get_log_messages(DEFAULT_LOG_LANGUAGE)
+        return driver
+
+    def test_2006_selects_max_num_dir(self):
+        """测试SPEC2006在多个匹配目录时选择编号最大的目录"""
+        import tempfile
+        driver = self._create_2006_driver()
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            bench_path = os.path.join(tmpdir, "400.perlbench", "build")
+            os.makedirs(bench_path)
+            for num in ["0001", "0002", "0003"]:
+                dir_name = f"build_base_test_label.{num}"
+                os.makedirs(os.path.join(bench_path, dir_name))
+
+            driver.spec_bench_path = tmpdir
+            result = driver.get_bench_path(ActionType.build, TuneType.base, InputType.test, SPECMode.speed)
+            assert len(result) == 1
+            assert result[0].endswith("build_base_test_label.0003")
+
+    def test_2017_selects_max_num_dir(self):
+        """测试SPEC2017在多个匹配目录时选择编号最大的目录"""
+        import tempfile
+        driver = self._create_2017_driver()
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            bench_path = os.path.join(tmpdir, "600.perlbench_s", "build")
+            os.makedirs(bench_path)
+            for num in ["0001", "0002", "0005"]:
+                dir_name = f"build_base_test_label.{num}"
+                os.makedirs(os.path.join(bench_path, dir_name))
+
+            driver.spec_bench_path = tmpdir
+            result = driver.get_bench_path(ActionType.build, TuneType.base, InputType.test, SPECMode.speed)
+            assert len(result) == 1
+            assert result[0].endswith("build_base_test_label.0005")
+
+    def test_2006_single_dir(self):
+        """测试SPEC2006只有一个匹配目录时直接返回该目录"""
+        import tempfile
+        driver = self._create_2006_driver()
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            bench_path = os.path.join(tmpdir, "400.perlbench", "build")
+            os.makedirs(bench_path)
+            os.makedirs(os.path.join(bench_path, "build_base_test_label.0001"))
+
+            driver.spec_bench_path = tmpdir
+            result = driver.get_bench_path(ActionType.build, TuneType.base, InputType.test, SPECMode.speed)
+            assert len(result) == 1
+            assert result[0].endswith("build_base_test_label.0001")
+
+    def test_2017_single_dir(self):
+        """测试SPEC2017只有一个匹配目录时直接返回该目录"""
+        import tempfile
+        driver = self._create_2017_driver()
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            bench_path = os.path.join(tmpdir, "600.perlbench_s", "build")
+            os.makedirs(bench_path)
+            os.makedirs(os.path.join(bench_path, "build_base_test_label.0001"))
+
+            driver.spec_bench_path = tmpdir
+            result = driver.get_bench_path(ActionType.build, TuneType.base, InputType.test, SPECMode.speed)
+            assert len(result) == 1
+            assert result[0].endswith("build_base_test_label.0001")
+
+
+class TestGetBenchDirPrefix:
+    """_get_bench_dir_prefix 方法测试"""
+
+    def _create_base_driver(self):
+        from src.pack_spec.spec_driver import SPECDriver
+        with patch.object(SPECDriver, '__init__', lambda self, *args, **kwargs: None):
+            driver = SPECDriver.__new__(SPECDriver)
+            driver.label = "test_label"
+        return driver
+
+    def _create_2017_driver(self):
+        from src.pack_spec.spec_2017_driver import SPEC2017Driver
+        with patch.object(SPEC2017Driver, '__init__', lambda self, *args, **kwargs: None):
+            driver = SPEC2017Driver.__new__(SPEC2017Driver)
+            driver.label = "test_label"
+        return driver
+
+    def test_base_build_prefix(self):
+        """测试基类构建目录前缀"""
+        driver = self._create_base_driver()
+        prefix = driver._get_bench_dir_prefix(ActionType.build, TuneType.base, InputType.test, SPECMode.speed)
+        assert prefix == "build_base_test_label"
+
+    def test_base_run_prefix(self):
+        """测试基类运行目录前缀"""
+        driver = self._create_base_driver()
+        prefix = driver._get_bench_dir_prefix(ActionType.run, TuneType.base, InputType.ref, SPECMode.speed)
+        assert prefix == "run_base_ref_test_label"
+
+    def test_2017_build_prefix(self):
+        """测试SPEC2017构建目录前缀"""
+        driver = self._create_2017_driver()
+        prefix = driver._get_bench_dir_prefix(ActionType.build, TuneType.peak, InputType.test, SPECMode.speed)
+        assert prefix == "build_peak_test_label"
+
+    def test_2017_run_prefix_non_ref(self):
+        """测试SPEC2017非ref输入的运行目录前缀"""
+        driver = self._create_2017_driver()
+        prefix = driver._get_bench_dir_prefix(ActionType.run, TuneType.base, InputType.test, SPECMode.speed)
+        assert prefix == "run_base_test_test_label"
+
+    def test_2017_run_prefix_ref_speed(self):
+        """测试SPEC2017 ref输入speed模式的运行目录前缀"""
+        driver = self._create_2017_driver()
+        prefix = driver._get_bench_dir_prefix(ActionType.run, TuneType.base, InputType.ref, SPECMode.speed)
+        assert prefix == "run_base_refspeed_test_label"
+
+    def test_2017_run_prefix_ref_rate(self):
+        """测试SPEC2017 ref输入rate模式的运行目录前缀"""
+        driver = self._create_2017_driver()
+        prefix = driver._get_bench_dir_prefix(ActionType.run, TuneType.peak, InputType.ref, SPECMode.rate)
+        assert prefix == "run_peak_refrate_test_label"
+
+
+class TestGetBenchPathBase:
+    """基类 get_bench_path 方法测试"""
+
+    def _create_driver(self):
+        from src.pack_spec.spec_driver import SPECDriver
+        with patch.object(SPECDriver, '__init__', lambda self, *args, **kwargs: None):
+            driver = SPECDriver.__new__(SPECDriver)
+            driver.spec_bench_list = ["400.perlbench"]
+            driver.spec_build_dir = "build"
+            driver.spec_run_dir = "run"
+            driver.label = "test_label"
+            driver.debug_mode = False
+            driver.msg = get_log_messages(DEFAULT_LOG_LANGUAGE)
+        return driver
+
+    def test_build_dir_returns_correct_path(self):
+        """测试构建目录返回正确路径"""
+        import tempfile
+        driver = self._create_driver()
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            bench_path = os.path.join(tmpdir, "400.perlbench", "build")
+            os.makedirs(bench_path)
+            os.makedirs(os.path.join(bench_path, "build_base_test_label.0001"))
+
+            driver.spec_bench_path = tmpdir
+            result = driver.get_bench_path(ActionType.build, TuneType.base, InputType.test, SPECMode.speed)
+            assert len(result) == 1
+            assert result[0].endswith("build_base_test_label.0001")
+
+    def test_run_dir_returns_correct_path(self):
+        """测试运行目录返回正确路径"""
+        import tempfile
+        driver = self._create_driver()
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            run_path = os.path.join(tmpdir, "400.perlbench", "run")
+            os.makedirs(run_path)
+            os.makedirs(os.path.join(run_path, "run_base_ref_test_label.0001"))
+
+            driver.spec_bench_path = tmpdir
+            result = driver.get_bench_path(ActionType.run, TuneType.base, InputType.ref, SPECMode.speed)
+            assert len(result) == 1
+            assert result[0].endswith("run_base_ref_test_label.0001")
+
+    def test_no_matching_dir_returns_empty(self):
+        """测试无匹配目录时返回空列表"""
+        import tempfile
+        driver = self._create_driver()
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            bench_path = os.path.join(tmpdir, "400.perlbench", "build")
+            os.makedirs(bench_path)
+
+            driver.spec_bench_path = tmpdir
+            result = driver.get_bench_path(ActionType.build, TuneType.base, InputType.test, SPECMode.speed)
+            assert len(result) == 0
+
+    def test_2017_run_dir_ref_speed(self):
+        """测试SPEC2017 ref+speed运行目录返回正确路径"""
+        import tempfile
+        from src.pack_spec.spec_2017_driver import SPEC2017Driver
+        with patch.object(SPEC2017Driver, '__init__', lambda self, *args, **kwargs: None):
+            driver = SPEC2017Driver.__new__(SPEC2017Driver)
+            driver.spec_bench_list = ["600.perlbench_s"]
+            driver.spec_build_dir = "build"
+            driver.spec_run_dir = "run"
+            driver.label = "test_label"
+            driver.debug_mode = False
+            driver.msg = get_log_messages(DEFAULT_LOG_LANGUAGE)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            run_path = os.path.join(tmpdir, "600.perlbench_s", "run")
+            os.makedirs(run_path)
+            os.makedirs(os.path.join(run_path, "run_base_refspeed_test_label.0001"))
+
+            driver.spec_bench_path = tmpdir
+            result = driver.get_bench_path(ActionType.run, TuneType.base, InputType.ref, SPECMode.speed)
+            assert len(result) == 1
+            assert result[0].endswith("run_base_refspeed_test_label.0001")
+
+
+class TestBuildRunCommand:
+    """_build_run_command 方法测试"""
+
+    def test_2006_build_run_command_returns_command(self):
+        """测试SPEC2006Driver._build_run_command 返回正确的runspec命令"""
+        from src.pack_spec.spec_2006_driver import SPEC2006Driver
+        with patch.object(SPEC2006Driver, '__init__', lambda self, *args, **kwargs: None):
+            driver = SPEC2006Driver.__new__(SPEC2006Driver)
+            driver.spec_dir = "/fake/spec2006"
+            driver.spec_cfg_path = "/fake/config.cfg"
+            driver.tune_type = TuneType.base
+            driver.input_type = InputType.ref
+            driver.spec_mode = SPECMode.speed
+            driver.iterations = 3
+            driver.spec_bench_list = ["400.perlbench", "401.bzip2"]
+            driver.msg = get_log_messages(DEFAULT_LOG_LANGUAGE)
+
+            cmd = driver._build_run_command()
+            assert isinstance(cmd, list)
+            assert len(cmd) > 0
+            assert cmd[0] == "/fake/spec2006/bin/runspec"
+            assert "--config" in cmd
+            assert "--tune" in cmd
+            assert "base" in cmd
+            assert "--size" in cmd
+            assert "ref" in cmd
+            assert "--iterations" in cmd
+            assert "3" in cmd
+            assert "--noreportable" in cmd
+            assert "400.perlbench" in cmd
+            assert "401.bzip2" in cmd
+
+    def test_2017_build_run_command_returns_command(self):
+        """测试SPEC2017Driver._build_run_command 返回正确的runcpu命令"""
+        from src.pack_spec.spec_2017_driver import SPEC2017Driver
+        with patch.object(SPEC2017Driver, '__init__', lambda self, *args, **kwargs: None):
+            driver = SPEC2017Driver.__new__(SPEC2017Driver)
+            driver.spec_dir = "/fake/spec2017"
+            driver.spec_cfg_path = "/fake/config.cfg"
+            driver.tune_type = TuneType.peak
+            driver.input_type = InputType.test
+            driver.spec_mode = SPECMode.rate
+            driver.iterations = 1
+            driver.spec_bench_list = ["600.perlbench_s"]
+            driver.msg = get_log_messages(DEFAULT_LOG_LANGUAGE)
+
+            cmd = driver._build_run_command()
+            assert isinstance(cmd, list)
+            assert len(cmd) > 0
+            assert cmd[0] == "/fake/spec2017/bin/runcpu"
+            assert "--config" in cmd
+            assert "--tune" in cmd
+            assert "peak" in cmd
+            assert "--size" in cmd
+            assert "test" in cmd
+            assert "--iterations" in cmd
+            assert "1" in cmd
+            assert "--noreportable" in cmd
+            assert "--rate" in cmd
+            assert "600.perlbench_s" in cmd

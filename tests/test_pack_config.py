@@ -6,11 +6,9 @@ pack_config.py 单元测试
 
 import os
 import pytest
-from unittest.mock import patch
 
 from src.pack_spec.pack_config import (
-    ActionType, TuneType, InputType, SPECName, SPECSubBench,
-    SPECMode, PACKMode, RunMode, LogLanguage,
+    ActionType, TuneType, InputType, SPECName, SPECMode, PACKMode, RunMode, LogLanguage,
     PackSPECError, ConfigError, FileOperationError,
     CommandExecutionError, BenchmarkError,
     DEFAULT_CORE_NUM, DEFAULT_ITERATIONS, DEFAULT_CLOCK_RATE,
@@ -18,7 +16,7 @@ from src.pack_spec.pack_config import (
     DEFAULT_VERIFY_MODE, DEFAULT_MINIMAL_MODE, DEFAULT_RUN_MODE,
     DEFAULT_REPORT_FORMAT, DEFAULT_LOG_LANGUAGE, RANDOM_SUFFIX_LENGTH,
     P_PATH, SCRIPTS_PATH, GENERATED_FILES_PATH,
-    LogMessages, get_log_messages, setup_logger,
+    LogMessages, get_log_messages, parse_log_language, setup_logger,
 )
 
 
@@ -337,3 +335,76 @@ class TestSetupLogger:
             
             assert "260409_test_pack" in log_path
             assert "log" in log_path
+
+
+class TestParseLogLanguage:
+    """parse_log_language 函数测试"""
+
+    def test_parse_zh(self):
+        """测试解析 'zh' 返回中文语言"""
+        log_language, msg = parse_log_language('zh')
+        assert log_language == LogLanguage.zh
+        assert isinstance(msg, LogMessages)
+        assert msg.language == LogLanguage.zh
+
+    def test_parse_chinese(self):
+        """测试解析 'chinese' 返回中文语言"""
+        log_language, msg = parse_log_language('chinese')
+        assert log_language == LogLanguage.zh
+
+    def test_parse_cn(self):
+        """测试解析 'cn' 返回中文语言"""
+        log_language, msg = parse_log_language('cn')
+        assert log_language == LogLanguage.zh
+
+    def test_parse_en(self):
+        """测试解析 'en' 返回英文语言"""
+        log_language, msg = parse_log_language('en')
+        assert log_language == LogLanguage.en
+        assert isinstance(msg, LogMessages)
+        assert msg.language == LogLanguage.en
+
+    def test_parse_english(self):
+        """测试解析 'english' 返回英文语言"""
+        log_language, msg = parse_log_language('english')
+        assert log_language == LogLanguage.en
+
+    def test_parse_case_insensitive(self):
+        """测试大小写不敏感"""
+        log_language, _ = parse_log_language('ZH')
+        assert log_language == LogLanguage.zh
+        log_language, _ = parse_log_language('En')
+        assert log_language == LogLanguage.en
+        log_language, _ = parse_log_language('CHINESE')
+        assert log_language == LogLanguage.zh
+        log_language, _ = parse_log_language('English')
+        assert log_language == LogLanguage.en
+
+    def test_parse_unknown_returns_default(self):
+        """测试未知字符串返回默认语言"""
+        log_language, msg = parse_log_language('fr')
+        assert log_language == DEFAULT_LOG_LANGUAGE
+        assert isinstance(msg, LogMessages)
+
+    def test_parse_empty_string_returns_default(self):
+        """测试空字符串返回默认语言"""
+        log_language, _ = parse_log_language('')
+        assert log_language == DEFAULT_LOG_LANGUAGE
+
+    def test_parse_returns_log_messages_instance(self):
+        """测试返回的 msg 是 LogMessages 实例且语言匹配"""
+        log_language, msg = parse_log_language('en')
+        assert isinstance(msg, LogMessages)
+        assert msg.language == log_language
+
+    def test_parse_zh_message_content(self):
+        """测试中文消息内容正确"""
+        _, msg = parse_log_language('zh')
+        result = msg.get("config_saved", path="/test")
+        assert "PackSPEC 配置文件已保存到" in result
+
+    def test_parse_en_message_content(self):
+        """测试英文消息内容正确"""
+        _, msg = parse_log_language('en')
+        result = msg.get("config_saved", path="/test")
+        assert "PackSPEC config file saved to" in result

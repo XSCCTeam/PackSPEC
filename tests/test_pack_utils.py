@@ -7,14 +7,12 @@ pack_utils.py 单元测试
 import os
 import json
 import pytest
-import tempfile
-import shutil
 from unittest.mock import patch, MagicMock
 
 from src.pack_spec.pack_config import (
     SPECName, TuneType, InputType, SPECMode, PACKMode,
     PackSPECError, FileOperationError, CommandExecutionError,
-    DEFAULT_CORE_NUM, SCRIPTS_PATH, GENERATED_FILES_PATH,
+    SCRIPTS_PATH,
 )
 from src.pack_spec.pack_utils import (
     is_numeric, EnumEncoder, EnumDecoder,
@@ -403,6 +401,57 @@ class TestPackUtils:
                                            SPECName.spec2006, TuneType.base, InputType.test, SPECMode.speed)
         assert os.path.isdir(result)
 
+    def test_create_dest_dir_overwrite_confirmed(self, base_config, temp_dir):
+        """测试 overwrite_confirmed=True 时直接覆盖已存在目录，不抛出异常"""
+        utils = PackUtils(base_config, MagicMock())
+        existing_dir = os.path.join(temp_dir, "existing_dir")
+        os.makedirs(existing_dir)
+        utils.overwrite_confirmed = True
+        with patch.object(utils, 'get_dest_dir', return_value=existing_dir):
+            result = utils.create_dest_dir(False, False, PACKMode.run,
+                                           SPECName.spec2006, TuneType.base, InputType.test, SPECMode.speed)
+        assert os.path.isdir(result)
+
+    def test_create_dest_dir_not_auto_mode_raises(self, base_config, temp_dir):
+        """测试非自动模式下目录已存在且未设置覆盖确认时抛出PackSPECError"""
+        utils = PackUtils(base_config, MagicMock())
+        existing_dir = os.path.join(temp_dir, "existing_dir")
+        os.makedirs(existing_dir)
+        with patch.object(utils, 'get_dest_dir', return_value=existing_dir):
+            with pytest.raises(PackSPECError):
+                utils.create_dest_dir(False, False, PACKMode.run,
+                                      SPECName.spec2006, TuneType.base, InputType.test, SPECMode.speed)
+
+    def test_create_generated_dir_auto_mode_overwrite(self, base_config, temp_dir):
+        """测试自动模式下覆盖已存在的生成目录"""
+        utils = PackUtils(base_config, MagicMock())
+        with patch.object(utils, 'get_pack_generated_dir_path', return_value=os.path.join(temp_dir, "gen_dir")):
+            os.makedirs(os.path.join(temp_dir, "gen_dir"))
+            with patch('src.pack_spec.pack_utils.GENERATED_FILES_PATH', temp_dir):
+                result = utils.create_generated_dir(auto_mode=True)
+        assert os.path.isdir(result)
+
+    def test_create_generated_dir_overwrite_confirmed(self, base_config, temp_dir):
+        """测试 overwrite_confirmed=True 时直接覆盖已存在目录，不抛出异常"""
+        utils = PackUtils(base_config, MagicMock())
+        gen_dir = os.path.join(temp_dir, "gen_dir")
+        os.makedirs(gen_dir)
+        utils.overwrite_confirmed = True
+        with patch.object(utils, 'get_pack_generated_dir_path', return_value=gen_dir):
+            with patch('src.pack_spec.pack_utils.GENERATED_FILES_PATH', temp_dir):
+                result = utils.create_generated_dir(auto_mode=False)
+        assert os.path.isdir(result)
+
+    def test_create_generated_dir_not_auto_mode_raises(self, base_config, temp_dir):
+        """测试非自动模式下目录已存在且未设置覆盖确认时抛出PackSPECError"""
+        utils = PackUtils(base_config, MagicMock())
+        gen_dir = os.path.join(temp_dir, "gen_dir")
+        os.makedirs(gen_dir)
+        with patch.object(utils, 'get_pack_generated_dir_path', return_value=gen_dir):
+            with patch('src.pack_spec.pack_utils.GENERATED_FILES_PATH', temp_dir):
+                with pytest.raises(PackSPECError):
+                    utils.create_generated_dir(auto_mode=False)
+
 
 class TestBuildQemuCommand:
     """build_qemu_command 函数测试"""
@@ -551,6 +600,20 @@ class TestCommandsToSendMessage:
         assert len(commands) > 0
         assert any("message" in cmd.lower() for cmd in commands)
 
+    def test_message_url_from_env(self, base_config):
+        """测试消息URL从环境变量BOSC_MESSAGE_URL获取"""
+        with patch('src.pack_spec.pack_utils.BOSC_MESSAGE_URL', 'http://custom-host:9999'):
+            utils = PackUtils(base_config, MagicMock())
+            commands = utils.commands_to_send_message("test message")
+        assert any("http://custom-host:9999/send-message" in cmd for cmd in commands)
+
+    def test_message_url_default(self, base_config):
+        """测试未设置BOSC_MESSAGE_URL时使用默认值"""
+        with patch('src.pack_spec.pack_utils.BOSC_MESSAGE_URL', 'http://172.38.8.102:8848'):
+            utils = PackUtils(base_config, MagicMock())
+            commands = utils.commands_to_send_message("test message")
+        assert any("http://172.38.8.102:8848/send-message" in cmd for cmd in commands)
+
 
 class TestCommandsToSendMdMessage:
     """commands_to_send_md_message 函数测试"""
@@ -605,7 +668,7 @@ class TestParseSpecResults:
 class TestCalculateSpecScore:
     """calculate_spec_score 函数测试"""
 
-    def test_int_score(self):
+    def test_int_score_spec2006(self):
         benchmarks = {
             "400.perlbench": {"runtime": 100.0, "score": 5.0},
             "401.bzip2": {"runtime": 80.0, "score": 6.25},
@@ -613,7 +676,7 @@ class TestCalculateSpecScore:
         score = calculate_spec_score(benchmarks, "int", SPECName.spec2006)
         assert score > 0
 
-    def test_fp_score(self):
+    def test_fp_score_spec2006(self):
         benchmarks = {
             "433.milc": {"runtime": 100.0, "score": 5.0},
             "434.zeusmp": {"runtime": 80.0, "score": 6.25},
@@ -621,9 +684,59 @@ class TestCalculateSpecScore:
         score = calculate_spec_score(benchmarks, "fp", SPECName.spec2006)
         assert score > 0
 
+    def test_int_score_spec2017(self):
+        benchmarks = {
+            "600.perlbench_s": {"runtime": 100.0, "score": 5.0},
+            "602.gcc_s": {"runtime": 80.0, "score": 6.25},
+        }
+        score = calculate_spec_score(benchmarks, "int", SPECName.spec2017)
+        assert score > 0
+
+    def test_fp_score_spec2017(self):
+        benchmarks = {
+            "603.bwaves_s": {"runtime": 100.0, "score": 5.0},
+            "607.cactuBSSN_s": {"runtime": 80.0, "score": 6.25},
+        }
+        score = calculate_spec_score(benchmarks, "fp", SPECName.spec2017)
+        assert score > 0
+
     def test_empty_benchmarks(self):
         score = calculate_spec_score({}, "int", SPECName.spec2006)
         assert score == 0.0
+
+    def test_spec2006v1p01_uses_spec2006_benches(self):
+        """测试spec2006v1p01版本使用SPEC2006的基准测试列表"""
+        benchmarks = {
+            "400.perlbench": {"runtime": 100.0, "score": 5.0},
+        }
+        score = calculate_spec_score(benchmarks, "int", SPECName.spec2006v1p01)
+        assert score > 0
+
+    def test_bench_list_consistency_with_driver(self):
+        """测试calculate_spec_score使用的基准测试列表与驱动模块定义一致"""
+        from src.pack_spec.spec_2006_driver import SPEC2006_INT_BENCHES, SPEC2006_FP_BENCHES
+        from src.pack_spec.spec_2017_driver import SPEC2017_INT_BENCHES, SPEC2017_FP_BENCHES
+
+        all_2006_int = {"400.perlbench", "401.bzip2", "403.gcc", "429.mcf", "445.gobmk",
+                        "456.hmmer", "458.sjeng", "462.libquantum", "464.h264ref",
+                        "471.omnetpp", "473.astar", "483.xalancbmk"}
+        assert set(SPEC2006_INT_BENCHES) == all_2006_int
+
+        all_2006_fp = {"410.bwaves", "416.gamess", "433.milc", "434.zeusmp", "435.gromacs",
+                       "436.cactusADM", "437.leslie3d", "444.namd", "447.dealII", "450.soplex",
+                       "453.povray", "454.calculix", "459.GemsFDTD", "465.tonto", "470.lbm",
+                       "481.wrf", "482.sphinx3"}
+        assert set(SPEC2006_FP_BENCHES) == all_2006_fp
+
+        all_2017_int = {"600.perlbench_s", "602.gcc_s", "605.mcf_s", "620.omnetpp_s",
+                        "623.xalancbmk_s", "625.x264_s", "631.deepsjeng_s", "641.leela_s",
+                        "648.exchange2_s", "657.xz_s"}
+        assert set(SPEC2017_INT_BENCHES) == all_2017_int
+
+        all_2017_fp = {"603.bwaves_s", "607.cactuBSSN_s", "619.lbm_s", "621.wrf_s",
+                       "627.cam4_s", "628.pop2_s", "638.imagick_s", "644.nab_s",
+                       "649.fotonik3d_s", "654.roms_s"}
+        assert set(SPEC2017_FP_BENCHES) == all_2017_fp
 
 
 class TestGenerateQemuVerifyScript:
@@ -788,6 +901,11 @@ class TestPackUtilsExtended:
         with patch('subprocess.run') as mock_run:
             mock_run.return_value = MagicMock(stdout="output\n", returncode=0)
             result = utils.execute_commands("echo hello", "/tmp")
+        mock_run.assert_called_once()
+        # 验证命令以列表形式传递（shlex.split的结果）
+        call_args = mock_run.call_args[0][0]
+        assert isinstance(call_args, list)
+        assert call_args == ["echo", "hello"]
         assert "output" in result
 
     def test_execute_commands_failure(self, base_config):
@@ -796,6 +914,33 @@ class TestPackUtilsExtended:
             mock_run.side_effect = Exception("command failed")
             with pytest.raises(CommandExecutionError):
                 utils.execute_commands("bad_command", "/tmp")
+
+    def test_execute_commands_shlex_split_quoted_args(self, base_config):
+        """测试shlex.split正确处理带引号的命令参数，防止命令注入"""
+        utils = PackUtils(base_config, MagicMock())
+        with patch('subprocess.run') as mock_run:
+            mock_run.return_value = MagicMock(stdout="ok\n", returncode=0)
+            utils.execute_commands('echo "hello world"', "/tmp")
+        call_args = mock_run.call_args[0][0]
+        assert isinstance(call_args, list)
+        # shlex.split会将引号内的内容作为一个整体参数
+        assert call_args == ["echo", "hello world"]
+        # 确保不会被错误拆分为 ["echo", "\"hello", "world\""]
+        assert call_args != ["echo", '"hello', 'world"']
+
+    def test_execute_commands_shlex_split_injection_prevention(self, base_config):
+        """测试shlex.split防止命令注入攻击"""
+        utils = PackUtils(base_config, MagicMock())
+        with patch('subprocess.run') as mock_run:
+            mock_run.return_value = MagicMock(stdout="ok\n", returncode=0)
+            # 模拟恶意输入：尝试通过分号注入额外命令
+            utils.execute_commands('echo "test; rm -rf /"', "/tmp")
+        call_args = mock_run.call_args[0][0]
+        assert isinstance(call_args, list)
+        # shlex.split会将分号作为参数的一部分，而不是命令分隔符
+        assert call_args == ["echo", "test; rm -rf /"]
+        # 确保不会拆分成多个命令
+        assert len(call_args) == 2
 
     def test_use_template_to_create_script(self, base_config, temp_dir):
         utils = PackUtils(base_config, MagicMock())

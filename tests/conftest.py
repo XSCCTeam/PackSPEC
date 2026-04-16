@@ -11,10 +11,7 @@ import shutil
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from src.pack_spec.pack_config import (
-    SPECName, TuneType, InputType, SPECMode, PACKMode, RunMode,
-    DEFAULT_CORE_NUM, DEFAULT_CLOCK_RATE, DEFAULT_ITERATIONS,
-    DEFAULT_REBUILD, DEFAULT_PROFILE_GEN, DEFAULT_AUTO_MODE,
-    DEFAULT_VERIFY_MODE, DEFAULT_MINIMAL_MODE, DEFAULT_RUN_MODE,
+    SPECName, TuneType, InputType, SPECMode, DEFAULT_CORE_NUM, DEFAULT_CLOCK_RATE, DEFAULT_PROFILE_GEN, DEFAULT_VERIFY_MODE, DEFAULT_MINIMAL_MODE, DEFAULT_RUN_MODE,
     DEFAULT_REPORT_FORMAT,
 )
 

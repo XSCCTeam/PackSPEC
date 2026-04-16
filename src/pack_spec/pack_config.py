@@ -305,6 +305,9 @@ DEFAULT_PROFILE_GEN = False
 DEFAULT_AUTO_MODE = False
 """默认是否自动模式，自动模式下无需用户确认"""
 
+DEFAULT_ALLOW_BASEPEAK = False
+"""默认是否允许basepeak配置，设为True时配置文件中basepeak=yes不会报错"""
+
 RANDOM_SUFFIX_LENGTH = 4
 """随机后缀长度，用于目录命名避免冲突"""
 
@@ -386,7 +389,7 @@ class BenchmarkError(PackSPECError):
 DEFAULT_LLVM_PATH = os.getenv('DEFAULT_LLVM_PATH')
 """默认LLVM安装路径，从环境变量获取"""
 
-if DEFAULT_LLVM_PATH != None:
+if DEFAULT_LLVM_PATH is not None:
     # llvm-profdata用于合并多个profraw文件为单个profdata文件，是Profile Guided Optimization的关键工具
     DEFAULT_LLVM_PROFDATA_PATH = os.path.join(DEFAULT_LLVM_PATH, "bin", "llvm-profdata")
     """llvm-profdata工具路径，用于合并profile文件"""
@@ -404,6 +407,9 @@ BOSC_API_KEY = os.getenv('BOSC_API_KEY')
 BOSC_AT_USER = os.getenv('BOSC_AT_USER')
 """钉钉通知@的用户手机号，从环境变量获取"""
 
+BOSC_MESSAGE_URL = os.getenv('BOSC_MESSAGE_URL', 'http://172.38.8.102:8848')
+"""消息发送服务URL，从环境变量获取，默认为内网消息服务地址"""
+
 
 #########################################
 # SPEC Configs - SPEC安装路径配置
@@ -412,7 +418,7 @@ BOSC_AT_USER = os.getenv('BOSC_AT_USER')
 SPEC2006_PATH = os.getenv('SPEC2006_PATH')
 """SPEC2006安装目录路径，从环境变量获取"""
 
-if SPEC2006_PATH != None:
+if SPEC2006_PATH is not None:
     SPEC2006_BENCH_PATH = os.path.join(SPEC2006_PATH, "benchspec", "CPU2006")
     """SPEC2006基准测试目录路径"""
     SPEC2006_CONFIG_PATH = os.path.join(SPEC2006_PATH, "config")
@@ -424,7 +430,7 @@ else:
 SPEC2017_PATH = os.getenv('SPEC2017_PATH')
 """SPEC2017安装目录路径，从环境变量获取"""
 
-if SPEC2017_PATH != None:
+if SPEC2017_PATH is not None:
     SPEC2017_BENCH_PATH = os.path.join(SPEC2017_PATH, "benchspec", "CPU2017")
     """SPEC2017基准测试目录路径"""
     SPEC2017_CONFIG_PATH = os.path.join(SPEC2017_PATH, "config")
@@ -918,6 +924,14 @@ class LogMessages:
             "zh": "用户中止",
             "en": "Aborted by user."
         },
+        "basepeak_not_allowed": {
+            "zh": "配置文件中设置了 basepeak=yes，但未启用 allow_basepeak 配置项。请在配置中设置 allow_basepeak=True 以允许使用 basepeak",
+            "en": "basepeak=yes is set in config file, but allow_basepeak is not enabled. Please set allow_basepeak=True in config to allow basepeak"
+        },
+        "dir_exists_not_auto_mode": {
+            "zh": "目录 {path} 已存在，非自动模式下未设置覆盖确认，请设置 auto_mode=True 或确认覆盖后重试",
+            "en": "Directory {path} already exists, auto_mode is not enabled and overwrite not confirmed. Please set auto_mode=True or confirm overwrite"
+        },
         "config_file_not_found": {
             "zh": "配置文件 {path} 未找到",
             "en": "File {path} not found."
@@ -953,10 +967,6 @@ class LogMessages:
         "spec_env_check_passed": {
             "zh": "SPEC环境检查通过: {path}",
             "en": "SPEC environment check passed: {path}"
-        },
-        "build_run_command_should_override": {
-            "zh": "_build_run_command() 应由子类重写",
-            "en": "_build_run_command() should be overridden by subclass"
         },
         "start_running_spec": {
             "zh": "开始运行SPEC测试: {cmd}",
@@ -1014,13 +1024,48 @@ class LogMessages:
         return message
 
 
+def parse_log_language(language_str: str) -> tuple:
+    """
+    解析日志语言配置字符串，返回对应的 LogLanguage 枚举和 LogMessages 实例
+
+    将字符串形式的日志语言配置（如 'zh'、'en'、'chinese'、'english' 等）
+    解析为 LogLanguage 枚举值，并生成对应的 LogMessages 实例。
+
+    Args:
+        language_str (str): 日志语言配置字符串，支持 'zh'/'chinese'/'cn' 和 'en'/'english'
+
+    Returns:
+        tuple: (LogLanguage, LogMessages) 元组，包含解析后的语言枚举和消息实例
+
+    Note:
+        如果传入的字符串无法识别，则使用 DEFAULT_LOG_LANGUAGE 作为默认值
+
+    Example:
+        >>> lang, msg = parse_log_language('zh')
+        >>> lang == LogLanguage.zh
+        True
+        >>> lang, msg = parse_log_language('english')
+        >>> lang == LogLanguage.en
+        True
+    """
+    language_str = language_str.lower()
+    if language_str in ('zh', 'chinese', 'cn'):
+        log_language = LogLanguage.zh
+    elif language_str in ('en', 'english'):
+        log_language = LogLanguage.en
+    else:
+        log_language = DEFAULT_LOG_LANGUAGE
+    msg = get_log_messages(log_language)
+    return log_language, msg
+
+
 def get_log_messages(language: LogLanguage = DEFAULT_LOG_LANGUAGE) -> LogMessages:
     """
     获取日志消息管理器实例
-    
+
     Args:
         language (LogLanguage): 语言配置
-        
+
     Returns:
         LogMessages: 日志消息管理器实例
     """

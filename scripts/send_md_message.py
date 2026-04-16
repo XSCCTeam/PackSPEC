@@ -3,17 +3,20 @@
 import requests
 import json
 import argparse
+import os
 
 def send_md_message(api_key, title, text, md_path, at_mobiles=None):
     """
     发送Markdown格式消息到指定API
     
     Args:
+        api_key: API密钥
         title: 消息标题
         text: 消息内容
+        md_path: Markdown文件路径
         at_mobiles: 要@的手机号列表(可选)
     """
-    url = "http://172.38.8.102:8848/custom-send"
+    url = os.getenv('BOSC_MESSAGE_URL', 'http://172.38.8.102:8848') + '/custom-send'
     
     at_content = {"isAtAll": False, "atUserIds": None}
     if at_mobiles:

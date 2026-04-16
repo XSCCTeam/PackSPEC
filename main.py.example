@@ -133,12 +133,19 @@ if __name__ == "__main__":
             # - 跳过 curl 检查和消息发送功能
             # - 使用 POSIX 兼容的循环语法
             "minimal_mode": False,
+
+            # 是否允许basepeak配置，默认为 False
+            # 当SPEC cfg文件中设置了 basepeak=yes 时，需要设置为 True 才允许继续
+            # 否则会抛出 ConfigError 异常
+            # basepeak=yes 表示使用base的二进制和/或结果用于peak
+            # 详见: https://www.spec.org/cpu2006/Docs/config.html#basepeak
+            "allow_basepeak": False,
         },
         # 消息发送相关配置
         "msg_config": {
             # 是否开启钉钉消息发送，默认为 False
             # 开启后会在测试完成后发送消息通知用户
-            # 需要在 .env 中配置 BOSC_AT_USER、BOSC_AT_TOKEN 环境变量
+            # 需要在 .env 中配置 BOSC_AT_USER、BOSC_AT_TOKEN、BOSC_MESSAGE_URL 环境变量
             "enable_dingtalk_message": True,
 
             # 日志输出语言，默认为 "zh"（中文）
@@ -163,4 +170,43 @@ if __name__ == "__main__":
     #   - 调用 run_spec() 直接运行 SPEC 测试
     #   - 跳过所有打包相关操作
     packer.run()
+
+
+# ============================================================
+# CLI 命令行使用方式
+# 
+# 除了编写 Python 脚本外，还可以通过 run-cli.py 命令行入口使用 PackSPEC：
+#
+# 1. 通过配置文件运行：
+#    python run-cli.py -c /path/to/pack_spec.cfg
+#
+# 2. 通过命令行参数运行：
+#    python run-cli.py --spec-name spec2017 --cfg-path /path/to/spec.cfg --pack-name my_test
+#
+# 3. 混合使用（命令行参数覆盖配置文件）：
+#    python run-cli.py -c /path/to/pack_spec.cfg --tune-type peak --iterations 1
+#
+# 4. 查看帮助信息：
+#    python run-cli.py -h
+#
+# 常用参数：
+#   --spec-name       SPEC版本（spec2006/spec2006v1p01/spec2017）
+#   --cfg-path        SPEC cfg文件路径
+#   --tune-type       优化级别（base/peak/all，默认: base）
+#   --input-type      输入类型（test/train/ref/all，默认: ref）
+#   --spec-mode       运行模式（speed/rate，默认: speed）
+#   --spec-benches    基准测试选择（默认: all）
+#   --iterations      迭代次数（默认: 3）
+#   --pack-name       打包任务名称（默认: packspec）
+#   --run-mode        运行模式（pack/direct，默认: pack）
+#   --setup-spec      是否执行setup
+#   --no-pack-binaries  不打包二进制文件
+#   --no-pack-benches   不打包测试环境
+#   --profile-gen     Profile生成模式
+#   --auto-mode       自动模式
+#   --verify-mode     QEMU验证模式
+#   --minimal-mode    极简模式
+#   --allow-basepeak  允许basepeak配置
+#   --log-language    日志语言（zh/en，默认: zh）
+# ============================================================
 

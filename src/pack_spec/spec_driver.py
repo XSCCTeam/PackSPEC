@@ -14,18 +14,19 @@ SPEC2006和SPEC2017的具体实现继承自该基类。
 子类需要实现：
 - get_bench_list(): 获取基准测试列表
 - get_ref_time(): 获取参考时间
-- get_bench_path(): 获取基准测试目录路径
+- _get_bench_dir_prefix(): 获取基准测试目录前缀（可选重写）
 - get_binary_path_map(): 获取二进制文件路径映射
+- _build_run_command(): 构建SPEC运行命令
 """
 
-import sys
 import os
+import re
 import subprocess
 
 from src.pack_spec.pack_config import (
     SPECName, TuneType, InputType, SPECMode, ActionType,
-    PackSPECError, ConfigError, FileOperationError, CommandExecutionError,
-    P_PATH, logger, LogLanguage, LogMessages, get_log_messages, DEFAULT_LOG_LANGUAGE
+    ConfigError, FileOperationError, CommandExecutionError,
+    P_PATH, logger
 )
 from src.pack_spec.pack_utils import PackUtils
 from typing import Dict, List, Optional
@@ -38,12 +39,16 @@ class SPECDriver:
     该类是SPEC2006Driver和SPEC2017Driver的基类，定义了SPEC基准测试的通用操作接口。
     提供了配置解析、编译执行、路径获取等核心功能。
     
+    支持驱动注册表模式：子类通过 _spec_name_key 类属性指定对应的 SPECName 枚举值，
+    在定义时自动注册到 _registry 字典中。通过 create() 工厂方法根据 SPECName 枚举值
+    查找并实例化对应的驱动类，替代 if/elif 链。
+    
     Attributes:
         spec_cfg_path (str): SPEC配置文件的绝对路径
         spec_name (SPECName): SPEC版本枚举值
         tune_type (TuneType): 优化级别枚举值
         input_type (InputType): 输入数据集类型枚举值
-        spec_mode (SPECMode): 运行模式枚举值
+        spec_mode (SPECMode): 运行模式枚举值(speed/rate)
         spec_benches (str): 基准测试选择字符串
         iterations (int): 测试迭代次数
         rebuild (bool): 是否重新构建
@@ -61,6 +66,75 @@ class SPECDriver:
     Note:
         该类不应直接实例化，应使用SPEC2006Driver或SPEC2017Driver
     """
+
+    _registry: Dict[str, type] = {}
+    """驱动注册表，键为 SPECName 枚举成员名，值为对应的驱动类"""
+
+    _spec_name_key: Optional[str] = None
+    """子类需设置此属性为对应的 SPECName 枚举成员名，用于自动注册"""
+
+    def __init_subclass__(cls, **kwargs):
+        """
+        子类定义时自动注册到注册表
+        
+        当子类设置了 _spec_name_key 类属性时，自动将其注册到 _registry 中。
+        子类必须在类体中定义 _spec_name_key 为 SPECName 枚举成员名字符串。
+        
+        Args:
+            **kwargs: 传递给父类的关键字参数
+        """
+        super().__init_subclass__(**kwargs)
+        if cls._spec_name_key is not None:
+            SPECDriver._registry[cls._spec_name_key] = cls
+
+    @classmethod
+    def create(cls, spec_name: SPECName, spec_cfg_path: str, tune_type: TuneType,
+               input_type: InputType, spec_mode: SPECMode, spec_benches: str,
+               utils: PackUtils, iterations: int = 3, rebuild: bool = False,
+               debug_mode: bool = False, allow_basepeak: bool = False) -> 'SPECDriver':
+        """
+        工厂方法：根据 SPECName 枚举值创建对应的驱动实例
+        
+        通过注册表查找 spec_name 对应的驱动类并实例化，
+        替代 if/elif 链进行驱动选择。
+        
+        Args:
+            spec_name (SPECName): SPEC版本枚举值(spec2006/spec2006v1p01/spec2017)
+            spec_cfg_path (str): SPEC配置文件的绝对路径
+            tune_type (TuneType): 优化级别枚举值(base/peak/all)
+            input_type (InputType): 输入数据集类型枚举值(test/train/ref/all)
+            spec_mode (SPECMode): 运行模式枚举值(speed/rate)
+            spec_benches (str): 基准测试选择字符串，空格分隔
+            utils (PackUtils): 工具类实例
+            iterations (int, optional): 测试迭代次数，默认3
+            rebuild (bool, optional): 是否重新构建，默认False
+            debug_mode (bool, optional): 是否调试模式，默认False
+            allow_basepeak (bool, optional): 是否允许basepeak配置，默认False
+            
+        Returns:
+            SPECDriver: 对应的驱动实例
+            
+        Raises:
+            ValueError: 当 spec_name 未在注册表中找到对应驱动类时抛出
+        """
+        driver_cls = cls._registry.get(spec_name.name)
+        if driver_cls is None:
+            raise ValueError(
+                f"未找到 SPECName '{spec_name.name}' 对应的驱动类，"
+                f"已注册的驱动: {list(cls._registry.keys())}"
+            )
+        return driver_cls(
+            spec_cfg_path=spec_cfg_path,
+            tune_type=tune_type,
+            input_type=input_type,
+            spec_mode=spec_mode,
+            spec_benches=spec_benches,
+            utils=utils,
+            iterations=iterations,
+            rebuild=rebuild,
+            debug_mode=debug_mode,
+            allow_basepeak=allow_basepeak,
+        )
     def __init__(self, 
                  spec_cfg_path: str,
                  spec_name: SPECName, 
@@ -72,6 +146,7 @@ class SPECDriver:
                  iterations: int = 3,
                  rebuild: bool = False,
                  debug_mode: bool = False,
+                 allow_basepeak: bool = False,
                  ):
         """
         初始化SPECDriver实例
@@ -87,6 +162,7 @@ class SPECDriver:
             iterations (int, optional): 测试迭代次数，默认3
             rebuild (bool, optional): 是否重新构建，默认False
             debug_mode (bool, optional): 是否调试模式，默认False
+            allow_basepeak (bool, optional): 是否允许basepeak配置，默认False
             
         Note:
             初始化时会自动调用analyze_spec_config()解析配置文件获取标签
@@ -100,6 +176,7 @@ class SPECDriver:
         self.iterations = iterations
         self.rebuild = rebuild
         self.debug_mode = debug_mode
+        self.allow_basepeak = allow_basepeak
         self.utils = utils
         self.msg = utils.msg  # 使用 PackUtils 中的消息管理器
         self.label = self.analyze_spec_config()
@@ -182,11 +259,11 @@ class SPECDriver:
             
         Raises:
             ConfigError: 当配置文件不存在时抛出
-            PackSPECError: 当用户取消basepeak确认时抛出
-            AssertionError: 当无法从配置文件中提取标签时抛出
+            ConfigError: 当无法从配置文件中提取标签时抛出
+            ConfigError: 当配置文件中设置了basepeak=yes但未启用allow_basepeak时抛出
             
         Note:
-            - 如果配置文件中设置了basepeak=yes，会提示用户确认
+            - 如果配置文件中设置了basepeak=yes，需要allow_basepeak=True才允许继续
             - SPEC2006配置文件格式: ext = label_name
             - SPEC2017配置文件格式: label = label_name
         """
@@ -226,20 +303,21 @@ class SPECDriver:
                             "run will be reported for both. ———— SPEC2006 Docs"
                             "(https://www.spec.org/cpu2006/Docs/config.html#basepeak)"
                         )
-                        choice = input(f"Are you sure you use it right? (y/n): ")
-                        if choice.lower() == 'y':
+                        if self.allow_basepeak:
                             logger.warning(self.msg.get("continue_with_basepeak"))
                         else:
-                            logger.error(self.msg.get("aborted_by_user"))
-                            raise PackSPECError(self.msg.get("aborted_by_user"))
+                            logger.error(self.msg.get("basepeak_not_allowed"))
+                            raise ConfigError(self.msg.get("basepeak_not_allowed"))
                         
         except FileNotFoundError:
             logger.error(self.msg.get("config_file_not_found", path=self.spec_cfg_path))
             raise ConfigError(self.msg.get("config_file_not_found", path=self.spec_cfg_path))
         if self.spec_name in [SPECName.spec2006, SPECName.spec2006v1p01]:
-            assert label != "", f"Ext not found in file {self.spec_cfg_path}."
+            if label == "":
+                raise ConfigError(f"Ext not found in file {self.spec_cfg_path}.")
         elif self.spec_name == SPECName.spec2017:
-            assert label!= "", f"Label not found in file {self.spec_cfg_path}."
+            if label == "":
+                raise ConfigError(f"Label not found in file {self.spec_cfg_path}.")
         return label
     
     def run_setup_spec(self, tune_type: TuneType, input_type: InputType, rebuild: bool = True) -> str:
@@ -382,7 +460,7 @@ class SPECDriver:
             # 替换完整路径
             line = line.replace(src_dir, ".")
             # 替换目录名
-            line = line.replace(f"../{src_dir_name}/", f"./")
+            line = line.replace(f"../{src_dir_name}/", "./")
             # 替换二进制文件名
             if binary_name_map[0] != "":
                 line = line.replace(binary_name_map[0], binary_name_map[1])
@@ -449,7 +527,7 @@ class SPECDriver:
         for line in commands:
             line = line.replace(f"cd {src_dir}", "")
             line = line.replace(src_dir, ".")
-            line = line.replace(f"../{src_dir_name}/", f"./")
+            line = line.replace(f"../{src_dir_name}/", "./")
             line = line.replace(f"specperl {self.spec_dir}/bin/specdiff", "specdiff")
             
             if line.strip().startswith("specdiff") and ">" in line:
@@ -508,21 +586,126 @@ class SPECDriver:
         logger.debug(self.msg.get("spec_env_check_passed", path=self.spec_dir))
         return True
 
+    def _get_bench_dir_prefix(self, action_type: ActionType, tune_type: TuneType,
+                              input_type: InputType, spec_mode: SPECMode) -> str:
+        """
+        获取基准测试目录前缀
+
+        根据动作类型、优化级别、输入类型和运行模式构建目录前缀。
+        子类可重写此方法以提供版本特定的目录前缀格式。
+
+        Args:
+            action_type (ActionType): 动作类型(build/run)
+            tune_type (TuneType): 优化级别(base/peak)
+            input_type (InputType): 输入数据集类型(test/train/ref)
+            spec_mode (SPECMode): 运行模式(speed/rate)
+
+        Returns:
+            str: 目录前缀字符串
+
+        Note:
+            默认实现适用于SPEC2006格式：
+            - 构建目录前缀: build_{tune_type}_{label}
+            - 运行目录前缀: run_{tune_type}_{input_type}_{label}
+        """
+        if action_type == ActionType.build:
+            return f"{action_type.name}_{tune_type.name}_{self.label}"
+        else:
+            return f"{action_type.name}_{tune_type.name}_{input_type.name}_{self.label}"
+
+    def get_bench_path(self, action_type: ActionType, tune_type: TuneType,
+                       input_type: InputType, spec_mode: SPECMode) -> List[str]:
+        """
+        获取基准测试的构建或运行目录路径列表
+
+        根据动作类型、优化级别、输入类型等参数，查找并返回匹配的基准测试目录。
+        目录命名格式遵循SPEC规范。
+
+        Args:
+            action_type (ActionType): 动作类型
+                - ActionType.build: 获取构建目录
+                - ActionType.run: 获取运行目录
+            tune_type (TuneType): 优化级别(base/peak)
+            input_type (InputType): 输入数据集类型(test/train/ref)
+            spec_mode (SPECMode): 运行模式(speed/rate)
+
+        Returns:
+            list: 匹配的基准测试目录绝对路径列表
+
+        Note:
+            - 构建目录格式: build_{tune_type}_{label}.XXXX
+            - 运行目录格式由子类 _get_bench_dir_prefix 方法决定
+            - 如果找到多个匹配目录，选择编号最大的(最新的)
+        """
+        if self.debug_mode:
+            logger.debug(self.msg.get("get_bench_dir_with"))
+            logger.debug(self.msg.get("action_type_info", value=action_type.name))
+            logger.debug(self.msg.get("tune_type_info_debug", value=tune_type.name))
+            logger.debug(self.msg.get("input_type_info_debug", value=input_type.name))
+            logger.debug(self.msg.get("spec_mode_info_debug", value=spec_mode.name))
+
+        if action_type == ActionType.build:
+            bench_parent_dir = self.spec_build_dir
+        else:
+            bench_parent_dir = self.spec_run_dir
+
+        bench_dir_perfix = self._get_bench_dir_prefix(action_type, tune_type, input_type, spec_mode)
+
+        selected_bench_dir = []
+
+        for bench_dir in os.listdir(self.spec_bench_path):
+            if bench_dir in self.spec_bench_list:
+                bench_run_dir = os.path.join(self.spec_bench_path, bench_dir, bench_parent_dir)
+                if self.debug_mode:
+                    logger.debug(self.msg.get("bench_run_dir", bench=bench_dir, path=bench_run_dir))
+
+                run_dir_path_list = []
+
+                pattern = re.compile(rf"^{re.escape(bench_dir_perfix)}\.\d{{4}}$")
+
+                if not os.path.isdir(bench_run_dir):
+                    logger.warning(self.msg.get("directory_not_exist", path=bench_run_dir))
+                    continue
+
+                for run_dir in os.listdir(bench_run_dir):
+                    if pattern.match(run_dir):
+                        run_dir_path_list.append(os.path.join(bench_run_dir, run_dir))
+
+                if len(run_dir_path_list) == 0:
+                    logger.warning(self.msg.get("bench_not_found_in", bench=os.path.basename(bench_dir), prefix=bench_dir_perfix))
+                elif len(run_dir_path_list) > 1:
+                    logger.warning(self.msg.get("bench_found_multiple", bench=os.path.basename(bench_dir), prefix=bench_dir_perfix))
+                    for run_dir_path in run_dir_path_list:
+                        logger.debug(self.msg.get("found_path", path=run_dir_path))
+                    max_num = 0
+                    selected = run_dir_path_list[0]
+                    for run_dir_perfix in run_dir_path_list:
+                        if run_dir_perfix.split(".")[-1].isnumeric():
+                            if int(run_dir_perfix.split(".")[-1]) > max_num:
+                                max_num = int(run_dir_perfix.split(".")[-1])
+                                selected = run_dir_perfix
+                    selected_bench_dir.append(selected)
+                    logger.warning(self.msg.get("bench_using", bench=os.path.basename(bench_dir), selected=selected))
+                else:
+                    selected_bench_dir.append(run_dir_path_list[0])
+                    logger.debug(self.msg.get("bench_using", bench=os.path.basename(bench_dir), selected=run_dir_path_list[0]))
+
+        return selected_bench_dir
+
     def _build_run_command(self) -> List[str]:
         """
         构建SPEC运行命令
-        
+
         根据SPEC版本构建runspec或runcpu命令及参数。
-        子类需要重写此方法以提供版本特定的命令构建逻辑。
-        
+        子类必须实现此方法以提供版本特定的命令构建逻辑。
+
         Returns:
             List[str]: SPEC命令及参数列表
-            
-        Note:
-            此方法应由子类重写，基类返回空列表
+
+        Raises:
+            NotImplementedError: 基类未实现此方法，子类必须重写
         """
-        logger.warning(self.msg.get("build_run_command_should_override"))
-        return []
+        raise NotImplementedError("子类必须实现 _build_run_command 方法")
 
     def run_spec_directly(self, output_dir: Optional[str] = None) -> Dict:
         """
@@ -553,8 +736,6 @@ class SPECDriver:
         self._check_spec_environment()
         
         spec_cmd = self._build_run_command()
-        if not spec_cmd:
-            raise CommandExecutionError("无法构建SPEC命令")
         
         if output_dir is None:
             from src.pack_spec.pack_config import RESULTS_OUTPUT_PATH, CURRENT_TIME

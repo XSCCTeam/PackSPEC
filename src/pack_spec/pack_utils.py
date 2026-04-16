@@ -20,7 +20,6 @@ PackSPEC工具类模块
 """
 
 import os
-import sys
 import json
 import shlex
 from enum import Enum
@@ -32,7 +31,8 @@ from src.pack_spec.pack_config import (
     CURRENT_DATE, DEFAULT_CORE_NUM, DEFAULT_LLVM_PROFDATA_PATH,
     DEFAULT_AUTO_MODE,
     SCRIPTS_PATH, GENERATED_FILES_PATH, logger, QEMU_CMD, QEMU_PATH,
-    LogLanguage, LogMessages, get_log_messages, DEFAULT_LOG_LANGUAGE
+    LogLanguage, get_log_messages, DEFAULT_LOG_LANGUAGE,
+    parse_log_language, BOSC_MESSAGE_URL
 )
 import subprocess
 import shutil
@@ -307,14 +307,9 @@ class PackUtils:
         self.overwrite_confirmed = False
         
         # 日志语言配置
-        language_str = msg_config.get('log_language', 'zh').lower()
-        if language_str in ('zh', 'chinese', 'cn'):
-            self.log_language = LogLanguage.zh
-        elif language_str in ('en', 'english'):
-            self.log_language = LogLanguage.en
-        else:
-            self.log_language = DEFAULT_LOG_LANGUAGE
-        self.msg = get_log_messages(self.log_language)
+        self.log_language, self.msg = parse_log_language(
+            msg_config.get('log_language', 'zh')
+        )
 
     def save_pack_spec_cfg(self, pack_spec_cfg: dict):
         """
@@ -485,8 +480,8 @@ class PackUtils:
         创建生成的文件目录
 
         创建GENERATED_FILES_PATH根目录和打包生成的子目录。
-        如果子目录已存在，在非自动模式下会提示用户确认是否覆盖；
-        在自动模式下直接覆盖。
+        如果子目录已存在，在非自动模式下且未设置覆盖确认时抛出异常；
+        在自动模式或覆盖确认后直接覆盖。
 
         Args:
             auto_mode (bool, optional): 是否自动模式，默认为False。
@@ -496,7 +491,7 @@ class PackUtils:
             str: 创建的打包生成目录的完整路径
 
         Raises:
-            PackSPECError: 当非自动模式下用户选择不覆盖已存在的目录时抛出
+            PackSPECError: 当非自动模式下目录已存在且未设置覆盖确认时抛出
         """
         os.makedirs(GENERATED_FILES_PATH, exist_ok=True)
         self.logger.info(self.msg.get("generated_dir_created", path=GENERATED_FILES_PATH))
@@ -504,16 +499,13 @@ class PackUtils:
         # 检查目录是否已存在
         if os.path.exists(pack_generated_dir_path):
             self.logger.warning(self.msg.get("pack_dir_exists", path=pack_generated_dir_path))
-            if not auto_mode and not self.overwrite_confirmed:
-                self.logger.debug(self.msg.get("continue_prompt"))
-                choice = input(self.msg.get("continue_prompt"))
-            if auto_mode == True or self.overwrite_confirmed or choice.lower() == 'y':
+            if auto_mode or self.overwrite_confirmed:
                 self.overwrite_confirmed = True
                 os.makedirs(pack_generated_dir_path, exist_ok=True)
                 self.logger.info(self.msg.get("pack_dir_created", path=pack_generated_dir_path))
             else:
-                self.logger.error(self.msg.get("operation_canceled"))
-                raise PackSPECError(self.msg.get("operation_canceled"))
+                self.logger.error(self.msg.get("dir_exists_not_auto_mode", path=pack_generated_dir_path))
+                raise PackSPECError(self.msg.get("dir_exists_not_auto_mode", path=pack_generated_dir_path))
         else:
             os.makedirs(pack_generated_dir_path, exist_ok=False)
             self.logger.info(self.msg.get("pack_dir_created", path=pack_generated_dir_path))
@@ -577,23 +569,20 @@ class PackUtils:
             str: 创建的目标目录路径
             
         Raises:
-            PackSPECError: 当用户取消目录覆盖操作时抛出
+            PackSPECError: 当非自动模式下目录已存在且未设置覆盖确认时抛出
         """
         dest_bench_dir = self.get_dest_dir(profile_gen, auto_mode, pack_mode,
                                            spec_name, tune_type, input_type, spec_mode)
         if os.path.exists(dest_bench_dir):
             self.logger.warning(self.msg.get("dest_dir_exists", path=dest_bench_dir))
-            if not auto_mode and not self.overwrite_confirmed:
-                self.logger.debug(self.msg.get("overwrite_prompt"))
-                choice = input(self.msg.get("overwrite_prompt"))
-            if auto_mode == True or self.overwrite_confirmed or choice.lower() == 'y':
+            if auto_mode or self.overwrite_confirmed:
                 self.overwrite_confirmed = True
                 self.logger.debug(self.msg.get("overwriting_dir", path=dest_bench_dir))
                 shutil.rmtree(dest_bench_dir)
                 os.makedirs(dest_bench_dir, exist_ok=False)
             else:
-                self.logger.error(self.msg.get("operation_canceled_not_overwritten"))
-                raise PackSPECError(self.msg.get("operation_canceled_not_overwritten"))
+                self.logger.error(self.msg.get("dir_exists_not_auto_mode", path=dest_bench_dir))
+                raise PackSPECError(self.msg.get("dir_exists_not_auto_mode", path=dest_bench_dir))
         else:
             self.logger.debug(self.msg.get("creating_dir", path=dest_bench_dir))
             os.makedirs(dest_bench_dir, exist_ok=False)
@@ -633,10 +622,10 @@ class PackUtils:
             CommandExecutionError: 当命令执行失败时抛出
         """
         try:
-            # 执行命令并捕获输出
+            # 使用shlex.split安全解析命令字符串，正确处理引号和转义，防止命令注入
             self.logger.debug(self.msg.get("executing_command", command=command))
             result = subprocess.run(
-                command.split(),
+                shlex.split(command),
                 cwd=work_dir,
                 capture_output=True,
                 text=True,
@@ -727,7 +716,7 @@ class PackUtils:
             with open(os.path.join(SCRIPTS_PATH, template_name), "r") as f:
                 template = f.read()
             for key, value in replace_dict.items():
-                if key != None and value!= None:
+                if key is not None and value is not None:
                     template = template.replace(key, value)
             with open(os.path.join(script_target_dir, script_name), "w") as f:
                 f.write(template)
@@ -811,14 +800,14 @@ class PackUtils:
             List[str]: 发送消息的命令列表
             
         Note:
-            使用环境变量 BOSC_API_KEY 和 BOSC_AT_USER 来保护敏感信息
+            使用环境变量 BOSC_API_KEY、BOSC_AT_USER 和 BOSC_MESSAGE_URL 来保护敏感信息
         """
         commands = [
             "# 发送任务完成信息并at指定用户",
             "# 从环境变量获取敏感信息",
             'BOSC_API_KEY="${BOSC_API_KEY}"',
             'BOSC_AT_USER="${BOSC_AT_USER}"',
-            'curl -X POST "http://172.38.8.102:8848/send-message" \\',
+            f'curl -X POST "{BOSC_MESSAGE_URL}/send-message" \\',
             '     -H "api-key: $BOSC_API_KEY" \\',
             '     -H "Content-Type: application/json" \\',
             f'     -d "{{\\"content\\": \\"{message}\\\\n【来自李扬的 HUAWEI Pure 70 Pro Max】\\", \\"at_user_ids\\": [\\"$BOSC_AT_USER\\"]}}"',
@@ -850,7 +839,7 @@ class PackUtils:
             "# 从环境变量获取敏感信息",
             'BOSC_API_KEY="${BOSC_API_KEY}"',
             'BOSC_AT_USER="${BOSC_AT_USER}"',
-            f"chmod +x send_md_message.py",
+            "chmod +x send_md_message.py",
             './send_md_message.py --api_key "$BOSC_API_KEY" \\',
             f'     --title "{title_message}" \\',
             f'     --text "{text_message}" \\',
@@ -879,8 +868,8 @@ class PackUtils:
 
         commands = [
             "# 收集profile文件",
-            f"chmod +x collect_profiles.sh",
-            f"./collect_profiles.sh",
+            "chmod +x collect_profiles.sh",
+            "./collect_profiles.sh",
             ""
         ]
         self.logger.debug(self.msg.get("add_collect_profiles_commands"))
@@ -987,7 +976,7 @@ class PackUtils:
         if minimal_mode:
             commands.extend([
                 "i=1",
-                f"while [ $i -le $TEST_TIMES ]; do",
+                "while [ $i -le $TEST_TIMES ]; do",
                 f"    printf \"Test {bench_name} #$i:\\n\" | tee -a \"$LOG_FILE\""
             ])
             if core_num != DEFAULT_CORE_NUM:
@@ -1003,7 +992,7 @@ class PackUtils:
             ])
         else:
             commands.extend([
-                f"for i in $(seq 1 $TEST_TIMES); do",
+                "for i in $(seq 1 $TEST_TIMES); do",
                 f"    echo \"Test {bench_name} #$i:\" | tee -a \"$LOG_FILE\""
             ])
             if core_num != DEFAULT_CORE_NUM:
@@ -1101,6 +1090,7 @@ def calculate_spec_score(benchmarks: Dict, bench_type: str, spec_name: 'SPECName
     
     根据各基准测试的分数计算综合分数。
     SPEC分数计算使用几何平均数。
+    基准测试列表从驱动模块中导入，避免重复定义。
     
     Args:
         benchmarks (Dict): 各基准测试的结果字典
@@ -1112,36 +1102,17 @@ def calculate_spec_score(benchmarks: Dict, bench_type: str, spec_name: 'SPECName
         
     Note:
         SPEC分数 = geometric_mean(reference_time / runtime) * 100
+        基准测试列表引用自 spec_2006_driver 和 spec_2017_driver 模块，
+        使用延迟导入避免循环依赖
     """
     from src.pack_spec.pack_config import SPECName
-    
-    int_benches_2006 = [
-        "400.perlbench", "401.bzip2", "403.gcc", "429.mcf", "445.gobmk",
-        "456.hmmer", "458.sjeng", "462.libquantum", "464.h264ref",
-        "471.omnetpp", "473.astar", "483.xalancbmk"
-    ]
-    fp_benches_2006 = [
-        "410.bwaves", "416.gamess", "433.milc", "434.zeusmp", "435.gromacs",
-        "436.cactusADM", "437.leslie3d", "444.namd", "447.dealII", "450.soplex",
-        "453.povray", "454.calculix", "459.GemsFDTD", "465.tonto", "470.lbm",
-        "481.wrf", "482.sphinx3"
-    ]
-    
-    int_benches_2017 = [
-        "600.perlbench_s", "602.gcc_s", "605.mcf_s", "620.omnetpp_s",
-        "623.xalancbmk_s", "625.x264_s", "631.deepsjeng_s", "641.leela_s",
-        "648.exchange2_s", "657.xz_s"
-    ]
-    fp_benches_2017 = [
-        "603.bwaves_s", "607.cactuBSSN_s", "619.lbm_s", "621.wrf_s",
-        "627.cam4_s", "628.pop2_s", "638.imagick_s", "644.nab_s",
-        "649.fotonik3d_s", "654.roms_s"
-    ]
+    from src.pack_spec.spec_2006_driver import SPEC2006_INT_BENCHES, SPEC2006_FP_BENCHES
+    from src.pack_spec.spec_2017_driver import SPEC2017_INT_BENCHES, SPEC2017_FP_BENCHES
     
     if spec_name in [SPECName.spec2006, SPECName.spec2006v1p01]:
-        target_benches = int_benches_2006 if bench_type == "int" else fp_benches_2006
+        target_benches = SPEC2006_INT_BENCHES if bench_type == "int" else SPEC2006_FP_BENCHES
     else:
-        target_benches = int_benches_2017 if bench_type == "int" else fp_benches_2017
+        target_benches = SPEC2017_INT_BENCHES if bench_type == "int" else SPEC2017_FP_BENCHES
     
     scores = []
     for bench in target_benches:
@@ -1212,7 +1183,6 @@ def generate_markdown_report(results: Dict, config: Dict, output_path: str) -> s
         str: 生成的报告文件路径
     """
     from datetime import datetime
-    from src.pack_spec.pack_config import CURRENT_DATE, CURRENT_TIME
     
     lines = [
         "# SPEC CPU 测试报告",
@@ -1231,8 +1201,8 @@ def generate_markdown_report(results: Dict, config: Dict, output_path: str) -> s
         "",
         "### 综合分数",
         "",
-        f"| 类型 | 分数 |",
-        f"|------|------|",
+        "| 类型 | 分数 |",
+        "|------|------|",
         f"| 整数测试 (INT) | {results.get('int_score', 0.0):.2f} |",
         f"| 浮点测试 (FP) | {results.get('fp_score', 0.0):.2f} |",
         "",
@@ -1251,7 +1221,7 @@ def generate_markdown_report(results: Dict, config: Dict, output_path: str) -> s
     lines.extend([
         "",
         "---",
-        f"*报告由 PackSPEC 自动生成*"
+        "*报告由 PackSPEC 自动生成*"
     ])
     
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
@@ -1347,7 +1317,7 @@ def build_qemu_command(input_type: InputType,
     
     commands = []
     
-    commands.append(f"# QEMU模拟器配置")
+    commands.append("# QEMU模拟器配置")
     commands.append(f"QEMU_PATH=\"{QEMU_PATH if QEMU_PATH else ''}\"")
     commands.append(f"QEMU_CMD=\"{QEMU_CMD if QEMU_CMD else ''}\"")
     
@@ -1529,7 +1499,7 @@ def generate_qemu_verify_all_script(bench_list: List[str],
         "TOTAL_LOG=\"$SCRIPT_DIR/logs/verify_all.log\"",
         "",
         "echo \"========================================\" | tee \"$TOTAL_LOG\"",
-        f"echo \"QEMU批量验证测试\" | tee -a \"$TOTAL_LOG\"",
+        "echo \"QEMU批量验证测试\" | tee -a \"$TOTAL_LOG\"",
         f"echo \"输入类型: {input_type.name}\" | tee -a \"$TOTAL_LOG\"",
         f"echo \"优化级别: {tune_type.name}\" | tee -a \"$TOTAL_LOG\"",
         f"echo \"基准测试数量: {len(bench_list)}\" | tee -a \"$TOTAL_LOG\"",
@@ -1608,13 +1578,13 @@ def generate_qemu_verify_all_script(bench_list: List[str],
         script_content.extend([
             f"# 验证 {bench_name}",
             "wait_for_slot",
-            f"(",
+            "(",
             f"    bench_name=\"{bench_name}\"",
             f"    bench_log=\"$RESULT_DIR/{bench_name}.log\"",
             f"    bench_status=\"$RESULT_DIR/{bench_name}.status\"",
-            f"    ",
-            f"    echo \"[$(date '+%H:%M:%S')] 开始验证: $bench_name\" | tee -a \"$TOTAL_LOG\"",
-            f"    ",
+            "    ",
+            "    echo \"[$(date '+%H:%M:%S')] 开始验证: $bench_name\" | tee -a \"$TOTAL_LOG\"",
+            "    ",
             f"    cd \"$SCRIPT_DIR/{bench_name}\"",
         ])
         
@@ -1622,7 +1592,7 @@ def generate_qemu_verify_all_script(bench_list: List[str],
             with open(run_script_path, 'r', encoding='utf-8') as f:
                 run_script_lines = f.readlines()
             
-            script_content.append(f"    if (")
+            script_content.append("    if (")
             for line in run_script_lines:
                 stripped = line.strip()
                 if stripped.startswith("#!") or stripped == "":
@@ -1632,25 +1602,25 @@ def generate_qemu_verify_all_script(bench_list: List[str],
                     script_content.append(qemu_line)
                 else:
                     script_content.append(f"    {stripped}")
-            script_content.append(f"    ) > \"$bench_log\" 2>&1; then")
+            script_content.append("    ) > \"$bench_log\" 2>&1; then")
         else:
             script_content.append(f"    # 警告: 未找到 run_{input_type.name}.sh，使用简化命令")
             script_content.append(f"    if $QEMU_PATH/$QEMU_CMD ./{binary_name} > \"$bench_log\" 2>&1; then")
         
         script_content.extend([
-            f"        echo \"success\" > \"$bench_status\"",
-            f"        echo \"[$(date '+%H:%M:%S')] ✓ 完成: $bench_name\" | tee -a \"$TOTAL_LOG\"",
-            f"    else",
-            f"        echo \"failed\" > \"$bench_status\"",
-            f"        echo \"[$(date '+%H:%M:%S')] ✗ 失败: $bench_name\" | tee -a \"$TOTAL_LOG\"",
-            f"    fi",
-            f"    ",
-            f"    cd \"$SCRIPT_DIR\"",
-            f") &",
-            f"RUNNING_JOBS=$((RUNNING_JOBS + 1))",
-            f"TOTAL_COUNT=$((TOTAL_COUNT + 1))",
+            "        echo \"success\" > \"$bench_status\"",
+            "        echo \"[$(date '+%H:%M:%S')] ✓ 完成: $bench_name\" | tee -a \"$TOTAL_LOG\"",
+            "    else",
+            "        echo \"failed\" > \"$bench_status\"",
+            "        echo \"[$(date '+%H:%M:%S')] ✗ 失败: $bench_name\" | tee -a \"$TOTAL_LOG\"",
+            "    fi",
+            "    ",
+            "    cd \"$SCRIPT_DIR\"",
+            ") &",
+            "RUNNING_JOBS=$((RUNNING_JOBS + 1))",
+            "TOTAL_COUNT=$((TOTAL_COUNT + 1))",
             f"echo \"进度: $TOTAL_COUNT/{len(bench_list)} (运行中: $RUNNING_JOBS)\"",
-            f"",
+            "",
         ])
     
     script_content.extend([
