@@ -254,6 +254,18 @@ class TestPackUtils:
         assert "run" in dest_dir
         assert "spec2006" in dest_dir
 
+    def test_get_dest_dir_buildrun_mode(self, base_config):
+        """测试buildrun模式下目录名前缀使用build，子目录使用build"""
+        utils = PackUtils(base_config, MagicMock())
+        dest_dir = utils.get_dest_dir(
+            False, True, PACKMode.buildrun,
+            SPECName.spec2006, TuneType.base, InputType.test, SPECMode.speed
+        )
+        assert "build" in dest_dir
+        assert "spec2006_build_" in dest_dir
+        assert "spec2006_buildrun_" not in dest_dir
+        assert "base_test_speed" in dest_dir
+
     def test_get_dest_dir_profile_gen(self, base_config):
         utils = PackUtils(base_config, MagicMock())
         dest_dir = utils.get_dest_dir(
@@ -412,15 +424,27 @@ class TestPackUtils:
                                            SPECName.spec2006, TuneType.base, InputType.test, SPECMode.speed)
         assert os.path.isdir(result)
 
-    def test_create_dest_dir_not_auto_mode_raises(self, base_config, temp_dir):
-        """测试非自动模式下目录已存在且未设置覆盖确认时抛出PackSPECError"""
+    def test_create_dest_dir_not_auto_mode_user_declines(self, base_config, temp_dir):
+        """测试非自动模式下目录已存在时询问用户，用户拒绝覆盖抛出PackSPECError"""
         utils = PackUtils(base_config, MagicMock())
         existing_dir = os.path.join(temp_dir, "existing_dir")
         os.makedirs(existing_dir)
         with patch.object(utils, 'get_dest_dir', return_value=existing_dir):
-            with pytest.raises(PackSPECError):
-                utils.create_dest_dir(False, False, PACKMode.run,
-                                      SPECName.spec2006, TuneType.base, InputType.test, SPECMode.speed)
+            with patch('builtins.input', return_value='n'):
+                with pytest.raises(PackSPECError):
+                    utils.create_dest_dir(False, False, PACKMode.run,
+                                          SPECName.spec2006, TuneType.base, InputType.test, SPECMode.speed)
+
+    def test_create_dest_dir_not_auto_mode_user_confirms(self, base_config, temp_dir):
+        """测试非自动模式下目录已存在时询问用户，用户确认覆盖后正常创建"""
+        utils = PackUtils(base_config, MagicMock())
+        existing_dir = os.path.join(temp_dir, "existing_dir")
+        os.makedirs(existing_dir)
+        with patch.object(utils, 'get_dest_dir', return_value=existing_dir):
+            with patch('builtins.input', return_value='y'):
+                result = utils.create_dest_dir(False, False, PACKMode.run,
+                                              SPECName.spec2006, TuneType.base, InputType.test, SPECMode.speed)
+        assert os.path.isdir(result)
 
     def test_create_generated_dir_auto_mode_overwrite(self, base_config, temp_dir):
         """测试自动模式下覆盖已存在的生成目录"""
@@ -442,15 +466,27 @@ class TestPackUtils:
                 result = utils.create_generated_dir(auto_mode=False)
         assert os.path.isdir(result)
 
-    def test_create_generated_dir_not_auto_mode_raises(self, base_config, temp_dir):
-        """测试非自动模式下目录已存在且未设置覆盖确认时抛出PackSPECError"""
+    def test_create_generated_dir_not_auto_mode_user_declines(self, base_config, temp_dir):
+        """测试非自动模式下目录已存在时询问用户，用户拒绝覆盖抛出PackSPECError"""
         utils = PackUtils(base_config, MagicMock())
         gen_dir = os.path.join(temp_dir, "gen_dir")
         os.makedirs(gen_dir)
         with patch.object(utils, 'get_pack_generated_dir_path', return_value=gen_dir):
             with patch('src.pack_spec.pack_utils.GENERATED_FILES_PATH', temp_dir):
-                with pytest.raises(PackSPECError):
-                    utils.create_generated_dir(auto_mode=False)
+                with patch('builtins.input', return_value='n'):
+                    with pytest.raises(PackSPECError):
+                        utils.create_generated_dir(auto_mode=False)
+
+    def test_create_generated_dir_not_auto_mode_user_confirms(self, base_config, temp_dir):
+        """测试非自动模式下目录已存在时询问用户，用户确认覆盖后正常创建"""
+        utils = PackUtils(base_config, MagicMock())
+        gen_dir = os.path.join(temp_dir, "gen_dir")
+        os.makedirs(gen_dir)
+        with patch.object(utils, 'get_pack_generated_dir_path', return_value=gen_dir):
+            with patch('src.pack_spec.pack_utils.GENERATED_FILES_PATH', temp_dir):
+                with patch('builtins.input', return_value='y'):
+                    result = utils.create_generated_dir(auto_mode=False)
+        assert os.path.isdir(result)
 
 
 class TestBuildQemuCommand:
@@ -1004,3 +1040,32 @@ class TestPackUtilsExtended:
         utils = PackUtils(base_config, MagicMock())
         path = utils.get_pack_generated_dir_path()
         assert path.endswith("test_pack")
+
+
+class TestCopySpecDetailLogToGeneratedDir:
+    """copy_spec_detail_log_to_generated_dir 方法测试"""
+
+    def test_copies_log_when_path_found(self, base_config, temp_dir):
+        """测试找到SPEC详细日志路径时正确复制到目标目录"""
+        utils = PackUtils(base_config, MagicMock())
+        spec_dir = os.path.join(temp_dir, "spec")
+        dest_dir = os.path.join(temp_dir, "generated")
+        os.makedirs(dest_dir)
+        log_file = os.path.join(temp_dir, "spec_log.txt")
+        with open(log_file, "w") as f:
+            f.write("spec detail log content")
+        with patch.object(utils, 'get_spec_log_file_path', return_value=log_file), \
+             patch.object(utils, 'copy_file_to_target_dir', return_value=True):
+            utils.copy_spec_detail_log_to_generated_dir(spec_dir, "/path/to/setuplog", dest_dir)
+        utils.logger.success.assert_called_once()
+
+    def test_warns_when_path_not_found(self, base_config, temp_dir):
+        """测试未找到SPEC详细日志路径时输出警告不报错"""
+        utils = PackUtils(base_config, MagicMock())
+        spec_dir = os.path.join(temp_dir, "spec")
+        dest_dir = os.path.join(temp_dir, "generated")
+        os.makedirs(dest_dir)
+        with patch.object(utils, 'get_spec_log_file_path', return_value=""):
+            utils.copy_spec_detail_log_to_generated_dir(spec_dir, "/path/to/setuplog", dest_dir)
+        utils.logger.warning.assert_called_once()
+        utils.logger.success.assert_not_called()

@@ -456,6 +456,9 @@ DEFAULT_VERIFY_MODE = False
 DEFAULT_MINIMAL_MODE = False
 """默认极简模式开关，开启后生成的脚本使用POSIX兼容语法，降低对运行环境的要求"""
 
+DEFAULT_PACK_BUILDS = False
+"""默认 pack_builds 开关，开启后打包 build 和 run 目录的全部内容到一个 build 目录"""
+
 
 class LogMessages:
     """
@@ -491,6 +494,14 @@ class LogMessages:
         "spec_log_parse_error": {
             "zh": "从 '{file}' 查找 SPEC 日志失败: {error}",
             "en": "Failed find spec log from '{file}': {error}"
+        },
+        "spec_detail_log_copied": {
+            "zh": "SPEC 详细日志已复制到生成目录: {path}",
+            "en": "SPEC detail log copied to generated dir: {path}"
+        },
+        "spec_detail_log_not_found": {
+            "zh": "SPEC 详细日志路径未在 setuplog 中找到",
+            "en": "SPEC detail log path not found in setuplog"
         },
         "generated_dir_created": {
             "zh": "已创建生成文件目录: {path}",
@@ -788,6 +799,10 @@ class LogMessages:
             "zh": "执行 pack_benches_cfg()...",
             "en": "Executing pack_benches_cfg()..."
         },
+        "executing_pack_builds": {
+            "zh": "执行 pack_builds(with_build=True)...",
+            "en": "Executing pack_builds(with_build=True)..."
+        },
         "executing_pack_qemu_verify": {
             "zh": "执行 pack_qemu_verify()...",
             "en": "Executing pack_qemu_verify()..."
@@ -931,6 +946,18 @@ class LogMessages:
         "dir_exists_not_auto_mode": {
             "zh": "目录 {path} 已存在，非自动模式下未设置覆盖确认，请设置 auto_mode=True 或确认覆盖后重试",
             "en": "Directory {path} already exists, auto_mode is not enabled and overwrite not confirmed. Please set auto_mode=True or confirm overwrite"
+        },
+        "confirm_overwrite_dir": {
+            "zh": "目录 {path} 已存在，是否覆盖？(y/n)",
+            "en": "Directory {path} already exists, overwrite? (y/n)"
+        },
+        "overwrite_confirmed_by_user": {
+            "zh": "用户确认覆盖目录 {path}",
+            "en": "User confirmed overwrite of directory {path}"
+        },
+        "overwrite_declined_by_user": {
+            "zh": "用户拒绝覆盖目录 {path}，跳过操作",
+            "en": "User declined overwrite of directory {path}, skipping"
         },
         "config_file_not_found": {
             "zh": "配置文件 {path} 未找到",

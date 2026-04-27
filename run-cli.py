@@ -218,6 +218,12 @@ def build_arg_parser() -> argparse.ArgumentParser:
         help="允许basepeak配置（当cfg文件中设置basepeak=yes时需要启用）",
     )
     parser.add_argument(
+        "--pack-builds",
+        dest="pack_builds",
+        action="store_true",
+        help="打包 build 和 run 目录到一个 build 目录",
+    )
+    parser.add_argument(
         "--qemu-verify-parallel-jobs",
         dest="qemu_verify_parallel_jobs",
         type=int,
@@ -350,6 +356,8 @@ def build_config(parser: argparse.ArgumentParser, args: argparse.Namespace) -> d
         task_config["pack_binaries"] = args.pack_binaries
     if "pack_benches" in explicit:
         task_config["pack_benches"] = args.pack_benches
+    if "pack_builds" in explicit:
+        task_config["pack_builds"] = args.pack_builds
     if run_mode is not None:
         task_config["run_mode"] = run_mode
 

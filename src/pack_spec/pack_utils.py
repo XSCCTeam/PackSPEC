@@ -370,11 +370,15 @@ class PackUtils:
             
         Note:
             输出目录格式:
-            - auto_mode=True: {GENERATED_FILES_PATH}/{pack_name}/{bin|run}/{spec_name}_{pack_mode}_{pack_name}.{tune_type}_{input_type}_{spec_mode}
-            - auto_mode=False: {GENERATED_FILES_PATH}/{date}_{pack_name}/{bin|run}/{date}_{spec_name}_{pack_mode}_{pack_name}.{tune_type}_{input_type}_{spec_mode}
+            - auto_mode=True: {GENERATED_FILES_PATH}/{pack_name}/{bin|run|build}/{spec_name}_{pack_mode}_{pack_name}.{tune_type}_{input_type}_{spec_mode}
+            - auto_mode=False: {GENERATED_FILES_PATH}/{date}_{pack_name}/{bin|run|build}/{date}_{spec_name}_{pack_mode}_{pack_name}.{tune_type}_{input_type}_{spec_mode}
+            - 当pack_mode为buildrun时，目录名前缀使用build而非buildrun，子目录使用build
         """
         test_name = f"{self.pack_name}.{tune_type.name}_{input_type.name}_{spec_mode.name}"
-        dest_bench_name = f"{spec_name.name}_{pack_mode.name}_{test_name}"
+        if pack_mode == PACKMode.buildrun:
+            dest_bench_name = f"{spec_name.name}_build_{test_name}"
+        else:
+            dest_bench_name = f"{spec_name.name}_{pack_mode.name}_{test_name}"
         
         if not auto_mode:
             dest_bench_name = f"{self.init_date}_{dest_bench_name}"
@@ -384,6 +388,8 @@ class PackUtils:
 
         if pack_mode == PACKMode.bin:
             subdir = "bin"
+        elif pack_mode == PACKMode.buildrun:
+            subdir = "build"
         else:
             subdir = "run"
 
@@ -504,8 +510,14 @@ class PackUtils:
                 os.makedirs(pack_generated_dir_path, exist_ok=True)
                 self.logger.info(self.msg.get("pack_dir_created", path=pack_generated_dir_path))
             else:
-                self.logger.error(self.msg.get("dir_exists_not_auto_mode", path=pack_generated_dir_path))
-                raise PackSPECError(self.msg.get("dir_exists_not_auto_mode", path=pack_generated_dir_path))
+                confirm = input(self.msg.get("confirm_overwrite_dir", path=pack_generated_dir_path))
+                if confirm.strip().lower() in ('y', 'yes'):
+                    self.overwrite_confirmed = True
+                    self.logger.info(self.msg.get("overwrite_confirmed_by_user", path=pack_generated_dir_path))
+                    os.makedirs(pack_generated_dir_path, exist_ok=True)
+                else:
+                    self.logger.info(self.msg.get("overwrite_declined_by_user", path=pack_generated_dir_path))
+                    raise PackSPECError(self.msg.get("overwrite_declined_by_user", path=pack_generated_dir_path))
         else:
             os.makedirs(pack_generated_dir_path, exist_ok=False)
             self.logger.info(self.msg.get("pack_dir_created", path=pack_generated_dir_path))
@@ -581,8 +593,15 @@ class PackUtils:
                 shutil.rmtree(dest_bench_dir)
                 os.makedirs(dest_bench_dir, exist_ok=False)
             else:
-                self.logger.error(self.msg.get("dir_exists_not_auto_mode", path=dest_bench_dir))
-                raise PackSPECError(self.msg.get("dir_exists_not_auto_mode", path=dest_bench_dir))
+                confirm = input(self.msg.get("confirm_overwrite_dir", path=dest_bench_dir))
+                if confirm.strip().lower() in ('y', 'yes'):
+                    self.overwrite_confirmed = True
+                    self.logger.info(self.msg.get("overwrite_confirmed_by_user", path=dest_bench_dir))
+                    shutil.rmtree(dest_bench_dir)
+                    os.makedirs(dest_bench_dir, exist_ok=False)
+                else:
+                    self.logger.info(self.msg.get("overwrite_declined_by_user", path=dest_bench_dir))
+                    raise PackSPECError(self.msg.get("overwrite_declined_by_user", path=dest_bench_dir))
         else:
             self.logger.debug(self.msg.get("creating_dir", path=dest_bench_dir))
             os.makedirs(dest_bench_dir, exist_ok=False)
@@ -756,6 +775,25 @@ class PackUtils:
         self.create_env_file(dest_dir, "compile")
 
         self.copy_pack_log_file_to_target_dir(dest_dir)
+
+    def copy_spec_detail_log_to_generated_dir(self, spec_dir: str, spec_setup_log_path: str, dest_dir: str) -> None:
+        """
+        将SPEC详细日志复制到生成目录
+        
+        从setuplog文件中提取SPEC内部详细日志路径（如"The log for this run is in /path/to/log"），
+        并将该日志文件复制到生成的文件夹根目录中，便于用户在setup完成后直接查看。
+        
+        Args:
+            spec_dir (str): SPEC安装目录路径
+            spec_setup_log_path (str): setuplog文件路径
+            dest_dir (str): 目标目录路径（生成文件夹根目录）
+        """
+        spec_log_file_path = self.get_spec_log_file_path(spec_dir, spec_setup_log_path)
+        if spec_log_file_path != "":
+            self.copy_file_to_target_dir(spec_log_file_path, dest_dir, "spec detail log")
+            self.logger.success(self.msg.get("spec_detail_log_copied", path=dest_dir))
+        else:
+            self.logger.warning(self.msg.get("spec_detail_log_not_found"))
 
     def commands_to_cal_score(self, script_target_dir: str, test_clock_rate: float, 
                                score_file: str = "", minimal_mode: bool = False) -> List[str]:

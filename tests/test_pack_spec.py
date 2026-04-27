@@ -9,7 +9,7 @@ from unittest.mock import patch, MagicMock
 
 from src.pack_spec.pack_config import (
     SPECName, TuneType, InputType, SPECMode, PACKMode, DEFAULT_CORE_NUM, DEFAULT_CLOCK_RATE, DEFAULT_PROFILE_GEN, DEFAULT_VERIFY_MODE, DEFAULT_MINIMAL_MODE, DEFAULT_RUN_MODE,
-    DEFAULT_REPORT_FORMAT,
+    DEFAULT_REPORT_FORMAT, DEFAULT_PACK_BUILDS,
 )
 from src.pack_spec.pack_spec import PackSPEC
 
@@ -95,6 +95,29 @@ class TestPackSPECInitPackSpec:
     def test_msg_config_parsing(self, base_config):
         packer = self._create_packer(base_config)
         assert packer.msg_enabled is False
+
+    def test_pack_builds_default_false(self, base_config):
+        """测试pack_builds默认值为False"""
+        packer = self._create_packer(base_config)
+        assert packer.pack_builds_enabled is DEFAULT_PACK_BUILDS
+        assert packer.pack_builds_enabled is False
+
+    def test_pack_builds_explicit_true(self):
+        """测试显式设置pack_builds=True"""
+        config = {
+            "task": {"pack_name": "test", "pack_builds": True},
+            "spec_config": {
+                "spec_cfg_path": "/tmp/test.cfg",
+                "spec_name": SPECName.spec2006,
+                "tune_type": TuneType.base,
+                "input_type": InputType.test,
+                "spec_mode": SPECMode.speed,
+                "spec_benches": "all",
+            },
+            "pack_config": {"auto_mode": True},
+        }
+        packer = self._create_packer(config)
+        assert packer.pack_builds_enabled is True
 
     def test_profile_gen_forces_iterations_to_1(self):
         config = {
@@ -240,6 +263,37 @@ class TestPackSPECRun:
         assert result["steps"] == []
         assert result["success"] is True
 
+    def test_run_pack_builds_calls_with_build_true(self, base_config):
+        """测试pack_builds=True时作为独立步骤执行pack_benches_cfg(with_build=True)"""
+        base_config["task"]["pack_benches"] = True
+        base_config["task"]["pack_builds"] = True
+
+        packer = self._create_packer_with_mocks(base_config)
+        packer.setup_spec = MagicMock()
+        packer.pack_binaries = MagicMock()
+        packer.pack_benches_cfg = MagicMock()
+        packer.pack_qemu_verify = MagicMock()
+
+        result = packer.run()
+
+        packer.pack_benches_cfg.assert_called()
+        assert "pack_builds" in result["steps"]
+
+    def test_run_pack_builds_false_no_effect(self, base_config):
+        """测试pack_builds=False时pack_builds步骤不执行"""
+        base_config["task"]["pack_benches"] = True
+
+        packer = self._create_packer_with_mocks(base_config)
+        packer.setup_spec = MagicMock()
+        packer.pack_binaries = MagicMock()
+        packer.pack_benches_cfg = MagicMock()
+        packer.pack_qemu_verify = MagicMock()
+
+        result = packer.run()
+
+        packer.pack_benches_cfg.assert_called_once_with()
+        assert "pack_benches_cfg" in result["steps"]
+
 
 class TestSetupSpecCfgIsolation:
     """setup_spec 配置文件隔离测试"""
@@ -342,6 +396,60 @@ class TestSetupSpecCfgIsolation:
         packer.setup_spec()
         
         assert mock_driver_instance.spec_cfg_path == "/tmp/test/cfg/test.cfg"
+
+    @patch('src.pack_spec.pack_spec.setup_logger')
+    @patch('src.pack_spec.pack_spec.SPECDriver.create')
+    @patch('src.pack_spec.pack_spec.PackUtils')
+    @patch('src.pack_spec.pack_spec.os.makedirs')
+    @patch('src.pack_spec.pack_spec.shutil.copy2')
+    @patch('src.pack_spec.pack_spec.os.path.exists')
+    @patch('src.pack_spec.pack_spec.os.path.join')
+    @patch('src.pack_spec.pack_spec.os.path.basename')
+    def test_setup_spec_calls_copy_spec_detail_log(
+        self, mock_basename, mock_join, mock_exists, mock_copy2, mock_makedirs,
+        mock_utils_cls, mock_create, mock_setup_logger
+    ):
+        """测试 setup_spec 执行后调用 copy_spec_detail_log_to_generated_dir"""
+        mock_basename.return_value = "test.cfg"
+        mock_join.side_effect = lambda *args: "/".join(args)
+        mock_exists.return_value = True
+        mock_setup_logger.return_value = "/tmp/test/log/PackSpec_test.log"
+        
+        mock_utils_instance = MagicMock()
+        mock_utils_instance.create_generated_dir.return_value = "/tmp/test"
+        mock_utils_instance.get_pack_generated_dir_path.return_value = "/tmp/test"
+        mock_utils_instance.save_pack_spec_cfg = MagicMock()
+        mock_utils_instance.msg = MagicMock()
+        mock_utils_instance.msg.get = MagicMock(return_value="test message")
+        mock_utils_cls.return_value = mock_utils_instance
+        
+        mock_driver_instance = MagicMock()
+        mock_driver_instance.spec_cfg_path = "/original/path/test.cfg"
+        mock_driver_instance.spec_dir = "/spec_dir"
+        mock_driver_instance.run_setup_spec.return_value = "/tmp/test/test.base_ref.setuplog"
+        mock_create.return_value = mock_driver_instance
+        
+        config = {
+            "task": {"pack_name": "test"},
+            "spec_config": {
+                "spec_cfg_path": "/original/path/test.cfg",
+                "spec_name": SPECName.spec2006,
+                "tune_type": TuneType.base,
+                "input_type": InputType.test,
+                "spec_mode": SPECMode.speed,
+                "spec_benches": "all",
+            },
+            "pack_config": {"auto_mode": True},
+        }
+        
+        packer = PackSPEC(config)
+        packer.spec_cfg_path = "/original/path/test.cfg"
+        packer.setup_spec()
+        
+        mock_driver_instance.run_setup_spec.assert_called_once()
+        mock_utils_instance.copy_spec_detail_log_to_generated_dir.assert_called_once_with(
+            "/spec_dir", "/tmp/test/test.base_ref.setuplog", "/tmp/test"
+        )
 
 
 class TestCopyBenchesWithBuild:

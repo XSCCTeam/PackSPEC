@@ -163,6 +163,7 @@ config = {
         "setup_spec": False,
         "pack_binaries": False,
         "pack_benches": False,
+        "pack_builds": False,
     },
     # SPEC基准测试相关配置
     "spec_config": {
@@ -216,6 +217,7 @@ packer.run()
 | `setup_spec` | bool | 是否执行 SPEC 编译 | False |
 | `pack_binaries` | bool | 是否打包二进制文件 | False |
 | `pack_benches` | bool | 是否打包完整测试环境 | False |
+| `pack_builds` | bool | 是否打包 build 和 run 目录到一个 build 目录 | False |
 | `run_mode` | RunMode | 运行模式（pack/direct） | pack |
 
 #### spec_config 配置项
@@ -240,10 +242,11 @@ packer.run()
 | `test_core_num` | int | 绑定的 CPU 核心编号 | -1 (不绑定) |
 | `test_clock_rate` | float | CPU 主频 (GHz)，用于算分 | 1.0 |
 | `profile_gen` | bool | Profile 生成模式 | False |
-| `auto_mode` | bool | 自动模式，无需确认 | False |
+| `auto_mode` | bool | 自动模式，自动覆盖已存在目录（非自动模式下会询问用户是否覆盖） | False |
 | `verify_mode` | bool | QEMU 验证模式 | False |
 | `qemu_verify_parallel_jobs` | int | QEMU 验证并行任务数，0 表示使用 CPU 核心数-2 | 0 |
 | `minimal_mode` | bool | 极简模式 | False |
+| `allow_basepeak` | bool | 允许 basepeak 配置 | False |
 | `report_format` | str | 报告格式（json/markdown） | json |
 
 #### msg_config 配置项
@@ -309,6 +312,7 @@ config = {
         "setup_spec": False,
         "pack_binaries": False,
         "pack_benches": False,
+        "pack_builds": False,
     },
     "spec_config": {...},
     "pack_config": {...},
@@ -325,6 +329,7 @@ packer.run()  # 根据配置自动执行相应操作
 | `setup_spec` | task | `setup_spec()` | 执行 SPEC 编译和环境准备 |
 | `pack_binaries` | task | `pack_binaries()` | 打包二进制文件 |
 | `pack_benches` | task | `pack_benches_cfg()` | 打包完整测试环境 |
+| `pack_builds` | task | `pack_benches_cfg(with_build=True)` | 打包 build 和 run 目录到一个 build 目录 |
 | `run_mode` | task | `run_spec()` | 当设置为 `RunMode.direct` 时直接运行 SPEC 测试 |
 | `verify_mode` | pack_config | `pack_qemu_verify()` | 生成 QEMU 验证脚本 |
 
@@ -332,7 +337,7 @@ packer.run()  # 根据配置自动执行相应操作
 
 | run_mode 值 | 行为 |
 |-------------|------|
-| `RunMode.pack`（默认） | 根据 task 配置执行打包操作（setup_spec、pack_binaries、pack_benches） |
+| `RunMode.pack`（默认） | 根据 task 配置执行打包操作（setup_spec、pack_binaries、pack_benches、pack_builds） |
 | `RunMode.direct` | 直接运行 SPEC 测试，调用 `run_spec()` 方法，跳过打包操作 |
 
 **内部方法列表：**
@@ -368,8 +373,17 @@ generated_files/
     │       ├── 600.perlbench_s/
     │       │   └── perlbench_s
     │       └── ...
-    └── run/
-        └── spec2017_run_{pack_name}.{tune_type}_{input_type}_{spec_mode}/
+    ├── run/
+    │   └── spec2017_run_{pack_name}.{tune_type}_{input_type}_{spec_mode}/
+    │       ├── 600.perlbench_s/
+    │       │   ├── perlbench_s_base.{label}
+    │       │   ├── run_ref.sh
+    │       │   ├── test_ref.sh
+    │       │   └── ...
+    │       ├── test_ref_all.sh
+    │       └── ...
+    └── build/
+        └── spec2017_build_{pack_name}.{tune_type}_{input_type}_{spec_mode}/
             ├── 600.perlbench_s/
             │   ├── perlbench_s_base.{label}
             │   ├── run_ref.sh
@@ -393,7 +407,9 @@ generated_files/
     │   └── {config}.cfg                 # 复制的配置文件
     ├── bin/
     │   └── ...
-    └── run/
+    ├── run/
+    │   └── ...
+    └── build/
         └── ...
 ```
 
@@ -415,6 +431,7 @@ config = {
         "setup_spec": False,
         "pack_binaries": False,
         "pack_benches": False,
+        "pack_builds": False,
     },
     # SPEC基准测试相关配置
     "spec_config": {
@@ -497,6 +514,7 @@ config = {
         "setup_spec": False,
         "pack_binaries": False,
         "pack_benches": False,
+        "pack_builds": False,
     },
     # SPEC基准测试相关配置
     "spec_config": {

@@ -48,7 +48,7 @@ from src.pack_spec.pack_config import (
     PackSPECError, ConfigError, FileOperationError, CommandExecutionError, CURRENT_DATE, CURRENT_TIME, DEFAULT_ITERATIONS, DEFAULT_REBUILD,
     DEFAULT_CORE_NUM, DEFAULT_CLOCK_RATE, DEFAULT_PROFILE_GEN,
     DEFAULT_AUTO_MODE, DEFAULT_LLVM_PROFDATA_PATH,
-    DEFAULT_RUN_MODE, DEFAULT_REPORT_FORMAT, QEMU_PATH, DEFAULT_VERIFY_MODE, DEFAULT_MINIMAL_MODE, DEFAULT_ALLOW_BASEPEAK,
+    DEFAULT_RUN_MODE, DEFAULT_REPORT_FORMAT, QEMU_PATH, DEFAULT_VERIFY_MODE, DEFAULT_MINIMAL_MODE, DEFAULT_ALLOW_BASEPEAK, DEFAULT_PACK_BUILDS,
     BOSC_API_KEY, BOSC_AT_USER, logger, parse_log_language, setup_logger
 )
 from src.pack_spec.pack_utils import PackUtils, load_pack_spec_cfg, parse_spec_results, generate_json_report, generate_markdown_report, generate_qemu_verify_script, generate_qemu_verify_all_script
@@ -171,6 +171,7 @@ class PackSPEC:
         self.setup_spec_enabled = task_config.get('setup_spec', False)
         self.pack_binaries_enabled = task_config.get('pack_binaries', False)
         self.pack_benches_enabled = task_config.get('pack_benches', False)
+        self.pack_builds_enabled = task_config.get('pack_builds', DEFAULT_PACK_BUILDS)
         self.run_mode = task_config.get('run_mode', DEFAULT_RUN_MODE)
         
         # SPEC基准测试相关配置
@@ -195,7 +196,7 @@ class PackSPEC:
         self.minimal_mode = pack_config.get('minimal_mode', DEFAULT_MINIMAL_MODE)
         self.qemu_verify_parallel_jobs = pack_config.get('qemu_verify_parallel_jobs', 0)
         self.allow_basepeak = pack_config.get('allow_basepeak', DEFAULT_ALLOW_BASEPEAK)
-        
+
         # 消息发送配置
         msg_config = config.get('msg_config', {})
         self.msg_enabled = msg_config.get('enable_dingtalk_message', False)
@@ -619,7 +620,11 @@ class PackSPEC:
         logger.info(self.msg.get("cfg_copied_to", src=src_cfg_path, dest=dest_cfg_path))
         
         self.spec_driver.spec_cfg_path = dest_cfg_path
-        self.spec_driver.run_setup_spec(self.tune_type, self.input_type, rebuild=self.rebuild)
+        spec_setup_log_path = self.spec_driver.run_setup_spec(self.tune_type, self.input_type, rebuild=self.rebuild)
+        
+        self.utils.copy_spec_detail_log_to_generated_dir(
+            self.spec_driver.spec_dir, spec_setup_log_path, 
+            self.utils.get_pack_generated_dir_path())
 
     def _process_tune_input_combinations(self, func, *args, **kwargs):
         """
@@ -1036,6 +1041,12 @@ class PackSPEC:
                 logger.info(self.msg.get("executing_pack_benches_cfg"))
                 self.pack_benches_cfg()
                 result["steps"].append("pack_benches_cfg")
+            
+            # 根据 pack_builds 配置打包 build 和 run 目录
+            if self.pack_builds_enabled:
+                logger.info(self.msg.get("executing_pack_builds"))
+                self.pack_benches_cfg(with_build=True)
+                result["steps"].append("pack_builds")
             
             # 根据 verify_mode 配置生成 QEMU 验证脚本
             if self.verify_mode:

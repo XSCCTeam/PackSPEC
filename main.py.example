@@ -27,6 +27,12 @@ if __name__ == "__main__":
             # 包含输入数据集、运行脚本、验证脚本等
             "pack_benches": False,
 
+            # 是否打包 build 和 run 目录，默认为 False
+            # 需要显式设置为 True 才会执行打包 build 目录操作
+            # 包含 build 和 run 的全部内容，合并到一个 build 目录
+            # 输出目录结构为 generated_files/{pack_name}/build/spec2006_build_{pack_name}.xxx/
+            "pack_builds": False,
+
             # 运行模式，默认为 RunMode.pack（打包模式）
             # 可选值：
             #   RunMode.pack: 打包模式，根据 task 配置执行打包操作
@@ -101,10 +107,11 @@ if __name__ == "__main__":
 
             # 是否以生成 profile 模式运行，默认为 False
             # profile 生成模式只跑一次程序，iterations 将强制设置为 1
-            "profile_gen": True,
+            "profile_gen": False,
 
             # 是否以自动模式运行, 用于配合其他脚本执行, 默认为 False
-            # 如果为 True, 程序将自动覆盖已存在的文件，无需用户确认
+            # 如果为 True, 程序将自动覆盖已存在的目录，无需用户确认
+            # 如果为 False, 程序会在目录已存在时询问用户是否覆盖
             # 且生成的打包目录会以极简目录形式生成，且不包含日期
             "auto_mode": False,
 
@@ -119,7 +126,7 @@ if __name__ == "__main__":
             # 开启后生成QEMU验证脚本
             # 用于验证编译出的二进制文件是否正确
             # 需要在 .env 中配置 QEMU_PATH 环境变量
-            "verify_mode": True,
+            "verify_mode": False,
 
             # QEMU验证并行任务数，默认为 0（使用 CPU 核心数-2）
             # 用于并行执行多个测试子项，提高验证效率
@@ -167,6 +174,7 @@ if __name__ == "__main__":
     #   - 根据 task.setup_spec 配置决定是否调用 setup_spec()
     #   - 根据 task.pack_binaries 配置决定是否调用 pack_binaries()
     #   - 根据 task.pack_benches 配置决定是否调用 pack_benches_cfg()
+    #   - 根据 task.pack_builds 配置决定是否调用 pack_benches_cfg(with_build=True)
     #   - 根据 pack_config.verify_mode 配置决定是否调用 pack_qemu_verify()
     # - 当 run_mode == RunMode.direct 时：
     #   - 调用 run_spec() 直接运行 SPEC 测试
@@ -209,6 +217,7 @@ if __name__ == "__main__":
 #   --verify-mode     QEMU验证模式
 #   --minimal-mode    极简模式
 #   --allow-basepeak  允许basepeak配置
+#   --pack-builds     打包build和run目录到一个build目录
 #   --log-language    日志语言（zh/en，默认: zh）
 # ============================================================
 
