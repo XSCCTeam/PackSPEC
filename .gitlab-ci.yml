@@ -13,5 +13,9 @@ test:
   stage: test
   script:
     - pip install --cache-dir .cache/pip -e .[dev]
-    - pytest --cov=pack_spec --cov-report=term --cov-report=xml:coverage.xml
+    - pytest --cov=pack_spec --cov-report=term --cov-report=xml:coverage.xml --junitxml=report.xml
   coverage: '/TOTAL.*\s+(\d+%)$/'
+  artifacts:
+    when: always
+    reports:
+      junit: report.xml
