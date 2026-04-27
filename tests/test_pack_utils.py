@@ -1069,3 +1069,99 @@ class TestCopySpecDetailLogToGeneratedDir:
             utils.copy_spec_detail_log_to_generated_dir(spec_dir, "/path/to/setuplog", dest_dir)
         utils.logger.warning.assert_called_once()
         utils.logger.success.assert_not_called()
+
+
+class TestCommandsToRunBenchDryRun:
+    """commands_to_run_bench 更多组合场景测试"""
+
+    def test_peak_mode_run_command(self, base_config, spec_bench_map):
+        """测试peak优化级别时命令中可执行文件名包含peak"""
+        utils = PackUtils(base_config, MagicMock())
+        commands = utils.commands_to_run_bench(
+            "400.perlbench", False, spec_bench_map,
+            -1, 100.0, TuneType.peak, "test_label", InputType.test
+        )
+        assert any("perlbench_peak.test_label" in cmd for cmd in commands)
+
+    def test_ref_input_run_command(self, base_config, spec_bench_map):
+        """测试ref输入类型时命令中脚本名包含ref"""
+        utils = PackUtils(base_config, MagicMock())
+        commands = utils.commands_to_run_bench(
+            "400.perlbench", False, spec_bench_map,
+            -1, 100.0, TuneType.base, "test_label", InputType.ref
+        )
+        assert any("run_ref.sh" in cmd for cmd in commands)
+
+    def test_train_input_run_command(self, base_config, spec_bench_map):
+        """测试train输入类型时命令中脚本名包含train"""
+        utils = PackUtils(base_config, MagicMock())
+        commands = utils.commands_to_run_bench(
+            "400.perlbench", False, spec_bench_map,
+            -1, 100.0, TuneType.base, "test_label", InputType.train
+        )
+        assert any("run_train.sh" in cmd for cmd in commands)
+
+    def test_spec2017_bench_map(self, base_config):
+        """测试SPEC2017风格的bench_map时命令中包含对应的基准测试名称"""
+        spec2017_bench_map = {"600.perlbench_s": "perlbench_s"}
+        utils = PackUtils(base_config, MagicMock())
+        commands = utils.commands_to_run_bench(
+            "600.perlbench_s", False, spec2017_bench_map,
+            -1, 100.0, TuneType.base, "test_label", InputType.test
+        )
+        assert any("perlbench_s" in cmd for cmd in commands)
+
+
+class TestScriptGenerationIntegration:
+    """完整脚本生成流程集成测试"""
+
+    def test_normal_full_script_pipeline(self, base_config, spec_bench_map, temp_dir):
+        """测试正常模式完整脚本生成流水线"""
+        utils = PackUtils(base_config, MagicMock())
+        commands = utils.commands_to_prepare_run("test.log", -1, 3)
+        commands.extend(utils.commands_to_run_bench(
+            "400.perlbench", False, spec_bench_map,
+            -1, 100.0, TuneType.base, "test_label", InputType.test
+        ))
+        with patch.object(utils, 'copy_script_file_to_target_dir', return_value=True):
+            commands.extend(utils.commands_to_cal_score(temp_dir, 1.0))
+
+        assert commands[0] == "#!/bin/bash"
+        assert any("LOG_FILE" in cmd and "test.log" in cmd for cmd in commands)
+        assert any("TEST_TIMES=3" in cmd for cmd in commands)
+        assert any("perlbench" in cmd for cmd in commands)
+        assert any("cal_score" in cmd for cmd in commands)
+        script_text = "\n".join(commands)
+        assert "LOG_FILE" in script_text
+        assert "TEST_TIMES" in script_text
+
+    def test_minimal_full_script_pipeline(self, base_config, spec_bench_map, temp_dir):
+        """测试极简模式完整脚本生成流水线"""
+        utils = PackUtils(base_config, MagicMock())
+        commands = utils.commands_to_prepare_run("test.log", -1, 3, minimal_mode=True)
+        commands.extend(utils.commands_to_run_bench(
+            "400.perlbench", False, spec_bench_map,
+            -1, 100.0, TuneType.base, "test_label", InputType.test,
+            minimal_mode=True
+        ))
+        with patch.object(utils, 'copy_script_file_to_target_dir', return_value=True):
+            commands.extend(utils.commands_to_cal_score(temp_dir, 1.0, minimal_mode=True))
+
+        assert commands[0] == "#!/bin/sh"
+        assert any("set -e" in cmd for cmd in commands)
+        assert not any("curl" in cmd for cmd in commands)
+        assert not any("$(seq" in cmd for cmd in commands)
+        assert not any("echo -e" in cmd for cmd in commands)
+
+    def test_profile_gen_full_script_pipeline(self, base_config, spec_bench_map, temp_dir):
+        """测试profile生成模式完整脚本生成流水线"""
+        utils = PackUtils(base_config, MagicMock())
+        commands = utils.commands_to_prepare_run("test.log", -1, 3)
+        commands.extend(utils.commands_to_run_bench(
+            "400.perlbench", True, spec_bench_map,
+            -1, 100.0, TuneType.base, "test_label", InputType.test
+        ))
+        with patch.object(utils, 'copy_script_file_to_target_dir', return_value=True):
+            commands.extend(utils.commands_to_cal_score(temp_dir, 1.0))
+
+        assert any("LLVM_PROFILE_FILE" in cmd for cmd in commands)

@@ -1,0 +1,20 @@
+stages:
+  - test
+
+default:
+  image: python:3.8
+
+cache:
+  key: "${CI_COMMIT_REF_SLUG}-pip"
+  paths:
+    - .cache/pip
+
+test:
+  stage: test
+  script:
+    - pip install --cache-dir .cache/pip -e .[dev]
+    - pytest --cov=pack_spec --cov-report=term --cov-report=xml:coverage.xml
+  coverage: '/TOTAL.*\s+(\d+%)$/'
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH

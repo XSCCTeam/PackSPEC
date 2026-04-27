@@ -5,6 +5,7 @@ spec_driver.py 单元测试
 """
 
 import os
+import tempfile
 import pytest
 from unittest.mock import MagicMock, patch
 
@@ -829,3 +830,147 @@ class TestBuildRunCommand:
             assert "--noreportable" in cmd
             assert "--rate" in cmd
             assert "600.perlbench_s" in cmd
+
+
+class TestSpecinvokeDryRun:
+    """execute_specinvoke 方法模拟依赖测试"""
+
+    def test_specinvoke_creates_run_script(self):
+        """测试execute_specinvoke创建运行脚本并正确替换路径"""
+        from src.pack_spec.spec_driver import SPECDriver
+        with patch.object(SPECDriver, '__init__', lambda self, *args, **kwargs: None):
+            driver = SPECDriver.__new__(SPECDriver)
+            driver.spec_dir = "/fake/spec"
+            driver.msg = get_log_messages(DEFAULT_LOG_LANGUAGE)
+            driver.utils = MagicMock()
+            driver.utils.execute_commands.return_value = [
+                "# Starting run for copy #0",
+                "cd /src/dir",
+                "/src/dir/run_base.test_label ./perlbench_base.test_label < /dev/null"
+            ]
+
+            with tempfile.TemporaryDirectory() as tmpdir:
+                result = driver.execute_specinvoke("/src/dir", tmpdir, InputType.test)
+
+                assert result is True
+                script_path = os.path.join(tmpdir, "run_test.sh")
+                assert os.path.exists(script_path)
+                with open(script_path, 'r') as f:
+                    content = f.read()
+                # 验证实际运行命令保留在脚本中（路径被替换为相对路径）
+                assert "perlbench_base.test_label" in content
+                # 验证cd命令被替换为空字符串（cd {src_dir}被删除）
+                cd_src_dir_lines = [l for l in content.split('\n') if l.strip() == "cd /src/dir"]
+                assert len(cd_src_dir_lines) == 0
+                # 验证绝对路径被替换为相对路径
+                assert "/src/dir/" not in content
+                # 验证specinvoke行被跳过（不出现在脚本中）
+                specinvoke_lines = [l for l in content.split('\n') if l.strip().startswith("specinvoke")]
+                assert len(specinvoke_lines) == 0
+
+    def test_specinvoke_empty_output_creates_empty_script(self):
+        """测试execute_specinvoke空输出时仍返回True并创建空脚本（当前实现行为）"""
+        from src.pack_spec.spec_driver import SPECDriver
+        with patch.object(SPECDriver, '__init__', lambda self, *args, **kwargs: None):
+            driver = SPECDriver.__new__(SPECDriver)
+            driver.spec_dir = "/fake/spec"
+            driver.msg = get_log_messages(DEFAULT_LOG_LANGUAGE)
+            driver.utils = MagicMock()
+            driver.utils.execute_commands.return_value = []
+
+            with tempfile.TemporaryDirectory() as tmpdir:
+                result = driver.execute_specinvoke("/src/dir", tmpdir, InputType.test)
+
+                # 当前实现始终返回True
+                assert result is True
+                # 当前实现始终创建脚本文件（只有shebang行）
+                script_path = os.path.join(tmpdir, "run_test.sh")
+                assert os.path.exists(script_path)
+                with open(script_path, 'r') as f:
+                    content = f.read()
+                assert content == "#!/bin/bash\n"
+
+    def test_specinvoke_multiline_output(self):
+        """测试execute_specinvoke处理多组命令输出"""
+        from src.pack_spec.spec_driver import SPECDriver
+        with patch.object(SPECDriver, '__init__', lambda self, *args, **kwargs: None):
+            driver = SPECDriver.__new__(SPECDriver)
+            driver.spec_dir = "/fake/spec"
+            driver.msg = get_log_messages(DEFAULT_LOG_LANGUAGE)
+            driver.utils = MagicMock()
+            driver.utils.execute_commands.return_value = [
+                "# Starting run for copy #0",
+                "cd /src/dir",
+                "/src/dir/run_base.test_label ./perlbench_base.test_label < /dev/null",
+                "# Starting run for copy #0",
+                "cd /src/dir",
+                "/src/dir/run_base.test_label ./bzip2_base.test_label < /dev/null",
+            ]
+
+            with tempfile.TemporaryDirectory() as tmpdir:
+                result = driver.execute_specinvoke("/src/dir", tmpdir, InputType.test)
+
+                assert result is True
+                script_path = os.path.join(tmpdir, "run_test.sh")
+                assert os.path.exists(script_path)
+                with open(script_path, 'r') as f:
+                    content = f.read()
+                assert "perlbench_base.test_label" in content
+                assert "bzip2_base.test_label" in content
+
+    def test_specinvoke_skips_specinvoke_lines(self):
+        """测试execute_specinvoke跳过specinvoke开头的行"""
+        from src.pack_spec.spec_driver import SPECDriver
+        with patch.object(SPECDriver, '__init__', lambda self, *args, **kwargs: None):
+            driver = SPECDriver.__new__(SPECDriver)
+            driver.spec_dir = "/fake/spec"
+            driver.msg = get_log_messages(DEFAULT_LOG_LANGUAGE)
+            driver.utils = MagicMock()
+            driver.utils.execute_commands.return_value = [
+                "specinvoke -m",
+                "# Starting run for copy #0",
+                "cd /src/dir",
+                "./perlbench_base.test_label < /dev/null",
+                "specinvoke -e",
+            ]
+
+            with tempfile.TemporaryDirectory() as tmpdir:
+                result = driver.execute_specinvoke("/src/dir", tmpdir, InputType.test)
+
+                assert result is True
+                script_path = os.path.join(tmpdir, "run_test.sh")
+                assert os.path.exists(script_path)
+                with open(script_path, 'r') as f:
+                    content = f.read()
+                # 验证specinvoke开头的行被跳过
+                assert "perlbench_base.test_label" in content
+                for line in content.split('\n'):
+                    if line.strip():
+                        assert not line.strip().startswith("specinvoke"), f"specinvoke行未被跳过: {line}"
+
+    def test_specinvoke_binary_name_map(self):
+        """测试execute_specinvoke替换二进制文件名映射"""
+        from src.pack_spec.spec_driver import SPECDriver
+        with patch.object(SPECDriver, '__init__', lambda self, *args, **kwargs: None):
+            driver = SPECDriver.__new__(SPECDriver)
+            driver.spec_dir = "/fake/spec"
+            driver.msg = get_log_messages(DEFAULT_LOG_LANGUAGE)
+            driver.utils = MagicMock()
+            driver.utils.execute_commands.return_value = [
+                "# Starting run for copy #0",
+                "./perlbench_base.orig_name < /dev/null",
+            ]
+
+            with tempfile.TemporaryDirectory() as tmpdir:
+                result = driver.execute_specinvoke(
+                    "/src/dir", tmpdir, InputType.test,
+                    binary_name_map=("orig_name", "new_name")
+                )
+
+                assert result is True
+                script_path = os.path.join(tmpdir, "run_test.sh")
+                with open(script_path, 'r') as f:
+                    content = f.read()
+                # 验证旧二进制名被替换为新名
+                assert "new_name" in content
+                assert "orig_name" not in content
