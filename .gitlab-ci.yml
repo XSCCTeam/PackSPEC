@@ -14,7 +14,7 @@ test:
   script:
     - pip install --upgrade pip -i https://mirrors.cernet.edu.cn/pypi/web/simple
     - pip install --cache-dir .cache/pip --timeout 120 --retries 5 -i https://mirrors.cernet.edu.cn/pypi/web/simple -e .[dev]
-    - pytest --cov=pack_spec --cov-report=term --cov-report=xml:coverage.xml --junitxml=report.xml
+    - pytest --cov=src/pack_spec --cov-report=term --cov-report=xml:coverage.xml --junitxml=report.xml
   coverage: '/TOTAL.*\s+(\d+%)$/'
   artifacts:
     when: always
