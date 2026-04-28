@@ -1,0 +1,48 @@
+[project]
+name = "packspec"
+description = "PackSPEC - SPEC benchmark packaging tool"
+version = "0.1.0"
+readme = "README.md"
+requires-python = ">=3.8"
+dependencies = [
+    "loguru>=0.7.0",
+    "python-dotenv>=1.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+    "pytest-cov>=4.0.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = "-v --tb=short"
+
+[tool.coverage.run]
+source = ["src/pack_spec"]
+omit = [
+    "tests/*",
+    "src/pack_spec/spec_driver.py",
+    "src/pack_spec/spec_2006_driver.py",
+    "src/pack_spec/spec_2017_driver.py",
+    "src/pack_spec/pack_spec.py",
+]
+
+[tool.coverage.report]
+show_missing = true
+fail_under = 80
+exclude_also = [
+    "def setup_spec",
+    "def pack_binaries",
+    "def pack_benches_cfg",
+    "def pack_qemu_verify",
+    "def run_spec_directly",
+    "def run_spec",
+    "def print_info",
+    "def parse_spec_results",
+    "if __name__",
+]

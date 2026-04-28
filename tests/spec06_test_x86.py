@@ -1,3 +1,8 @@
+import sys
+import os
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 from src.pack_spec.pack_spec import PackSPEC
 from src.pack_spec.pack_config import SPECName, TuneType, InputType, SPECMode, RunMode
 
@@ -12,7 +17,7 @@ if __name__ == "__main__":
         # 任务配置
         "task": {
             # 打包任务名称
-            "pack_name": "riscv_llvm22_base",
+            "pack_name": "x86_llvm19_novec_wll",
 
             # 是否setup SPEC CPU 2006/2017
             # 也就是是否编译SPEC基准测试，默认为 False
@@ -20,18 +25,18 @@ if __name__ == "__main__":
 
             # 是否打包二进制文件，默认为 False
             # 需要显式设置为 True 才会执行打包二进制操作
-            "pack_binaries": False,
+            "pack_binaries": True,
 
             # 是否打包完整测试环境，默认为 False
             # 需要显式设置为 True 才会执行打包测试环境操作
             # 包含输入数据集、运行脚本、验证脚本等
-            "pack_benches": False,
+            "pack_benches": True,
 
             # 是否打包 build 和 run 目录，默认为 False
             # 需要显式设置为 True 才会执行打包 build 目录操作
             # 包含 build 和 run 的全部内容，合并到一个 build 目录
             # 输出目录结构为 generated_files/{pack_name}/build/spec2006_build_{pack_name}.xxx/
-            "pack_builds": False,
+            "pack_builds": True,
 
             # 运行模式，默认为 RunMode.pack（打包模式）
             # 可选值：
@@ -46,7 +51,7 @@ if __name__ == "__main__":
             # 注意：setup 操作前会自动将 cfg 文件复制到 generated_files/{pack_name}/cfg/ 目录
             # 以保护源配置文件不被修改
             # 日志文件会自动保存到 generated_files/{pack_name}/log/ 目录
-            "spec_cfg_path": "example.cfg",
+            "spec_cfg_path": "/home/wll/BOSC/speccpu2006-v1.0.1/config/x86_llvm19_novec_wll.cfg",
 
             # SPEC基准测试版本选择
             # 可选值：
@@ -161,7 +166,7 @@ if __name__ == "__main__":
             # 可选值：
             #   "zh" 或 "chinese": 中文输出
             #   "en" 或 "english": 英文输出
-            "log_language": "zh",
+            "log_language": "cn",
         },
     }
 
@@ -174,50 +179,8 @@ if __name__ == "__main__":
     #   - 根据 task.setup_spec 配置决定是否调用 setup_spec()
     #   - 根据 task.pack_binaries 配置决定是否调用 pack_binaries()
     #   - 根据 task.pack_benches 配置决定是否调用 pack_benches_cfg()
-    #   - 根据 task.pack_builds 配置决定是否调用 pack_benches_cfg(with_build=True)
     #   - 根据 pack_config.verify_mode 配置决定是否调用 pack_qemu_verify()
     # - 当 run_mode == RunMode.direct 时：
     #   - 调用 run_spec() 直接运行 SPEC 测试
     #   - 跳过所有打包相关操作
     packer.run()
-
-
-# ============================================================
-# CLI 命令行使用方式
-# 
-# 除了编写 Python 脚本外，还可以通过 run-cli.py 命令行入口使用 PackSPEC：
-#
-# 1. 通过配置文件运行：
-#    python run-cli.py -c /path/to/pack_spec.cfg
-#
-# 2. 通过命令行参数运行：
-#    python run-cli.py --spec-name spec2017 --cfg-path /path/to/spec.cfg --pack-name my_test
-#
-# 3. 混合使用（命令行参数覆盖配置文件）：
-#    python run-cli.py -c /path/to/pack_spec.cfg --tune-type peak --iterations 1
-#
-# 4. 查看帮助信息：
-#    python run-cli.py -h
-#
-# 常用参数：
-#   --spec-name       SPEC版本（spec2006/spec2006v1p01/spec2017）
-#   --cfg-path        SPEC cfg文件路径
-#   --tune-type       优化级别（base/peak/all，默认: base）
-#   --input-type      输入类型（test/train/ref/all，默认: ref）
-#   --spec-mode       运行模式（speed/rate，默认: speed）
-#   --spec-benches    基准测试选择（默认: all）
-#   --iterations      迭代次数（默认: 3）
-#   --pack-name       打包任务名称（默认: packspec）
-#   --run-mode        运行模式（pack/direct，默认: pack）
-#   --setup-spec      执行setup编译
-#   --pack-binaries   打包二进制文件（需配合 --setup-spec 使用）
-#   --pack-benches    打包完整测试环境（需配合 --setup-spec 使用）
-#   --profile-gen     Profile生成模式
-#   --auto-mode       自动模式
-#   --verify-mode     QEMU验证模式
-#   --minimal-mode    极简模式
-#   --allow-basepeak  允许basepeak配置
-#   --pack-builds     打包build和run目录到一个build目录
-#   --log-language    日志语言（zh/en，默认: zh）
-# ============================================================
-
