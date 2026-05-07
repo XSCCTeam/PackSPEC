@@ -36,7 +36,7 @@ config = {
 packer = PackSPEC(config)
 
 # 从配置文件初始化
-packer = PackSPEC("/path/to/pack_spec.cfg")
+packer = PackSPEC("/path/to/pack_config.json")
 ```
 
 ---
@@ -768,14 +768,14 @@ config = {
 
 ## 5. 配置文件格式
 
-### 5.1 pack_spec.cfg JSON 格式说明
+### 5.1 生成配置 JSON 格式说明
 
-PackSPEC 使用 JSON 格式保存和加载配置文件，文件名为 `pack_spec.cfg`。
+PackSPEC 使用 JSON 格式保存和加载配置文件。配置文件名会随 `auto_mode` 变化，便于和生成目录保持一致。
 
 **保存路径：**
 
-- `auto_mode=True`：`{GENERATED_FILES_PATH}/{pack_name}/pack_spec.cfg`
-- `auto_mode=False`：`{GENERATED_FILES_PATH}/{date}_{pack_name}/pack_spec.cfg`
+- `auto_mode=True`：`{GENERATED_FILES_PATH}/{pack_name}/{pack_name}.json`
+- `auto_mode=False`：`{GENERATED_FILES_PATH}/{date}_{pack_name}/{date}_{pack_name}.json`
 
 **JSON 结构示例：**
 

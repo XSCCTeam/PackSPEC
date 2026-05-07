@@ -203,7 +203,7 @@ packer.run()
 from src.pack_spec import PackSPEC
 
 # 从配置文件路径初始化
-packer = PackSPEC("/path/to/pack_spec.cfg")
+packer = PackSPEC("/path/to/pack_config.json")
 packer.run()
 ```
 
@@ -242,7 +242,7 @@ packer.run()
 | `test_core_num` | int | 绑定的 CPU 核心编号 | -1 (不绑定) |
 | `test_clock_rate` | float | CPU 主频 (GHz)，用于算分 | 1.0 |
 | `profile_gen` | bool | Profile 生成模式 | False |
-| `auto_mode` | bool | 自动模式，自动覆盖已存在目录（非自动模式下会询问用户是否覆盖） | False |
+| `auto_mode` | bool | 自动模式，自动覆盖已存在目录，并生成不带日期前缀的目录名（非自动模式下会询问用户是否覆盖，目录名带日期前缀） | False |
 | `verify_mode` | bool | QEMU 验证模式 | False |
 | `qemu_verify_parallel_jobs` | int | QEMU 验证并行任务数，0 表示使用 CPU 核心数-2 | 0 |
 | `minimal_mode` | bool | 极简模式 | False |
@@ -360,6 +360,8 @@ packer.run()  # 根据配置自动执行相应操作
 
 **普通模式（auto_mode=False）：**
 
+生成目录、配置文件和打包子目录都带日期前缀，避免不同日期的结果互相覆盖：
+
 ```
 generated_files/
 └── {date}_{pack_name}/
@@ -369,12 +371,12 @@ generated_files/
     ├── cfg/
     │   └── {config}.cfg                 # 复制的配置文件
     ├── bin/
-    │   └── spec2017_bin_{pack_name}.{tune_type}_{input_type}_{spec_mode}/
+    │   └── {date}_spec2017_bin_{pack_name}.{tune_type}_{input_type}_{spec_mode}/
     │       ├── 600.perlbench_s/
     │       │   └── perlbench_s
     │       └── ...
     ├── run/
-    │   └── spec2017_run_{pack_name}.{tune_type}_{input_type}_{spec_mode}/
+    │   └── {date}_spec2017_run_{pack_name}.{tune_type}_{input_type}_{spec_mode}/
     │       ├── 600.perlbench_s/
     │       │   ├── perlbench_s_base.{label}
     │       │   ├── run_ref.sh
@@ -383,7 +385,7 @@ generated_files/
     │       ├── test_ref_all.sh
     │       └── ...
     └── build/
-        └── spec2017_build_{pack_name}.{tune_type}_{input_type}_{spec_mode}/
+        └── {date}_spec2017_build_{pack_name}.{tune_type}_{input_type}_{spec_mode}/
             ├── 600.perlbench_s/
             │   ├── perlbench_s_base.{label}
             │   ├── run_ref.sh

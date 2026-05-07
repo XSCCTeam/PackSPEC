@@ -197,7 +197,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
         "--auto-mode",
         dest="auto_mode",
         action="store_true",
-        help="自动模式",
+        help="自动模式：自动覆盖已存在目录，且生成目录不带日期前缀",
     )
     parser.add_argument(
         "--verify-mode",

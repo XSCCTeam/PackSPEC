@@ -296,19 +296,24 @@ pack_spec/
 ```
 generated_files/
 ├── {date}_{pack_name}/      # 非自动模式
-│   ├── pack_spec.cfg        # 配置文件
+│   ├── {date}_{pack_name}.json  # 配置文件
 │   ├── cfg/                 # 配置文件副本
 │   ├── log/                 # 日志文件
 │   ├── bin/                 # 二进制文件
-│   │   └── {spec_name}_bin_{pack_name}.{tune}_{input}_{mode}/
+│   │   └── {date}_{spec_name}_bin_{pack_name}.{tune}_{input}_{mode}/
 │   └── run/                 # 运行环境
-│       └── {spec_name}_run_{pack_name}.{tune}_{input}_{mode}/
+│       └── {date}_{spec_name}_run_{pack_name}.{tune}_{input}_{mode}/
 │           ├── {bench_name}/
 │           │   ├── run_{input}.sh
 │           │   ├── test_{input}.sh
 │           │   └── ...
 │           └── test_{input}_all.sh
 └── {pack_name}/             # 自动模式（无日期前缀）
+    ├── {pack_name}.json     # 配置文件
+    ├── bin/
+    │   └── {spec_name}_bin_{pack_name}.{tune}_{input}_{mode}/
+    └── run/
+        └── {spec_name}_run_{pack_name}.{tune}_{input}_{mode}/
 ```
 
 ---
