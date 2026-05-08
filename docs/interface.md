@@ -111,6 +111,7 @@ packer.pack_binaries()
 - 自动生成 `run_{input_type}.sh` 测试脚本
 - 自动生成 `test_{input_type}.sh` 或 `profile_gen_{input_type}.sh` 运行脚本
 - 自动生成 `specdiff_{input_type}.sh` 验证脚本
+- 自动生成 `specdiff_{input_type}_all.sh` 批量验证脚本
 - 如果 `tune_type` 或 `input_type` 为 `all`，会自动处理所有组合
 
 **使用示例：**

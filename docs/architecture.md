@@ -261,6 +261,7 @@ flowchart TB
    - `run_{input_type}.sh`：基准测试运行脚本
    - `test_{input_type}.sh`：测试执行脚本（含分数计算）
    - `specdiff_{input_type}.sh`：输出验证脚本
+   - `specdiff_{input_type}_all.sh`：批量输出验证脚本
 
 ### 5.4 直接运行流程 (run_spec)
 

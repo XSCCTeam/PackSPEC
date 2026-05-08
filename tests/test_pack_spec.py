@@ -576,6 +576,37 @@ class TestCopyBenchesWithBuild:
             packer.spec_name, TuneType.base, InputType.test, SPECMode.speed
         )
 
+    @patch('src.pack_spec.pack_spec.shutil.copytree')
+    def test_copy_benches_without_build_creates_specdiff_all_script(self, mock_copytree, base_config):
+        """测试with_build=False时生成批量specdiff脚本"""
+        packer = self._create_packer_with_mocks(base_config)
+        with patch.object(packer, 'create_test_script'), \
+             patch.object(packer, 'create_run_all_script'), \
+             patch.object(packer, 'create_specdiff_all_script') as mock_specdiff_all:
+            result = packer.copy_benches(
+                tune_type=TuneType.base,
+                input_type=InputType.test,
+                spec_mode=SPECMode.speed,
+                with_build=False
+            )
+        mock_specdiff_all.assert_called_once_with(result, InputType.test)
+
+    @patch('src.pack_spec.pack_spec.shutil.copytree')
+    def test_copy_benches_with_build_creates_specdiff_all_script(self, mock_copytree, base_config):
+        """测试with_build=True时生成批量specdiff脚本"""
+        packer = self._create_packer_with_mocks(base_config)
+        packer.utils.get_bench_dir.side_effect = ["/tmp/build/400.perlbench", "/tmp/run/400.perlbench"]
+        with patch.object(packer, 'create_test_script'), \
+             patch.object(packer, 'create_run_all_script'), \
+             patch.object(packer, 'create_specdiff_all_script') as mock_specdiff_all:
+            result = packer.copy_benches(
+                tune_type=TuneType.base,
+                input_type=InputType.test,
+                spec_mode=SPECMode.speed,
+                with_build=True
+            )
+        mock_specdiff_all.assert_called_once_with(result, InputType.test)
+
 
 class TestAddScoreAndMessageCommandsDryRun:
     """_add_score_and_message_commands 方法干跑测试"""
@@ -863,6 +894,50 @@ class TestCreateRunAllScriptDryRun:
                 TuneType.base, InputType.ref
             )
         packer.utils.commands_to_collect_profiles.assert_called_once()
+
+
+class TestCreateSpecdiffAllScriptDryRun:
+    """create_specdiff_all_script 方法干跑测试"""
+
+    def _create_packer_with_mocks(self, base_config):
+        with patch('src.pack_spec.pack_spec.PackUtils') as mock_utils_cls, \
+             patch('src.pack_spec.pack_spec.SPECDriver.create') as mock_create, \
+             patch('src.pack_spec.pack_spec.setup_logger') as mock_setup_logger:
+            mock_utils_instance = MagicMock()
+            mock_utils_instance.create_generated_dir.return_value = "/tmp/test"
+            mock_utils_instance.get_pack_generated_dir_path.return_value = "/tmp/test"
+            mock_utils_instance.save_pack_spec_cfg = MagicMock()
+            mock_utils_cls.return_value = mock_utils_instance
+            mock_create.return_value = MagicMock()
+            mock_setup_logger.return_value = "/tmp/test/log/test.log"
+            packer = PackSPEC(base_config)
+        return packer
+
+    def test_script_path_and_commands(self, base_config):
+        """测试生成脚本路径和核心命令"""
+        packer = self._create_packer_with_mocks(base_config)
+        captured = {}
+        with patch.object(packer, '_write_script_file', side_effect=lambda path, content: captured.update({"path": path, "content": content})):
+            packer.create_specdiff_all_script(
+                ["/tmp/run/400.perlbench", "/tmp/run/401.bzip2"],
+                InputType.ref
+            )
+
+        assert captured["path"] == "/tmp/run/specdiff_ref_all.sh"
+        content = "\n".join(captured["content"])
+        assert "LOG_FILE=\"$SCRIPT_DIR/specdiff_ref_all.log\"" in content
+        assert "if [ ! -f \"$SCRIPT_DIR/400.perlbench/specdiff_ref.sh\" ]; then" in content
+        assert "cd \"$SCRIPT_DIR/401.bzip2\"" in content
+        assert "bash ./specdiff_ref.sh >> \"$LOG_FILE\" 2>&1" in content
+        assert "Failed benchmarks:$FAILED_BENCHES" in content
+        assert "exit 1" in content
+
+    def test_empty_bench_list_does_not_write_script(self, base_config):
+        """测试空基准测试列表不生成脚本"""
+        packer = self._create_packer_with_mocks(base_config)
+        with patch.object(packer, '_write_script_file') as mock_write:
+            packer.create_specdiff_all_script([], InputType.ref)
+        mock_write.assert_not_called()
 
 
 class TestProcessTuneInputCombinations:

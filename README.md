@@ -381,8 +381,10 @@ generated_files/
     │       │   ├── perlbench_s_base.{label}
     │       │   ├── run_ref.sh
     │       │   ├── test_ref.sh
+    │       │   ├── specdiff_ref.sh
     │       │   └── ...
     │       ├── test_ref_all.sh
+    │       ├── specdiff_ref_all.sh
     │       └── ...
     └── build/
         └── {date}_spec2017_build_{pack_name}.{tune_type}_{input_type}_{spec_mode}/
@@ -390,8 +392,10 @@ generated_files/
             │   ├── perlbench_s_base.{label}
             │   ├── run_ref.sh
             │   ├── test_ref.sh
+            │   ├── specdiff_ref.sh
             │   └── ...
             ├── test_ref_all.sh
+            ├── specdiff_ref_all.sh
             └── ...
 ```
 

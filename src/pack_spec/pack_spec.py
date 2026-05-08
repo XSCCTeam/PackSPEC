@@ -386,6 +386,7 @@ class PackSPEC:
             raise FileOperationError(self.msg.get("no_benches_to_copy"))
         
         self.create_run_all_script(self.spec_driver.label, self.test_core_num, dest_dir_list, tune_type, input_type)
+        self.create_specdiff_all_script(dest_dir_list, input_type)
 
         # 复制配置文件及相关日志至目标目录
         if spec_cfg != "":
@@ -591,6 +592,91 @@ class PackSPEC:
 
         self._write_script_file(run_all_script, script_content)
         logger.success(f"Successfully created {self.utils.get_run_script_name(self.profile_gen, input_type, 'all')} script at {run_all_script}")
+
+    def create_specdiff_all_script(self, buildrun_bench_dir_list: list, input_type: InputType):
+        """
+        创建批量执行所有基准测试 specdiff 的脚本
+
+        生成一个统一的脚本，依次进入每个基准测试目录并执行其
+        specdiff_{input_type}.sh，用于验证整套测试输出。
+
+        Args:
+            buildrun_bench_dir_list (list): 基准测试目录路径列表
+            input_type (InputType): 输入数据集类型
+
+        Note:
+            - 脚本名称格式: specdiff_{input_type}_all.sh
+            - 汇总日志名称格式: specdiff_{input_type}_all.log
+            - 单个基准测试失败不会中断后续验证，最后统一返回失败状态
+        """
+        if not buildrun_bench_dir_list:
+            logger.warning(self.msg.get("no_benchmark_dirs_to_run"))
+            return
+
+        parent_dir = os.path.dirname(buildrun_bench_dir_list[0])
+        specdiff_script_name = f"specdiff_{input_type.name}.sh"
+        specdiff_all_script = os.path.join(parent_dir, f"specdiff_{input_type.name}_all.sh")
+        log_file_name = f"specdiff_{input_type.name}_all.log"
+
+        script_content = [
+            "#!/bin/bash",
+            "",
+            "# 批量执行所有基准测试的 specdiff 验证",
+            "SCRIPT_DIR=$(cd \"$(dirname \"$0\")\" && pwd)",
+            f"LOG_FILE=\"$SCRIPT_DIR/{log_file_name}\"",
+            "",
+            "TOTAL_COUNT=0",
+            "SUCCESS_COUNT=0",
+            "FAIL_COUNT=0",
+            "FAILED_BENCHES=\"\"",
+            "",
+            "echo \"Starting specdiff validation at $(date)\" | tee \"$LOG_FILE\"",
+            "",
+        ]
+
+        for bench_dir in buildrun_bench_dir_list:
+            bench_name = os.path.basename(bench_dir)
+            script_content.extend([
+                f"TOTAL_COUNT=$((TOTAL_COUNT + 1))",
+                f"echo \"\" | tee -a \"$LOG_FILE\"",
+                f"echo \"Running specdiff for {bench_name}...\" | tee -a \"$LOG_FILE\"",
+                f"if [ ! -f \"$SCRIPT_DIR/{bench_name}/{specdiff_script_name}\" ]; then",
+                f"    echo \"ERROR: {bench_name}/{specdiff_script_name} not found\" | tee -a \"$LOG_FILE\"",
+                "    FAIL_COUNT=$((FAIL_COUNT + 1))",
+                f"    FAILED_BENCHES=\"$FAILED_BENCHES {bench_name}\"",
+                "else",
+                f"    cd \"$SCRIPT_DIR/{bench_name}\"",
+                f"    bash ./{specdiff_script_name} >> \"$LOG_FILE\" 2>&1",
+                "    STATUS=$?",
+                "    cd \"$SCRIPT_DIR\"",
+                "    if [ $STATUS -eq 0 ]; then",
+                f"        echo \"{bench_name} specdiff passed\" | tee -a \"$LOG_FILE\"",
+                "        SUCCESS_COUNT=$((SUCCESS_COUNT + 1))",
+                "    else",
+                f"        echo \"{bench_name} specdiff failed with status $STATUS\" | tee -a \"$LOG_FILE\"",
+                "        FAIL_COUNT=$((FAIL_COUNT + 1))",
+                f"        FAILED_BENCHES=\"$FAILED_BENCHES {bench_name}\"",
+                "    fi",
+                "fi",
+                "",
+            ])
+
+        script_content.extend([
+            "echo \"\" | tee -a \"$LOG_FILE\"",
+            "echo \"Specdiff validation completed at $(date)\" | tee -a \"$LOG_FILE\"",
+            "echo \"Total: $TOTAL_COUNT\" | tee -a \"$LOG_FILE\"",
+            "echo \"Success: $SUCCESS_COUNT\" | tee -a \"$LOG_FILE\"",
+            "echo \"Failed: $FAIL_COUNT\" | tee -a \"$LOG_FILE\"",
+            "if [ $FAIL_COUNT -gt 0 ]; then",
+            "    echo \"Failed benchmarks:$FAILED_BENCHES\" | tee -a \"$LOG_FILE\"",
+            "    exit 1",
+            "fi",
+            "",
+            "exit 0",
+        ])
+
+        self._write_script_file(specdiff_all_script, script_content)
+        logger.success(f"Successfully created specdiff_{input_type.name}_all.sh script at {specdiff_all_script}")
 
     def setup_spec(self):
         """
@@ -1072,4 +1158,3 @@ if __name__ == "__main__":
         "iterations": 3,
         "test_core_num": 4,
     })
-

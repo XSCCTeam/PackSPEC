@@ -14,15 +14,15 @@ fi
 
 # 创建虚拟环境
 echo "创建虚拟环境..."
-uv venv venv
+uv venv .venv
 
 echo "安装依赖..."
 
 # 激活虚拟环境并使用uv安装依赖和开发依赖（自动识别pyproject.toml）
-source venv/bin/activate && uv pip install -e .[dev]
+source .venv/bin/activate && uv pip install -e .[dev]
 
 echo ""
 echo "环境设置完成！"
 echo "使用以下命令激活虚拟环境:"
-echo "source venv/bin/activate"
+echo "source .venv/bin/activate"
 echo ""
