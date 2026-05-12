@@ -7,7 +7,7 @@
 /scripts/625_inputgen/625_host_run/
 /tests/spec2006/generated_files/
 /tests/spec2006/generated_files/__pycache__/
-/spec_env/spec2006/
+/spec_env/spec*/
 .env
 main.py
 *.pyc
