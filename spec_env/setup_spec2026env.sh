@@ -1,13 +1,13 @@
 #!/bin/bash
 
-# SPEC CPU 2017环境设置脚本
+# SPEC CPU 2026环境设置脚本
 # 通过 OpenList API (/api/fs/get) 获取带签名下载链接，下载 ISO 和校验文件，自动校验后安装
 
 set -euo pipefail
 
 SCRIPT_DIR=$(dirname "$(readlink -f "$0")")
 
-mkdir -p spec2017 || error_exit "无法创建 spec2017 目录" 1
+mkdir -p spec2026 || error_exit "无法创建 spec2026 目录" 1
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -21,29 +21,29 @@ ERROR_LABEL="${RED}[ERROR]${NC}"
 SUCCESS_LABEL="${GREEN}[SUCCESS]${NC}"
 
 DEFAULT_OPENLIST_BASE_URL="http://172.38.8.157:5244"
-DEFAULT_ISO_REMOTE_PATH="/cpu2017/cpu2017-1.1.9.iso"
-DEFAULT_HASH_REMOTE_PATH="/cpu2017/cpu2017-1.1.9.iso.sha256"
-DEFAULT_SPEC2017_ISO="$SCRIPT_DIR/spec2017/cpu2017-1.1.9.iso"
-DEFAULT_SPEC2017_HASH="$SCRIPT_DIR/spec2017/cpu2017-1.1.9.iso.sha256"
-DEFAULT_SPEC2017_UNPACK_DIR="$SCRIPT_DIR/spec2017/cpu2017-1.1.9"
-DEFAULT_SPEC2017_INSTALL_DIR="$SCRIPT_DIR/spec2017/speccpu2017-v1.1.9"
+DEFAULT_ISO_REMOTE_PATH="/cpu2026/cpu2026-1.0.1.iso"
+DEFAULT_HASH_REMOTE_PATH="/cpu2026/cpu2026-1.0.1.iso.sha256"
+DEFAULT_SPEC2026_ISO="$SCRIPT_DIR/spec2026/cpu2026-1.0.1.iso"
+DEFAULT_SPEC2026_HASH="$SCRIPT_DIR/spec2026/cpu2026-1.0.1.iso.sha256"
+DEFAULT_SPEC2026_UNPACK_DIR="$SCRIPT_DIR/spec2026/cpu2026-1.0.1"
+DEFAULT_SPEC2026_INSTALL_DIR="$SCRIPT_DIR/spec2026/speccpu2026-v1.0.1"
 
 OPENLIST_BASE_URL="${OPENLIST_BASE_URL:-$DEFAULT_OPENLIST_BASE_URL}"
 ISO_REMOTE_PATH="${ISO_REMOTE_PATH:-$DEFAULT_ISO_REMOTE_PATH}"
 HASH_REMOTE_PATH="${HASH_REMOTE_PATH:-$DEFAULT_HASH_REMOTE_PATH}"
-SPEC2017_ISO="${SPEC2017_ISO:-$DEFAULT_SPEC2017_ISO}"
-SPEC2017_HASH="${SPEC2017_HASH:-$DEFAULT_SPEC2017_HASH}"
-SPEC2017_UNPACK_DIR="${SPEC2017_UNPACK_DIR:-$DEFAULT_SPEC2017_UNPACK_DIR}"
-SPEC2017_INSTALL_DIR="${SPEC2017_INSTALL_DIR:-$DEFAULT_SPEC2017_INSTALL_DIR}"
+SPEC2026_ISO="${SPEC2026_ISO:-$DEFAULT_SPEC2026_ISO}"
+SPEC2026_HASH="${SPEC2026_HASH:-$DEFAULT_SPEC2026_HASH}"
+SPEC2026_UNPACK_DIR="${SPEC2026_UNPACK_DIR:-$DEFAULT_SPEC2026_UNPACK_DIR}"
+SPEC2026_INSTALL_DIR="${SPEC2026_INSTALL_DIR:-$DEFAULT_SPEC2026_INSTALL_DIR}"
 
-LOG_DIR="$SCRIPT_DIR/spec2017/logs"
+LOG_DIR="$SCRIPT_DIR/spec2026/logs"
 mkdir -p "$LOG_DIR" || error_exit "无法创建日志目录 '$LOG_DIR'" 1
 
 if [ ! -d "$LOG_DIR" ]; then
     error_exit "日志目录 '$LOG_DIR' 创建失败" 1
 fi
 
-LOG_FILE="$LOG_DIR/setup_spec2017_$(date '+%Y%m%d_%H%M%S').log"
+LOG_FILE="$LOG_DIR/setup_spec2026_$(date '+%Y%m%d_%H%M%S').log"
 
 if ! touch "$LOG_FILE" 2>/dev/null; then
     error_exit "无法创建日志文件 '$LOG_FILE'" 1
@@ -64,7 +64,7 @@ error_exit() {
     exit "$2"
 }
 
-MIN_FREE_SPACE_GB=12
+MIN_FREE_SPACE_GB=20
 
 check_dependencies() {
     log "$INFO_LABEL" "检查依赖..."
@@ -90,14 +90,14 @@ check_dependencies() {
 check_write_permission() {
     log "$INFO_LABEL" "检查写入权限..."
 
-    local target_dir="$SCRIPT_DIR/spec2017"
+    local target_dir="$SCRIPT_DIR/spec2026"
     if [ -d "$target_dir" ]; then
         if [ ! -w "$target_dir" ]; then
             error_exit "目录 '$target_dir' 无写入权限，请检查权限或使用其他目录" 10
         fi
     else
         if [ ! -w "$SCRIPT_DIR" ]; then
-            error_exit "目录 '$SCRIPT_DIR' 无写入权限，无法创建 spec2017 目录" 10
+            error_exit "目录 '$SCRIPT_DIR' 无写入权限，无法创建 spec2026 目录" 10
         fi
     fi
 
@@ -113,7 +113,7 @@ check_disk_space() {
     local available_gb=$((available_kb / 1024 / 1024))
 
     if [ "$available_gb" -lt "$MIN_FREE_SPACE_GB" ]; then
-        error_exit "磁盘空间不足: 可用 ${available_gb}GB，至少需要 ${MIN_FREE_SPACE_GB}GB (ISO ~3.0GB + 解压空间)" 11
+        error_exit "磁盘空间不足: 可用 ${available_gb}GB，至少需要 ${MIN_FREE_SPACE_GB}GB (ISO ~8.2GB + 解压空间)" 11
     fi
 
     log "$INFO_LABEL" "✓ 磁盘空间充足: 可用 ${available_gb}GB"
@@ -183,22 +183,22 @@ download_file() {
 }
 
 download_iso() {
-    log "$INFO_LABEL" "准备下载SPEC CPU 2017 ISO文件和校验文件..."
+    log "$INFO_LABEL" "准备下载SPEC CPU 2026 ISO文件和校验文件..."
 
-    download_file "$ISO_REMOTE_PATH" "$SPEC2017_ISO" "ISO文件"
-    download_file "$HASH_REMOTE_PATH" "$SPEC2017_HASH" "SHA256校验文件"
+    download_file "$ISO_REMOTE_PATH" "$SPEC2026_ISO" "ISO文件"
+    download_file "$HASH_REMOTE_PATH" "$SPEC2026_HASH" "SHA256校验文件"
 }
 
 verify_iso() {
     log "$INFO_LABEL" "校验ISO文件完整性..."
 
-    if [ ! -f "$SPEC2017_HASH" ]; then
+    if [ ! -f "$SPEC2026_HASH" ]; then
         log "$ATTENTION_LABEL" "校验文件不存在，跳过校验"
         return 0
     fi
 
     local expected_hash
-    expected_hash=$(awk '{print $1}' "$SPEC2017_HASH")
+    expected_hash=$(awk '{print $1}' "$SPEC2026_HASH")
 
     if [ -z "$expected_hash" ]; then
         log "$ATTENTION_LABEL" "校验文件内容为空，跳过校验"
@@ -207,7 +207,7 @@ verify_iso() {
 
     log "$INFO_LABEL" "计算本地文件的 SHA256（大文件可能需要较长时间）..."
     local actual_hash
-    actual_hash=$(sha256sum "$SPEC2017_ISO" | awk '{print $1}')
+    actual_hash=$(sha256sum "$SPEC2026_ISO" | awk '{print $1}')
 
     if [ "$actual_hash" = "$expected_hash" ]; then
         log "$SUCCESS_LABEL" "SHA256 校验通过: $actual_hash"
@@ -216,7 +216,7 @@ verify_iso() {
         log "$ERROR_LABEL" "期望: $expected_hash"
         log "$ERROR_LABEL" "实际: $actual_hash"
         log "$ATTENTION_LABEL" "删除已下载的文件，请重新运行脚本"
-        rm -f "$SPEC2017_ISO" "$SPEC2017_HASH"
+        rm -f "$SPEC2026_ISO" "$SPEC2026_HASH"
         error_exit "SHA256 校验失败，ISO文件可能损坏或被篡改" 8
     fi
 }
@@ -224,17 +224,17 @@ verify_iso() {
 unpack_iso() {
     log "$INFO_LABEL" "准备解压ISO文件..."
 
-    if [ -d "$SPEC2017_UNPACK_DIR" ]; then
-        log "$ATTENTION_LABEL" "解压目录 '$SPEC2017_UNPACK_DIR' 已存在，跳过解压"
+    if [ -d "$SPEC2026_UNPACK_DIR" ]; then
+        log "$ATTENTION_LABEL" "解压目录 '$SPEC2026_UNPACK_DIR' 已存在，跳过解压"
         fix_unpack_permissions
         return 0
     fi
 
-    mkdir -p "$SPEC2017_UNPACK_DIR" || error_exit "创建解压目录失败" 3
+    mkdir -p "$SPEC2026_UNPACK_DIR" || error_exit "创建解压目录失败" 3
 
-    log "$INFO_LABEL" "解压 $SPEC2017_ISO 到 $SPEC2017_UNPACK_DIR..."
+    log "$INFO_LABEL" "解压 $SPEC2026_ISO 到 $SPEC2026_UNPACK_DIR..."
 
-    if ! bsdtar -xf "$SPEC2017_ISO" -C "$SPEC2017_UNPACK_DIR" 2>&1 | tee -a "$LOG_FILE"; then
+    if ! bsdtar -xf "$SPEC2026_ISO" -C "$SPEC2026_UNPACK_DIR" 2>&1 | tee -a "$LOG_FILE"; then
         error_exit "解压ISO文件失败" 4
     fi
 
@@ -246,41 +246,41 @@ unpack_iso() {
 fix_unpack_permissions() {
     log "$INFO_LABEL" "修复ISO解压文件的只读权限..."
 
-    if [ ! -d "$SPEC2017_UNPACK_DIR" ]; then
+    if [ ! -d "$SPEC2026_UNPACK_DIR" ]; then
         return 0
     fi
 
     local readonly_count
-    readonly_count=$(find "$SPEC2017_UNPACK_DIR" ! -writable -type f 2>/dev/null | wc -l)
+    readonly_count=$(find "$SPEC2026_UNPACK_DIR" ! -writable -type f 2>/dev/null | wc -l)
 
     if [ "$readonly_count" -gt 0 ]; then
         log "$INFO_LABEL" "发现 $readonly_count 个只读文件，修复权限..."
-        chmod -R u+w "$SPEC2017_UNPACK_DIR"
+        chmod -R u+w "$SPEC2026_UNPACK_DIR"
         log "$SUCCESS_LABEL" "权限修复完成"
     else
         log "$INFO_LABEL" "✓ 无只读文件需要修复"
     fi
 }
 
-install_spec2017() {
-    log "$INFO_LABEL" "准备安装SPEC CPU 2017..."
+install_spec2026() {
+    log "$INFO_LABEL" "准备安装SPEC CPU 2026..."
 
-    cd "$SPEC2017_UNPACK_DIR" || error_exit "切换到解压目录失败" 5
+    cd "$SPEC2026_UNPACK_DIR" || error_exit "切换到解压目录失败" 5
 
     if [ ! -f "install.sh" ]; then
         error_exit "install.sh 脚本未找到，解压可能失败" 6
     fi
 
-    log "$ATTENTION_LABEL" "开始安装SPEC CPU 2017..."
+    log "$ATTENTION_LABEL" "开始安装SPEC CPU 2026..."
     log "$INFO_LABEL" "将自动接受安装协议"
 
-    mkdir -p "$SPEC2017_INSTALL_DIR" || error_exit "创建安装目录失败" 3
+    mkdir -p "$SPEC2026_INSTALL_DIR" || error_exit "创建安装目录失败" 3
 
-    if ! ./install.sh -d "$SPEC2017_INSTALL_DIR" <<< "yes" 2>&1 | tee -a "$LOG_FILE"; then
-        error_exit "安装SPEC CPU 2017失败" 7
+    if ! ./install.sh -d "$SPEC2026_INSTALL_DIR" <<< "yes" 2>&1 | tee -a "$LOG_FILE"; then
+        error_exit "安装SPEC CPU 2026失败" 7
     fi
 
-    log "$SUCCESS_LABEL" "SPEC CPU 2017安装完成"
+    log "$SUCCESS_LABEL" "SPEC CPU 2026安装完成"
 }
 
 verify_installation() {
@@ -290,7 +290,7 @@ verify_installation() {
     local all_found=true
 
     for file in "${key_files[@]}"; do
-        if [ ! -f "$SPEC2017_INSTALL_DIR/$file" ]; then
+        if [ ! -f "$SPEC2026_INSTALL_DIR/$file" ]; then
             log "$ERROR_LABEL" "关键文件 '$file' 未找到"
             all_found=false
         fi
@@ -315,8 +315,8 @@ cleanup() {
         if [[ $read_status -eq 124 ]]; then
             log "$INFO_LABEL" "超时，自动选择清理文件"
         fi
-        rm -f "$SPEC2017_ISO" "$SPEC2017_HASH"
-        if [ ! -f "$SPEC2017_ISO" ]; then
+        rm -f "$SPEC2026_ISO" "$SPEC2026_HASH"
+        if [ ! -f "$SPEC2026_ISO" ]; then
             log "$SUCCESS_LABEL" "ISO和校验文件已清理"
         else
             log "$ERROR_LABEL" "清理文件失败"
@@ -332,15 +332,15 @@ show_help() {
     echo "选项:"
     echo "  -h, --help              显示此帮助信息"
     echo "  -o, --openlist URL      指定OpenList服务地址（默认: $DEFAULT_OPENLIST_BASE_URL）"
-    echo "  -i, --iso FILE          指定本地ISO文件路径（默认: $DEFAULT_SPEC2017_ISO）"
-    echo "  -d, --dir DIR           指定安装目录（默认: $DEFAULT_SPEC2017_INSTALL_DIR）"
+    echo "  -i, --iso FILE          指定本地ISO文件路径（默认: $DEFAULT_SPEC2026_ISO）"
+    echo "  -d, --dir DIR           指定安装目录（默认: $DEFAULT_SPEC2026_INSTALL_DIR）"
     echo ""
     echo "环境变量:"
     echo "  OPENLIST_BASE_URL       与 -o 选项相同"
     echo "  ISO_REMOTE_PATH         OpenList上ISO文件的远程路径"
     echo "  HASH_REMOTE_PATH        OpenList上校验文件的远程路径"
-    echo "  SPEC2017_ISO            与 -i 选项相同"
-    echo "  SPEC2017_INSTALL_DIR    与 -d 选项相同"
+    echo "  SPEC2026_ISO            与 -i 选项相同"
+    echo "  SPEC2026_INSTALL_DIR    与 -d 选项相同"
 }
 
 parse_args() {
@@ -355,11 +355,11 @@ parse_args() {
                 shift 2
                 ;;
             -i|--iso)
-                SPEC2017_ISO="$2"
+                SPEC2026_ISO="$2"
                 shift 2
                 ;;
             -d|--dir)
-                SPEC2017_INSTALL_DIR="$2"
+                SPEC2026_INSTALL_DIR="$2"
                 shift 2
                 ;;
             *)
@@ -370,7 +370,7 @@ parse_args() {
 }
 
 main() {
-    log "$INFO_LABEL" "开始安装SPEC CPU 2017环境"
+    log "$INFO_LABEL" "开始安装SPEC CPU 2026环境"
     log "$INFO_LABEL" "日志文件: $LOG_FILE"
 
     parse_args "$@"
@@ -380,12 +380,12 @@ main() {
     download_iso
     verify_iso
     unpack_iso
-    install_spec2017
+    install_spec2026
     verify_installation
     cleanup
 
-    log "$SUCCESS_LABEL" "SPEC CPU 2017环境设置完成！"
-    log "$INFO_LABEL" "使用方法: cd $SPEC2017_INSTALL_DIR && source shrc"
+    log "$SUCCESS_LABEL" "SPEC CPU 2026环境设置完成！"
+    log "$INFO_LABEL" "使用方法: cd $SPEC2026_INSTALL_DIR && source shrc"
 
     exit 0
 }
