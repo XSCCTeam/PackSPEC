@@ -43,7 +43,7 @@ if __name__ == "__main__":
             #   RunMode.pack: 打包模式，根据 task 配置执行打包操作
             #   RunMode.direct: 直接运行模式，直接运行 SPEC 测试，跳过打包操作
             # 当设置为 RunMode.direct 时，会调用 run_spec() 方法直接运行 SPEC 测试
-            "run_mode": RunMode.pack,
+            "run_mode": RunMode.direct,
         },
         # SPEC基准测试相关配置
         "spec_config": {

@@ -282,7 +282,7 @@ DEFAULT_LOG_LANGUAGE = LogLanguage.zh
 """默认日志语言，默认使用中文"""
 
 RESULTS_OUTPUT_PATH = os.path.join(P_PATH, "spec_results")
-"""SPEC测试结果输出目录路径"""
+"""SPEC测试结果输出目录路径（仅作为spec_driver独立使用时的回退路径，通过PackSPEC.run_spec()调用时结果保存在generated_files子目录下）"""
 
 DEFAULT_CORE_NUM = -1
 """默认绑定的CPU核心编号，-1表示不绑定核心"""

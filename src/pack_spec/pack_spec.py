@@ -816,7 +816,9 @@ class PackSPEC:
         测试完成后可选择生成测试报告。
         
         Args:
-            output_dir (str, optional): 结果输出目录，默认自动生成
+            output_dir (str, optional): 结果输出目录，默认为
+                generated_files/{date}_{pack_name}/spec_results/run_{timestamp}，
+                如果指定则使用指定目录
             generate_report (bool, optional): 是否生成测试报告，默认True
             
         Returns:
@@ -840,6 +842,9 @@ class PackSPEC:
             >>> result = packer.run_spec()
             >>> print(f"INT分数: {result['results']['int_score']}")
         """
+        if output_dir is None:
+            output_dir = os.path.join(self.utils.get_pack_generated_dir_path(), "spec_results", f"run_{CURRENT_TIME}")
+
         logger.info("="*80)
         logger.info(self.msg.get("start_direct_run"))
         logger.info("="*80)

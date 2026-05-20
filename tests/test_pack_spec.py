@@ -1043,6 +1043,63 @@ class TestRunDirectMode:
         packer.run_spec.assert_not_called()
 
 
+class TestRunSpecOutputDir:
+    """run_spec 方法的默认输出目录测试"""
+
+    def _create_packer_with_mocks(self, config):
+        with patch('src.pack_spec.pack_spec.PackUtils') as mock_utils_cls, \
+             patch('src.pack_spec.pack_spec.SPECDriver.create') as mock_create, \
+             patch('src.pack_spec.pack_spec.setup_logger') as mock_setup_logger:
+            mock_utils_instance = MagicMock()
+            mock_utils_instance.create_generated_dir.return_value = "/tmp/test_generated"
+            mock_utils_instance.get_pack_generated_dir_path.return_value = "/tmp/test_generated"
+            mock_utils_instance.save_pack_spec_cfg = MagicMock()
+            mock_utils_cls.return_value = mock_utils_instance
+            mock_create.return_value = MagicMock()
+            mock_setup_logger.return_value = "/tmp/test/log/test.log"
+            packer = PackSPEC(config)
+        return packer
+
+    def test_run_spec_default_output_dir_uses_generated_dir(self, base_config):
+        """测试run_spec默认output_dir使用generated_files子目录"""
+        base_config["task"]["run_mode"] = RunMode.direct
+        packer = self._create_packer_with_mocks(base_config)
+        with patch.object(packer.spec_driver, 'run_spec_directly') as mock_run, \
+             patch('src.pack_spec.pack_spec.parse_spec_results') as mock_parse, \
+             patch('src.pack_spec.pack_spec.generate_json_report') as mock_report:
+            mock_run.return_value = {
+                "success": True,
+                "output_dir": "/tmp/test_generated/spec_results/run_260520_120000",
+                "log_file": "/tmp/test.log",
+                "return_code": 0,
+                "error_message": "",
+            }
+            mock_parse.return_value = {"benchmarks": {}, "int_score": 0.0, "fp_score": 0.0, "raw_data": []}
+            result = packer.run_spec(output_dir=None)
+        called_output_dir = mock_run.call_args[0][0]
+        assert "/tmp/test_generated/spec_results/run_" in called_output_dir
+
+    def test_run_spec_custom_output_dir_overrides_default(self, base_config):
+        """测试run_spec自定义output_dir覆盖默认路径"""
+        base_config["task"]["run_mode"] = RunMode.direct
+        packer = self._create_packer_with_mocks(base_config)
+        custom_dir = "/tmp/custom_output_dir"
+        with patch.object(packer.spec_driver, 'run_spec_directly') as mock_run, \
+             patch('src.pack_spec.pack_spec.parse_spec_results') as mock_parse, \
+             patch('src.pack_spec.pack_spec.generate_json_report') as mock_report:
+            mock_run.return_value = {
+                "success": True,
+                "output_dir": custom_dir,
+                "log_file": "/tmp/test.log",
+                "return_code": 0,
+                "error_message": "",
+            }
+            mock_parse.return_value = {"benchmarks": {}, "int_score": 0.0, "fp_score": 0.0, "raw_data": []}
+            result = packer.run_spec(output_dir=custom_dir)
+        called_output_dir = mock_run.call_args[0][0]
+        assert called_output_dir == custom_dir
+
+
 class TestCopyBinariesDryRun:
     """copy_binaries 方法干跑测试"""
 

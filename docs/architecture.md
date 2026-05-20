@@ -285,7 +285,6 @@ pack_spec/
 ├── docs/                    # 文档目录
 ├── generated_files/         # 生成的配置和输出
 ├── packed_files/            # 打包输出目录
-├── spec_results/            # 直接运行结果目录
 ├── .env                     # 环境变量配置
 ├── .env.example             # 环境变量示例
 ├── main.py.example          # 使用示例
@@ -300,6 +299,8 @@ generated_files/
 │   ├── {date}_{pack_name}.json  # 配置文件
 │   ├── cfg/                 # 配置文件副本
 │   ├── log/                 # 日志文件
+│   ├── spec_results/        # 直接运行SPEC测试结果目录
+│   │   └── run_{timestamp}/ # 单次运行结果
 │   ├── bin/                 # 二进制文件
 │   │   └── {date}_{spec_name}_bin_{pack_name}.{tune}_{input}_{mode}/
 │   └── run/                 # 运行环境
@@ -311,6 +312,8 @@ generated_files/
 │           └── test_{input}_all.sh
 └── {pack_name}/             # 自动模式（无日期前缀）
     ├── {pack_name}.json     # 配置文件
+    ├── spec_results/        # 直接运行SPEC测试结果目录
+    │   └── run_{timestamp}/ # 单次运行结果
     ├── bin/
     │   └── {spec_name}_bin_{pack_name}.{tune}_{input}_{mode}/
     └── run/

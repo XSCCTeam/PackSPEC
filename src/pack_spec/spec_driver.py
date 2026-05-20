@@ -715,7 +715,9 @@ class SPECDriver:
         测试完成后返回结果信息。
         
         Args:
-            output_dir (str, optional): 结果输出目录，默认为spec_results/{timestamp}
+            output_dir (str, optional): 结果输出目录，
+                通过PackSPEC.run_spec()调用时默认为generated_files/{date}_{pack_name}/spec_results/run_{timestamp}，
+                直接调用spec_driver时默认为spec_results/run_{timestamp}
             
         Returns:
             Dict: 包含以下键的结果字典：

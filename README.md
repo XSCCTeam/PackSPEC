@@ -492,7 +492,7 @@ print(f"报告路径: {result['report_path']}")
 - 直接运行模式需要 SPEC 已正确安装并配置环境变量
 - 测试过程中会实时输出日志
 - 支持 Ctrl+C 中断测试
-- 测试结果保存在 `spec_results/` 目录下
+- 测试结果保存在 `generated_files/{pack_name}/spec_results/` 目录下
 
 ### QEMU 验证模式
 
