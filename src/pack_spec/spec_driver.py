@@ -320,6 +320,42 @@ class SPECDriver:
                 raise ConfigError(f"Label not found in file {self.spec_cfg_path}.")
         return label
     
+    def _convert_benches_for_mode(self, spec_benches: str, spec_mode: SPECMode) -> str:
+        """
+        根据spec_mode将spec_benches中的通用名称转换为对应的benchset名称
+
+        当spec_mode为speed时，将"all"/"int"/"fp"转换为对应的speed benchset名称；
+        当spec_mode为rate时，转换为对应的rate benchset名称。
+        对于具体的基准测试编号(如"600 602")则保持不变。
+
+        Args:
+            spec_benches (str): 原始基准测试选择字符串
+            spec_mode (SPECMode): 运行模式枚举值(speed/rate)
+
+        Returns:
+            str: 转换后的benchset名称字符串
+        """
+        benches = spec_benches.split()
+        converted = []
+        for bench in benches:
+            if self.spec_name == SPECName.spec2017:
+                if bench == "all":
+                    converted.extend(["intspeed", "fpspeed"] if spec_mode == SPECMode.speed else ["intrate", "fprate"])
+                elif bench in ["int", "intspeed", "intrate"]:
+                    converted.append("intspeed" if spec_mode == SPECMode.speed else "intrate")
+                elif bench in ["fp", "fpspeed", "fprate"]:
+                    converted.append("fpspeed" if spec_mode == SPECMode.speed else "fprate")
+                else:
+                    converted.append(bench)
+            elif self.spec_name in [SPECName.spec2006, SPECName.spec2006v1p01]:
+                if bench == "all":
+                    converted.extend(["int", "fp"])
+                else:
+                    converted.append(bench)
+            else:
+                converted.append(bench)
+        return " ".join(converted)
+
     def run_setup_spec(self, tune_type: TuneType, input_type: InputType, rebuild: bool = True) -> str:
         """
         运行SPEC setup脚本进行编译和环境准备
@@ -341,8 +377,10 @@ class SPECDriver:
         Note:
             - 脚本路径由setup_script_path属性指定
             - 执行的命令格式: setup_script --spec-dir ... --config ... --action setup ...
+            - 会根据spec_mode自动将spec_benches转换为对应的benchset名称
         """
         output_log = []
+        setup_benches = self._convert_benches_for_mode(self.spec_benches, self.spec_mode)
         spec_setup_cmd = [
             self.setup_script_path, 
             "--spec-dir", self.spec_dir,
@@ -350,7 +388,7 @@ class SPECDriver:
             "--action", "setup",
             "--tune", tune_type.name,
             "--input", input_type.name,
-            "--benches", self.spec_benches,
+            "--benches", setup_benches,
             "--iterations", str(self.iterations)
         ]
         if rebuild:
@@ -734,6 +772,7 @@ class SPECDriver:
         Note:
             - 测试过程中会实时输出日志
             - 支持Ctrl+C中断测试
+            - 执行前会自动source SPEC安装目录下的shrc文件，初始化Perl和SPEC运行环境
         """
         self._check_spec_environment()
         
@@ -754,6 +793,10 @@ class SPECDriver:
             "error_message": ""
         }
         
+        shrc_path = os.path.join(self.spec_dir, "shrc")
+        
+        shell_cmd = f"source {shrc_path} && {' '.join(spec_cmd)}"
+        
         logger.info(self.msg.get("start_running_spec", cmd=' '.join(spec_cmd)))
         logger.info(self.msg.get("result_output_dir", path=output_dir))
         
@@ -761,7 +804,7 @@ class SPECDriver:
         try:
             with open(log_file, 'w') as log_f:
                 process = subprocess.Popen(
-                    spec_cmd,
+                    ["bash", "-c", shell_cmd],
                     cwd=self.spec_dir,
                     stdout=subprocess.PIPE,
                     stderr=subprocess.STDOUT,

@@ -10,7 +10,7 @@ if __name__ == "__main__":
     """
     SPEC基准测试打包工具主程序
     
-    示例：打包SPEC2006整数基准测试套件
+    示例：打包SPEC2017整数基准测试套件
     """
     
     config = {
@@ -51,14 +51,14 @@ if __name__ == "__main__":
             # 注意：setup 操作前会自动将 cfg 文件复制到 generated_files/{pack_name}/cfg/ 目录
             # 以保护源配置文件不被修改
             # 日志文件会自动保存到 generated_files/{pack_name}/log/ 目录
-            "spec_cfg_path": "/home/wll/sdbdata/pack_spec/tests/test_cfgs/spec06_x86_llvm19_novec.cfg",
+            "spec_cfg_path": "/home/wll/sdbdata/pack_spec/tests/test_cfgs/spec17_x86_llvm19_novec.cfg",
 
             # SPEC基准测试版本选择
             # 可选值：
             #   SPECName.spec2006: SPEC2006基准套件
             #   SPECName.spec2006v1p01: SPEC2006 v1.0.1基准套件
             #   SPECName.spec2017: SPEC2017基准套件
-            "spec_name": SPECName.spec2006,
+            "spec_name": SPECName.spec2017,
 
             # SPEC基准测试优化级别
             # 可选值：

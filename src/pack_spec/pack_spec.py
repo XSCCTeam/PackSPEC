@@ -705,6 +705,8 @@ class PackSPEC:
         shutil.copy2(src_cfg_path, dest_cfg_path)
         logger.info(self.msg.get("cfg_copied_to", src=src_cfg_path, dest=dest_cfg_path))
         
+        self.utils.inject_riscv_x264_submit(dest_cfg_path)
+        
         self.spec_driver.spec_cfg_path = dest_cfg_path
         spec_setup_log_path = self.spec_driver.run_setup_spec(self.tune_type, self.input_type, rebuild=self.rebuild)
         

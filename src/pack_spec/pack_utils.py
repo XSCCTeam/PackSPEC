@@ -300,11 +300,13 @@ class PackUtils:
         task_config = config.get('task', {})
         pack_config = config.get('pack_config', {})
         msg_config = config.get('msg_config', {})
+        spec_config = config.get('spec_config', {})
         self.pack_name = task_config.get('pack_name', config.get('pack_name', 'packspec'))
         self.auto_mode = pack_config.get('auto_mode', DEFAULT_AUTO_MODE)
         self.logger = logger
         self.init_date = config.get('date', CURRENT_DATE)
         self.overwrite_confirmed = False
+        self.spec_name = spec_config.get('spec_name', None)
         
         # 日志语言配置
         self.log_language, self.msg = parse_log_language(
@@ -445,41 +447,58 @@ class PackUtils:
     #
     # 打包生成的配置文件目录
     #
+    def _get_spec_version_tag(self) -> str:
+        """
+        获取SPEC版本的短标识，用于目录名
+
+        Returns:
+            str: SPEC版本短标识，如"spec06"或"spec17"；
+                 如果未设置spec_name则返回空字符串
+        """
+        if self.spec_name is None:
+            return ""
+        spec_version_map = {
+            SPECName.spec2006: "spec2006",
+            SPECName.spec2006v1p01: "spec2006",
+            SPECName.spec2017: "spec2017",
+        }
+        return spec_version_map.get(self.spec_name, "")
+
     def get_pack_generated_dir_path(self) -> str:
         """
         获取打包生成的目录路径
         
         目录名称格式:
         - auto_mode=True: {pack_name}（不包含日期，便于自动化脚本预测路径）
-        - auto_mode=False: {date}_{pack_name}（包含日期，避免不同日期的生成互相覆盖）
+        - auto_mode=False: {date}_{spec_version}_{pack_name}（包含日期和SPEC版本，避免不同日期的生成互相覆盖）
         
         例如:
         - auto_mode=True: x86_llvm19_novec_wll
-        - auto_mode=False: 260408_x86_llvm19_novec_wll
+        - auto_mode=False: 260408_spec17_x86_llvm19_novec_wll
         
         Returns:
             str: 目录的完整路径
         """
+        spec_tag = self._get_spec_version_tag()
         if self.auto_mode:
             return os.path.join(GENERATED_FILES_PATH, self.pack_name)
         else:
-            return os.path.join(GENERATED_FILES_PATH, f"{self.init_date}_{self.pack_name}")
+            if spec_tag:
+                return os.path.join(GENERATED_FILES_PATH, f"{self.init_date}_{spec_tag}_{self.pack_name}")
+            else:
+                return os.path.join(GENERATED_FILES_PATH, f"{self.init_date}_{self.pack_name}")
 
     def get_pack_generated_file_path(self) -> str:
         """
         获取打包生成的配置文件路径
         
-        文件名称格式:
-        - auto_mode=True: {pack_name}.json（不包含日期，便于自动化脚本预测路径）
-        - auto_mode=False: {date}_{pack_name}.json（包含日期）
+        文件名称格式与目录名称格式一致，扩展名为.json
         
         Returns:
             str: 配置文件的完整路径
         """
-        if self.auto_mode:
-            return os.path.join(self.get_pack_generated_dir_path(), f"{self.pack_name}.json")
-        else:
-            return os.path.join(self.get_pack_generated_dir_path(), f"{self.init_date}_{self.pack_name}.json")
+        dir_name = os.path.basename(self.get_pack_generated_dir_path())
+        return os.path.join(self.get_pack_generated_dir_path(), f"{dir_name}.json")
     
     def create_generated_dir(self, auto_mode: bool = False):
         """
@@ -1044,6 +1063,51 @@ class PackUtils:
                 f"echo -e '{bench_name} completed ' | tee -a \"$LOG_FILE\"",
             ])
         return commands
+
+    def inject_riscv_x264_submit(self, cfg_path: str) -> bool:
+        """
+        在RISC-V交叉编译平台的SPEC cfg文件中，为625.x264_s段注入
+        use_submit_for_speed和submit配置，以解决specinvoke执行失败的问题。
+
+        仅当cfg文件中包含riscv64目标编译标志时才执行注入操作。
+
+        Args:
+            cfg_path (str): 待修改的cfg文件路径（应为复制后的cfg）
+
+        Returns:
+            bool: 是否执行了注入操作
+        """
+        with open(cfg_path, 'r') as f:
+            content = f.read()
+
+        if '--target=riscv64' not in content:
+            return False
+
+        qemu_cmd_name = QEMU_CMD if QEMU_CMD else 'qemu-riscv64'
+        qemu_binary = shlex.split(qemu_cmd_name)[0]
+
+        lines = content.split('\n')
+        new_lines = []
+        injected = False
+
+        for i, line in enumerate(lines):
+            new_lines.append(line)
+            stripped = line.strip()
+            if stripped == '625.x264_s:' and not injected:
+                indent = '   '
+                new_lines.append(f'{indent}use_submit_for_speed = 1')
+                if QEMU_PATH:
+                    new_lines.append(f'{indent}submit = {QEMU_PATH}/{qemu_binary} $command')
+                else:
+                    new_lines.append(f'{indent}submit = {qemu_binary} $command')
+                injected = True
+                self.logger.info(self.msg.get("riscv_x264_submit_injected", cfg=cfg_path))
+
+        if injected:
+            with open(cfg_path, 'w') as f:
+                f.write('\n'.join(new_lines))
+
+        return injected
 
 
 def parse_spec_results(result_dir: str, spec_name: 'SPECName', language: LogLanguage = DEFAULT_LOG_LANGUAGE) -> Dict:

@@ -135,6 +135,76 @@ class TestSPECDriverBase:
                 driver._build_run_command()
 
 
+class TestConvertBenchesForMode:
+    """_convert_benches_for_mode 方法测试"""
+
+    def _make_driver(self, spec_name):
+        from src.pack_spec.spec_driver import SPECDriver
+        driver = SPECDriver.__new__(SPECDriver)
+        driver.spec_name = spec_name
+        return driver
+
+    def test_spec2017_all_speed(self):
+        driver = self._make_driver(SPECName.spec2017)
+        result = driver._convert_benches_for_mode("all", SPECMode.speed)
+        assert result == "intspeed fpspeed"
+
+    def test_spec2017_all_rate(self):
+        driver = self._make_driver(SPECName.spec2017)
+        result = driver._convert_benches_for_mode("all", SPECMode.rate)
+        assert result == "intrate fprate"
+
+    def test_spec2017_int_speed(self):
+        driver = self._make_driver(SPECName.spec2017)
+        result = driver._convert_benches_for_mode("int", SPECMode.speed)
+        assert result == "intspeed"
+
+    def test_spec2017_int_rate(self):
+        driver = self._make_driver(SPECName.spec2017)
+        result = driver._convert_benches_for_mode("int", SPECMode.rate)
+        assert result == "intrate"
+
+    def test_spec2017_fp_speed(self):
+        driver = self._make_driver(SPECName.spec2017)
+        result = driver._convert_benches_for_mode("fp", SPECMode.speed)
+        assert result == "fpspeed"
+
+    def test_spec2017_fp_rate(self):
+        driver = self._make_driver(SPECName.spec2017)
+        result = driver._convert_benches_for_mode("fp", SPECMode.rate)
+        assert result == "fprate"
+
+    def test_spec2017_specific_numbers_unchanged(self):
+        driver = self._make_driver(SPECName.spec2017)
+        result = driver._convert_benches_for_mode("600 602", SPECMode.speed)
+        assert result == "600 602"
+
+    def test_spec2017_intspeed_stays_intspeed(self):
+        driver = self._make_driver(SPECName.spec2017)
+        result = driver._convert_benches_for_mode("intspeed", SPECMode.speed)
+        assert result == "intspeed"
+
+    def test_spec2017_intrate_converts_to_intspeed(self):
+        driver = self._make_driver(SPECName.spec2017)
+        result = driver._convert_benches_for_mode("intrate", SPECMode.speed)
+        assert result == "intspeed"
+
+    def test_spec2017_fprate_converts_to_fpspeed(self):
+        driver = self._make_driver(SPECName.spec2017)
+        result = driver._convert_benches_for_mode("fprate", SPECMode.speed)
+        assert result == "fpspeed"
+
+    def test_spec2006_all_expands_to_int_fp(self):
+        driver = self._make_driver(SPECName.spec2006)
+        result = driver._convert_benches_for_mode("all", SPECMode.speed)
+        assert result == "int fp"
+
+    def test_spec2006_int_stays_int(self):
+        driver = self._make_driver(SPECName.spec2006)
+        result = driver._convert_benches_for_mode("int", SPECMode.speed)
+        assert result == "int"
+
+
 class TestSPEC2006DriverBenchSelection:
     """SPEC2006Driver 基准测试选择逻辑测试"""
 

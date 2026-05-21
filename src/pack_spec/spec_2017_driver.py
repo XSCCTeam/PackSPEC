@@ -22,8 +22,8 @@ import os
 
 from src.pack_spec.pack_config import (
     SPECName, TuneType, InputType, SPECMode, ActionType,
-    FileOperationError, BenchmarkError,
-    SPEC2017_BENCH_PATH, SCRIPTS_PATH, logger
+    ConfigError, FileOperationError, BenchmarkError,
+    SPEC2017_PATH, SPEC2017_BENCH_PATH, SCRIPTS_PATH, logger
 )
 from .spec_driver import SPECDriver
 from src.pack_spec.pack_utils import PackUtils, is_numeric
@@ -127,6 +127,7 @@ class SPEC2017Driver(SPECDriver):
                  utils: PackUtils,
                  iterations: int = 3,
                  rebuild: bool = False,
+                 debug_mode: bool = False,
                  allow_basepeak: bool = False,
                  ):
         """
@@ -141,11 +142,16 @@ class SPEC2017Driver(SPECDriver):
             utils (PackUtils): 工具类实例
             iterations (int, optional): 测试迭代次数，默认3
             rebuild (bool, optional): 是否重新构建，默认False
+            debug_mode (bool, optional): 是否调试模式，默认False
             allow_basepeak (bool, optional): 是否允许basepeak配置，默认False
         """
         super().__init__(spec_cfg_path, SPECName.spec2017, 
                         tune_type, input_type, spec_mode, 
-                        spec_benches, utils, iterations, rebuild, allow_basepeak=allow_basepeak)
+                        spec_benches, utils, iterations, rebuild, debug_mode, allow_basepeak)
+        if SPEC2017_PATH is None:
+            logger.error(self.msg.get("spec_path_not_set"))
+            raise ConfigError(self.msg.get("spec_path_not_set"))
+        self.spec_dir = SPEC2017_PATH
         self.spec_bench_path = SPEC2017_BENCH_PATH
         self.spec_bench_map = SPEC2017_BIN_MAP
         self.spec_build_dir = 'build'
@@ -304,8 +310,8 @@ class SPEC2017Driver(SPECDriver):
         binary_path_map = {}
         for bench_dir in bench_dirs:
             # Extract the benchmark name from the directory path
-            # Path format: .../benchspec/CPU2017/{benchmark_name}/build/{build_dir}
-            bench_name = os.path.basename(os.path.dirname(bench_dir))
+            # Path format: .../benchspec/CPU/{benchmark_name}/build/{build_dir}
+            bench_name = os.path.basename(os.path.dirname(os.path.dirname(bench_dir)))
             # Only process actual benchmark directories that exist in our map
             if bench_name in self.spec_bench_map:
                 binary_path_map[bench_name] = os.path.join(bench_dir, self.spec_bench_map[bench_name])
