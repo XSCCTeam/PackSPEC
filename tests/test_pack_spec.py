@@ -63,7 +63,9 @@ class TestPackSPECInitPackSpec:
             mock_utils_cls.return_value.create_generated_dir.return_value = "/tmp/test"
             mock_utils_cls.return_value.get_pack_generated_dir_path.return_value = "/tmp/test"
             mock_utils_cls.return_value.save_pack_spec_cfg = MagicMock()
-            mock_create.return_value = MagicMock()
+            mock_driver = MagicMock()
+            mock_driver.label = ""
+            mock_create.return_value = mock_driver
             mock_setup_logger.return_value = "/tmp/test/log/test.log"
             return PackSPEC(config)
 

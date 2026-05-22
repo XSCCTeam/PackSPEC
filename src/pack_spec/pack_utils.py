@@ -1064,6 +1064,41 @@ class PackUtils:
             ])
         return commands
 
+    def update_cfg_label(self, cfg_path: str, new_label: str, spec_name: 'SPECName') -> None:
+        """
+        修改cfg文件中的label（SPEC2017）或ext（SPEC2006）为new_label
+
+        仅匹配文件顶层（非缩进）的label/ext行，跳过注释行。
+
+        Args:
+            cfg_path (str): cfg文件路径
+            new_label (str): 新的label/ext值
+            spec_name (SPECName): SPEC版本，用于确定匹配label还是ext
+        """
+        with open(cfg_path, 'r') as f:
+            lines = f.readlines()
+
+        target_key = 'label' if spec_name == SPECName.spec2017 else 'ext'
+        old_label = ""
+        updated = False
+
+        for i, line in enumerate(lines):
+            stripped = line.strip()
+            if stripped.startswith('#'):
+                continue
+            if not line[0].isspace() and stripped.startswith(target_key) and '=' in stripped:
+                key_part, _, value_part = stripped.partition('=')
+                if key_part.strip() == target_key:
+                    old_label = value_part.strip()
+                    lines[i] = f"{target_key} = {new_label}\n"
+                    updated = True
+                    break
+
+        if updated:
+            with open(cfg_path, 'w') as f:
+                f.writelines(lines)
+            self.logger.info(self.msg.get("cfg_label_updated", path=cfg_path, old=old_label, new=new_label))
+
     def inject_riscv_x264_submit(self, cfg_path: str) -> bool:
         """
         在RISC-V交叉编译平台的SPEC cfg文件中，为625.x264_s段注入

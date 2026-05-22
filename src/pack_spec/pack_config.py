@@ -484,6 +484,10 @@ class LogMessages:
             "zh": "检测到RISC-V交叉编译平台，已在cfg文件中为625.x264_s注入use_submit_for_speed和submit配置: {cfg}",
             "en": "RISC-V cross-compilation detected, injected use_submit_for_speed and submit for 625.x264_s in cfg: {cfg}"
         },
+        "cfg_label_updated": {
+            "zh": "已将cfg文件中的label从 '{old}' 更新为 '{new}': {path}",
+            "en": "Updated label in cfg from '{old}' to '{new}': {path}"
+        },
         "bench_dir_not_found": {
             "zh": "未找到基准测试目录: {bench_name}",
             "en": "Failed to find bench dir for {bench_name}."

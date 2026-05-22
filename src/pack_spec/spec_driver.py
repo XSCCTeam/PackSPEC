@@ -26,7 +26,7 @@ import subprocess
 from src.pack_spec.pack_config import (
     SPECName, TuneType, InputType, SPECMode, ActionType,
     ConfigError, FileOperationError, CommandExecutionError,
-    P_PATH, logger
+    P_PATH, logger, QEMU_PATH, QEMU_CMD
 )
 from src.pack_spec.pack_utils import PackUtils
 from typing import Dict, List, Optional
@@ -446,6 +446,45 @@ class SPECDriver:
             raise CommandExecutionError(self.msg.get("command_execute_failed", error=str(e)))
 
 
+    @staticmethod
+    def _remove_qemu_prefix(line: str) -> str:
+        """
+        从命令行中移除QEMU前缀
+
+        RISC-V交叉编译平台下，setup阶段注入了submit = qemu-riscv64 $command
+        以便specinvoke能正常执行，但生成的运行脚本不应包含QEMU前缀。
+
+        需要处理的QEMU前缀格式：
+        - /absolute/path/qemu-riscv64 [options]
+        - qemu-riscv64 [options]
+
+        Args:
+            line (str): 原始命令行
+
+        Returns:
+            str: 移除QEMU前缀后的命令行
+        """
+        import shlex as _shlex
+        qemu_cmd_name = QEMU_CMD if QEMU_CMD else 'qemu-riscv64'
+        qemu_binary = _shlex.split(qemu_cmd_name)[0]
+
+        patterns = []
+        if QEMU_PATH:
+            patterns.append(f"{QEMU_PATH}/{qemu_binary}")
+        patterns.append(qemu_binary)
+
+        for pattern in patterns:
+            if pattern in line:
+                idx = line.index(pattern)
+                after = line[idx + len(pattern):]
+                remaining = after.lstrip()
+                skip = len(after) - len(remaining)
+                qemu_prefix_end = idx + len(pattern) + skip
+                line = line[:idx] + line[qemu_prefix_end:]
+                break
+
+        return line
+
     def execute_specinvoke(self, src_dir: str, dest_dir: str, input_type: InputType, binary_name_map: tuple = ("", "")) -> bool:
         """
         执行specinvoke命令生成运行脚本
@@ -502,6 +541,10 @@ class SPECDriver:
             # 替换二进制文件名
             if binary_name_map[0] != "":
                 line = line.replace(binary_name_map[0], binary_name_map[1])
+            # 移除RISC-V平台下specinvoke生成的QEMU前缀
+            # setup阶段注入了submit = qemu-riscv64 $command来让specinvoke正常工作，
+            # 但生成的运行脚本不应包含QEMU前缀，因为实际运行在目标RISC-V机器上
+            line = self._remove_qemu_prefix(line)
             if not line.startswith("specinvoke"):
                 processed_commands.append(line)
         

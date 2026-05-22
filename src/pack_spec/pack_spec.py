@@ -167,7 +167,7 @@ class PackSPEC:
         """
         # 任务配置
         task_config = config.get('task', {})
-        self.pack_name = task_config.get('pack_name', 'packspec')
+        self.pack_name = task_config.get('pack_name', '')
         self.setup_spec_enabled = task_config.get('setup_spec', False)
         self.pack_binaries_enabled = task_config.get('pack_binaries', False)
         self.pack_benches_enabled = task_config.get('pack_benches', False)
@@ -216,6 +216,10 @@ class PackSPEC:
             self.spec_mode, self.spec_benches, self.utils, self.iterations, self.rebuild,
             allow_basepeak=self.allow_basepeak
         )
+        if not self.pack_name:
+            self.pack_name = self.spec_driver.label if self.spec_driver.label else 'packspec'
+        
+        self.utils.pack_name = self.pack_name
         self.print_info()
 
 
@@ -704,6 +708,10 @@ class PackSPEC:
         
         shutil.copy2(src_cfg_path, dest_cfg_path)
         logger.info(self.msg.get("cfg_copied_to", src=src_cfg_path, dest=dest_cfg_path))
+        
+        if self.pack_name and self.pack_name != self.spec_driver.label:
+            self.utils.update_cfg_label(dest_cfg_path, self.pack_name, self.spec_name)
+            self.spec_driver.label = self.pack_name
         
         self.utils.inject_riscv_x264_submit(dest_cfg_path)
         

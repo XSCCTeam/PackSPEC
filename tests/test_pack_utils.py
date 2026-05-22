@@ -1128,6 +1128,66 @@ class TestScriptGenerationIntegration:
             commands.extend(utils.commands_to_cal_score(temp_dir, 1.0))
 
 
+class TestUpdateCfgLabel:
+    """update_cfg_label 方法测试"""
+
+    def _make_utils(self, config=None):
+        if config is None:
+            config = {
+                'task': {'pack_name': 'test'},
+                'spec_config': {},
+                'pack_config': {},
+                'msg_config': {},
+            }
+        return PackUtils(config, MagicMock())
+
+    def _write_cfg(self, temp_dir, content):
+        cfg_path = os.path.join(temp_dir, "test.cfg")
+        with open(cfg_path, 'w') as f:
+            f.write(content)
+        return cfg_path
+
+    def test_update_label_spec2017(self, temp_dir):
+        """测试SPEC2017 cfg中label被更新"""
+        utils = self._make_utils()
+        cfg_content = (
+            "label = old_label\n"
+            "tune = base\n"
+        )
+        cfg_path = self._write_cfg(temp_dir, cfg_content)
+        utils.update_cfg_label(cfg_path, "new_label", SPECName.spec2017)
+        with open(cfg_path) as f:
+            content = f.read()
+        assert "label = new_label" in content
+        assert "old_label" not in content
+        utils.logger.info.assert_called_once()
+
+    def test_update_ext_spec2006(self, temp_dir):
+        """测试SPEC2006 cfg中ext被更新"""
+        utils = self._make_utils()
+        cfg_content = (
+            "ext = old_ext\n"
+            "tune = base\n"
+        )
+        cfg_path = self._write_cfg(temp_dir, cfg_content)
+        utils.update_cfg_label(cfg_path, "new_ext", SPECName.spec2006)
+        with open(cfg_path) as f:
+            content = f.read()
+        assert "ext = new_ext" in content
+        assert "old_ext" not in content
+        utils.logger.info.assert_called_once()
+
+    def test_label_not_changed_when_same(self, temp_dir):
+        """测试label相同时无变化"""
+        utils = self._make_utils()
+        cfg_content = "label = same_label\n"
+        cfg_path = self._write_cfg(temp_dir, cfg_content)
+        utils.update_cfg_label(cfg_path, "same_label", SPECName.spec2017)
+        with open(cfg_path) as f:
+            content = f.read()
+        assert "label = same_label" in content
+
+
 class TestInjectRiscvX264Submit:
     """inject_riscv_x264_submit 方法测试"""
 

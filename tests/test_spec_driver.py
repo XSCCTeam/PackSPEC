@@ -1044,3 +1044,63 @@ class TestSpecinvokeDryRun:
                 # 验证旧二进制名被替换为新名
                 assert "new_name" in content
                 assert "orig_name" not in content
+
+
+class TestRemoveQemuPrefix:
+    """_remove_qemu_prefix 方法测试"""
+
+    @patch('src.pack_spec.spec_driver.QEMU_PATH', '/mnt/sdbdata/QEMU-10.2.0/build')
+    @patch('src.pack_spec.spec_driver.QEMU_CMD', 'qemu-riscv64')
+    def test_remove_qemu_with_full_path(self):
+        from src.pack_spec.spec_driver import SPECDriver
+        line = "/mnt/sdbdata/QEMU-10.2.0/build/qemu-riscv64 ./x264_s_base.test --pass 1"
+        result = SPECDriver._remove_qemu_prefix(line)
+        assert result == "./x264_s_base.test --pass 1"
+
+    @patch('src.pack_spec.spec_driver.QEMU_PATH', '/mnt/sdbdata/QEMU-10.2.0/build')
+    @patch('src.pack_spec.spec_driver.QEMU_CMD', 'qemu-riscv64')
+    def test_remove_qemu_preserves_leading_whitespace(self):
+        from src.pack_spec.spec_driver import SPECDriver
+        line = "   /mnt/sdbdata/QEMU-10.2.0/build/qemu-riscv64 ./x264_s_base.test"
+        result = SPECDriver._remove_qemu_prefix(line)
+        assert result == "   ./x264_s_base.test"
+
+    @patch('src.pack_spec.spec_driver.QEMU_PATH', None)
+    @patch('src.pack_spec.spec_driver.QEMU_CMD', 'qemu-riscv64')
+    def test_remove_qemu_without_path(self):
+        from src.pack_spec.spec_driver import SPECDriver
+        line = "qemu-riscv64 ./x264_s_base.test --pass 1"
+        result = SPECDriver._remove_qemu_prefix(line)
+        assert result == "./x264_s_base.test --pass 1"
+
+    @patch('src.pack_spec.spec_driver.QEMU_PATH', '/mnt/sdbdata/QEMU')
+    @patch('src.pack_spec.spec_driver.QEMU_CMD', 'qemu-riscv64')
+    def test_no_qemu_prefix_no_change(self):
+        from src.pack_spec.spec_driver import SPECDriver
+        line = "./perlbench_s_base.test -I. -I./lib test.cfg"
+        result = SPECDriver._remove_qemu_prefix(line)
+        assert result == line
+
+    @patch('src.pack_spec.spec_driver.QEMU_PATH', '/mnt/sdbdata/QEMU-10.2.0/build')
+    @patch('src.pack_spec.spec_driver.QEMU_CMD', 'qemu-riscv64 -s 83886080000')
+    def test_qemu_cmd_with_extra_options(self):
+        from src.pack_spec.spec_driver import SPECDriver
+        line = "/mnt/sdbdata/QEMU-10.2.0/build/qemu-riscv64 ./x264_s_base.test"
+        result = SPECDriver._remove_qemu_prefix(line)
+        assert result == "./x264_s_base.test"
+
+    @patch('src.pack_spec.spec_driver.QEMU_PATH', '/mnt/sdbdata/QEMU')
+    @patch('src.pack_spec.spec_driver.QEMU_CMD', 'qemu-aarch64')
+    def test_aarch64_qemu_prefix(self):
+        from src.pack_spec.spec_driver import SPECDriver
+        line = "/mnt/sdbdata/QEMU/qemu-aarch64 ./binary_name args"
+        result = SPECDriver._remove_qemu_prefix(line)
+        assert result == "./binary_name args"
+
+    @patch('src.pack_spec.spec_driver.QEMU_PATH', '/mnt/sdbdata/QEMU')
+    @patch('src.pack_spec.spec_driver.QEMU_CMD', 'qemu-riscv64')
+    def test_comment_line_unchanged(self):
+        from src.pack_spec.spec_driver import SPECDriver
+        line = "# Starting run for copy #0"
+        result = SPECDriver._remove_qemu_prefix(line)
+        assert result == line
