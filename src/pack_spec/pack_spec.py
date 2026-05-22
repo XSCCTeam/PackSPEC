@@ -220,7 +220,7 @@ class PackSPEC:
             self.pack_name = self.spec_driver.label if self.spec_driver.label else 'packspec'
         elif self.pack_name != self.spec_driver.label:
             self.spec_driver.label = self.pack_name
-            
+
         self.utils.pack_name = self.pack_name
         self.print_info()
 
@@ -711,7 +711,7 @@ class PackSPEC:
         shutil.copy2(src_cfg_path, dest_cfg_path)
         logger.info(self.msg.get("cfg_copied_to", src=src_cfg_path, dest=dest_cfg_path))
         
-        if self.pack_name and self.pack_name != self.spec_driver.label:
+        if self.pack_name:
             self.utils.update_cfg_label(dest_cfg_path, self.pack_name, self.spec_name)
             self.spec_driver.label = self.pack_name
         
