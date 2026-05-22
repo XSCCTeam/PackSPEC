@@ -26,7 +26,7 @@ import subprocess
 from src.pack_spec.pack_config import (
     SPECName, TuneType, InputType, SPECMode, ActionType,
     ConfigError, FileOperationError, CommandExecutionError,
-    P_PATH, logger
+    P_PATH, logger, QEMU_PATH, QEMU_CMD
 )
 from src.pack_spec.pack_utils import PackUtils
 from typing import Dict, List, Optional
@@ -320,6 +320,42 @@ class SPECDriver:
                 raise ConfigError(f"Label not found in file {self.spec_cfg_path}.")
         return label
     
+    def _convert_benches_for_mode(self, spec_benches: str, spec_mode: SPECMode) -> str:
+        """
+        根据spec_mode将spec_benches中的通用名称转换为对应的benchset名称
+
+        当spec_mode为speed时，将"all"/"int"/"fp"转换为对应的speed benchset名称；
+        当spec_mode为rate时，转换为对应的rate benchset名称。
+        对于具体的基准测试编号(如"600 602")则保持不变。
+
+        Args:
+            spec_benches (str): 原始基准测试选择字符串
+            spec_mode (SPECMode): 运行模式枚举值(speed/rate)
+
+        Returns:
+            str: 转换后的benchset名称字符串
+        """
+        benches = spec_benches.split()
+        converted = []
+        for bench in benches:
+            if self.spec_name == SPECName.spec2017:
+                if bench == "all":
+                    converted.extend(["intspeed", "fpspeed"] if spec_mode == SPECMode.speed else ["intrate", "fprate"])
+                elif bench in ["int", "intspeed", "intrate"]:
+                    converted.append("intspeed" if spec_mode == SPECMode.speed else "intrate")
+                elif bench in ["fp", "fpspeed", "fprate"]:
+                    converted.append("fpspeed" if spec_mode == SPECMode.speed else "fprate")
+                else:
+                    converted.append(bench)
+            elif self.spec_name in [SPECName.spec2006, SPECName.spec2006v1p01]:
+                if bench == "all":
+                    converted.extend(["int", "fp"])
+                else:
+                    converted.append(bench)
+            else:
+                converted.append(bench)
+        return " ".join(converted)
+
     def run_setup_spec(self, tune_type: TuneType, input_type: InputType, rebuild: bool = True) -> str:
         """
         运行SPEC setup脚本进行编译和环境准备
@@ -341,8 +377,10 @@ class SPECDriver:
         Note:
             - 脚本路径由setup_script_path属性指定
             - 执行的命令格式: setup_script --spec-dir ... --config ... --action setup ...
+            - 会根据spec_mode自动将spec_benches转换为对应的benchset名称
         """
         output_log = []
+        setup_benches = self._convert_benches_for_mode(self.spec_benches, self.spec_mode)
         spec_setup_cmd = [
             self.setup_script_path, 
             "--spec-dir", self.spec_dir,
@@ -350,7 +388,7 @@ class SPECDriver:
             "--action", "setup",
             "--tune", tune_type.name,
             "--input", input_type.name,
-            "--benches", self.spec_benches,
+            "--benches", setup_benches,
             "--iterations", str(self.iterations)
         ]
         if rebuild:
@@ -408,6 +446,45 @@ class SPECDriver:
             raise CommandExecutionError(self.msg.get("command_execute_failed", error=str(e)))
 
 
+    @staticmethod
+    def _remove_qemu_prefix(line: str) -> str:
+        """
+        从命令行中移除QEMU前缀
+
+        RISC-V交叉编译平台下，setup阶段注入了submit = qemu-riscv64 $command
+        以便specinvoke能正常执行，但生成的运行脚本不应包含QEMU前缀。
+
+        需要处理的QEMU前缀格式：
+        - /absolute/path/qemu-riscv64 [options]
+        - qemu-riscv64 [options]
+
+        Args:
+            line (str): 原始命令行
+
+        Returns:
+            str: 移除QEMU前缀后的命令行
+        """
+        import shlex as _shlex
+        qemu_cmd_name = QEMU_CMD if QEMU_CMD else 'qemu-riscv64'
+        qemu_binary = _shlex.split(qemu_cmd_name)[0]
+
+        patterns = []
+        if QEMU_PATH:
+            patterns.append(f"{QEMU_PATH}/{qemu_binary}")
+        patterns.append(qemu_binary)
+
+        for pattern in patterns:
+            if pattern in line:
+                idx = line.index(pattern)
+                after = line[idx + len(pattern):]
+                remaining = after.lstrip()
+                skip = len(after) - len(remaining)
+                qemu_prefix_end = idx + len(pattern) + skip
+                line = line[:idx] + line[qemu_prefix_end:]
+                break
+
+        return line
+
     def execute_specinvoke(self, src_dir: str, dest_dir: str, input_type: InputType, binary_name_map: tuple = ("", "")) -> bool:
         """
         执行specinvoke命令生成运行脚本
@@ -464,6 +541,10 @@ class SPECDriver:
             # 替换二进制文件名
             if binary_name_map[0] != "":
                 line = line.replace(binary_name_map[0], binary_name_map[1])
+            # 移除RISC-V平台下specinvoke生成的QEMU前缀
+            # setup阶段注入了submit = qemu-riscv64 $command来让specinvoke正常工作，
+            # 但生成的运行脚本不应包含QEMU前缀，因为实际运行在目标RISC-V机器上
+            line = self._remove_qemu_prefix(line)
             if not line.startswith("specinvoke"):
                 processed_commands.append(line)
         
@@ -707,7 +788,7 @@ class SPECDriver:
         """
         raise NotImplementedError("子类必须实现 _build_run_command 方法")
 
-    def run_spec_directly(self, output_dir: Optional[str] = None) -> Dict:
+    def run_spec_directly(self, output_dir: str) -> Dict:
         """
         直接运行SPEC测试
         
@@ -715,7 +796,7 @@ class SPECDriver:
         测试完成后返回结果信息。
         
         Args:
-            output_dir (str, optional): 结果输出目录，默认为spec_results/{timestamp}
+            output_dir (str): 结果输出目录
             
         Returns:
             Dict: 包含以下键的结果字典：
@@ -732,14 +813,11 @@ class SPECDriver:
         Note:
             - 测试过程中会实时输出日志
             - 支持Ctrl+C中断测试
+            - 执行前会自动source SPEC安装目录下的shrc文件，初始化Perl和SPEC运行环境
         """
         self._check_spec_environment()
         
         spec_cmd = self._build_run_command()
-        
-        if output_dir is None:
-            from src.pack_spec.pack_config import RESULTS_OUTPUT_PATH, CURRENT_TIME
-            output_dir = os.path.join(RESULTS_OUTPUT_PATH, f"run_{CURRENT_TIME}")
         
         os.makedirs(output_dir, exist_ok=True)
         log_file = os.path.join(output_dir, "spec_run.log")
@@ -752,6 +830,10 @@ class SPECDriver:
             "error_message": ""
         }
         
+        shrc_path = os.path.join(self.spec_dir, "shrc")
+        
+        shell_cmd = f"source {shrc_path} && {' '.join(spec_cmd)}"
+        
         logger.info(self.msg.get("start_running_spec", cmd=' '.join(spec_cmd)))
         logger.info(self.msg.get("result_output_dir", path=output_dir))
         
@@ -759,7 +841,7 @@ class SPECDriver:
         try:
             with open(log_file, 'w') as log_f:
                 process = subprocess.Popen(
-                    spec_cmd,
+                    ["bash", "-c", shell_cmd],
                     cwd=self.spec_dir,
                     stdout=subprocess.PIPE,
                     stderr=subprocess.STDOUT,

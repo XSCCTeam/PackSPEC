@@ -281,9 +281,6 @@ DEFAULT_REPORT_FORMAT = "json"
 DEFAULT_LOG_LANGUAGE = LogLanguage.zh
 """默认日志语言，默认使用中文"""
 
-RESULTS_OUTPUT_PATH = os.path.join(P_PATH, "spec_results")
-"""SPEC测试结果输出目录路径"""
-
 DEFAULT_CORE_NUM = -1
 """默认绑定的CPU核心编号，-1表示不绑定核心"""
 
@@ -419,8 +416,10 @@ SPEC2006_PATH = os.getenv('SPEC2006_PATH')
 """SPEC2006安装目录路径，从环境变量获取"""
 
 if SPEC2006_PATH is not None:
-    SPEC2006_BENCH_PATH = os.path.join(SPEC2006_PATH, "benchspec", "CPU2006")
-    """SPEC2006基准测试目录路径"""
+    _spec2006_cpu2006_dir = os.path.join(SPEC2006_PATH, "benchspec", "CPU2006")
+    _spec2006_cpu_dir = os.path.join(SPEC2006_PATH, "benchspec", "CPU")
+    SPEC2006_BENCH_PATH = _spec2006_cpu2006_dir if os.path.isdir(_spec2006_cpu2006_dir) else _spec2006_cpu_dir
+    """SPEC2006基准测试目录路径，自动兼容CPU2006和CPU目录"""
     SPEC2006_CONFIG_PATH = os.path.join(SPEC2006_PATH, "config")
     """SPEC2006配置文件目录路径"""
 else:
@@ -431,8 +430,10 @@ SPEC2017_PATH = os.getenv('SPEC2017_PATH')
 """SPEC2017安装目录路径，从环境变量获取"""
 
 if SPEC2017_PATH is not None:
-    SPEC2017_BENCH_PATH = os.path.join(SPEC2017_PATH, "benchspec", "CPU2017")
-    """SPEC2017基准测试目录路径"""
+    _spec2017_cpu2017_dir = os.path.join(SPEC2017_PATH, "benchspec", "CPU2017")
+    _spec2017_cpu_dir = os.path.join(SPEC2017_PATH, "benchspec", "CPU")
+    SPEC2017_BENCH_PATH = _spec2017_cpu2017_dir if os.path.isdir(_spec2017_cpu2017_dir) else _spec2017_cpu_dir
+    """SPEC2017基准测试目录路径，自动兼容CPU2017和CPU目录"""
     SPEC2017_CONFIG_PATH = os.path.join(SPEC2017_PATH, "config")
     """SPEC2017配置文件目录路径"""
 else:
@@ -478,6 +479,14 @@ class LogMessages:
         "cfg_copied_to": {
             "zh": "配置文件已复制: {src} -> {dest}",
             "en": "Config file copied: {src} -> {dest}"
+        },
+        "riscv_x264_submit_injected": {
+            "zh": "检测到RISC-V交叉编译平台，已在cfg文件中为625.x264_s注入use_submit_for_speed和submit配置: {cfg}",
+            "en": "RISC-V cross-compilation detected, injected use_submit_for_speed and submit for 625.x264_s in cfg: {cfg}"
+        },
+        "cfg_label_updated": {
+            "zh": "已将cfg文件中的label从 '{old}' 更新为 '{new}': {path}",
+            "en": "Updated label in cfg from '{old}' to '{new}': {path}"
         },
         "bench_dir_not_found": {
             "zh": "未找到基准测试目录: {bench_name}",

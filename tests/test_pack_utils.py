@@ -306,8 +306,9 @@ class TestPackUtils:
         base_config["date"] = "260408"
         utils = PackUtils(base_config, MagicMock())
         path = utils.get_pack_generated_dir_path()
-        assert path.endswith("260408_test_pack")
+        assert path.endswith("260408_spec2006_test_pack")
         assert "260408" in path
+        assert "spec2006" in path
 
     def test_get_pack_generated_file_path_auto_mode_true(self, base_config):
         base_config["pack_config"]["auto_mode"] = True
@@ -320,7 +321,7 @@ class TestPackUtils:
         base_config["date"] = "260408"
         utils = PackUtils(base_config, MagicMock())
         path = utils.get_pack_generated_file_path()
-        assert path.endswith("260408_test_pack.json")
+        assert path.endswith("260408_spec2006_test_pack.json")
 
     def test_copy_file_to_target_dir_success(self, base_config, temp_dir):
         utils = PackUtils(base_config, MagicMock())
@@ -1110,6 +1111,189 @@ class TestCommandsToRunBenchDryRun:
             -1, 100.0, TuneType.base, "test_label", InputType.test
         )
         assert any("perlbench_s" in cmd for cmd in commands)
+
+
+class TestScriptGenerationIntegration:
+    """完整脚本生成流程集成测试"""
+
+    def test_normal_full_script_pipeline(self, base_config, spec_bench_map, temp_dir):
+        """测试正常模式完整脚本生成流水线"""
+        utils = PackUtils(base_config, MagicMock())
+        commands = utils.commands_to_prepare_run("test.log", -1, 3)
+        commands.extend(utils.commands_to_run_bench(
+            "400.perlbench", False, spec_bench_map,
+            -1, 100.0, TuneType.base, "test_label", InputType.test
+        ))
+        with patch.object(utils, 'copy_script_file_to_target_dir', return_value=True):
+            commands.extend(utils.commands_to_cal_score(temp_dir, 1.0))
+
+
+class TestUpdateCfgLabel:
+    """update_cfg_label 方法测试"""
+
+    def _make_utils(self, config=None):
+        if config is None:
+            config = {
+                'task': {'pack_name': 'test'},
+                'spec_config': {},
+                'pack_config': {},
+                'msg_config': {},
+            }
+        return PackUtils(config, MagicMock())
+
+    def _write_cfg(self, temp_dir, content):
+        cfg_path = os.path.join(temp_dir, "test.cfg")
+        with open(cfg_path, 'w') as f:
+            f.write(content)
+        return cfg_path
+
+    def test_update_label_spec2017(self, temp_dir):
+        """测试SPEC2017 cfg中label被更新"""
+        utils = self._make_utils()
+        cfg_content = (
+            "label = old_label\n"
+            "tune = base\n"
+        )
+        cfg_path = self._write_cfg(temp_dir, cfg_content)
+        utils.update_cfg_label(cfg_path, "new_label", SPECName.spec2017)
+        with open(cfg_path) as f:
+            content = f.read()
+        assert "label = new_label" in content
+        assert "old_label" not in content
+        utils.logger.info.assert_called_once()
+
+    def test_update_ext_spec2006(self, temp_dir):
+        """测试SPEC2006 cfg中ext被更新"""
+        utils = self._make_utils()
+        cfg_content = (
+            "ext = old_ext\n"
+            "tune = base\n"
+        )
+        cfg_path = self._write_cfg(temp_dir, cfg_content)
+        utils.update_cfg_label(cfg_path, "new_ext", SPECName.spec2006)
+        with open(cfg_path) as f:
+            content = f.read()
+        assert "ext = new_ext" in content
+        assert "old_ext" not in content
+        utils.logger.info.assert_called_once()
+
+    def test_label_not_changed_when_same(self, temp_dir):
+        """测试label相同时无变化"""
+        utils = self._make_utils()
+        cfg_content = "label = same_label\n"
+        cfg_path = self._write_cfg(temp_dir, cfg_content)
+        utils.update_cfg_label(cfg_path, "same_label", SPECName.spec2017)
+        with open(cfg_path) as f:
+            content = f.read()
+        assert "label = same_label" in content
+
+
+class TestInjectRiscvX264Submit:
+    """inject_riscv_x264_submit 方法测试"""
+
+    def _make_utils(self, config=None):
+        if config is None:
+            config = {
+                'task': {'pack_name': 'test'},
+                'spec_config': {},
+                'pack_config': {},
+                'msg_config': {},
+            }
+        return PackUtils(config, MagicMock())
+
+    def _write_cfg(self, temp_dir, content):
+        cfg_path = os.path.join(temp_dir, "test.cfg")
+        with open(cfg_path, 'w') as f:
+            f.write(content)
+        return cfg_path
+
+    def test_non_riscv_cfg_not_injected(self, temp_dir):
+        """非RISC-V cfg不应注入"""
+        utils = self._make_utils()
+        cfg_path = self._write_cfg(temp_dir, "625.x264_s:\n   LDCFLAGS = -z muldefs\n")
+        result = utils.inject_riscv_x264_submit(cfg_path)
+        assert result is False
+        with open(cfg_path) as f:
+            content = f.read()
+        assert "use_submit_for_speed" not in content
+
+    @patch('src.pack_spec.pack_utils.QEMU_PATH', '/path/to/qemu')
+    @patch('src.pack_spec.pack_utils.QEMU_CMD', 'qemu-riscv64')
+    def test_riscv_cfg_injected_with_qemu_path(self, temp_dir):
+        """RISC-V cfg应注入use_submit_for_speed和submit（含QEMU_PATH）"""
+        utils = self._make_utils()
+        cfg_content = (
+            "intspeed,fpspeed:\n"
+            "   CC = clang --target=riscv64-unknown-linux-gnu\n"
+            "\n"
+            "625.x264_s:\n"
+            "   LDCFLAGS = -z muldefs\n"
+        )
+        cfg_path = self._write_cfg(temp_dir, cfg_content)
+        result = utils.inject_riscv_x264_submit(cfg_path)
+        assert result is True
+        with open(cfg_path) as f:
+            content = f.read()
+        assert "use_submit_for_speed = 1" in content
+        assert "submit = /path/to/qemu/qemu-riscv64 $command" in content
+        lines = content.split('\n')
+        for i, line in enumerate(lines):
+            if line.strip() == '625.x264_s:':
+                assert 'use_submit_for_speed' in lines[i + 1]
+                assert 'submit' in lines[i + 2]
+                break
+
+    @patch('src.pack_spec.pack_utils.QEMU_PATH', None)
+    @patch('src.pack_spec.pack_utils.QEMU_CMD', 'qemu-riscv64')
+    def test_riscv_cfg_injected_without_qemu_path(self, temp_dir):
+        """RISC-V cfg应注入submit（无QEMU_PATH时仅使用qemu命令名）"""
+        utils = self._make_utils()
+        cfg_content = (
+            "intspeed,fpspeed:\n"
+            "   CC = clang --target=riscv64-unknown-linux-gnu\n"
+            "\n"
+            "625.x264_s:\n"
+            "   LDCFLAGS = -z muldefs\n"
+        )
+        cfg_path = self._write_cfg(temp_dir, cfg_content)
+        result = utils.inject_riscv_x264_submit(cfg_path)
+        assert result is True
+        with open(cfg_path) as f:
+            content = f.read()
+        assert "submit = qemu-riscv64 $command" in content
+
+    @patch('src.pack_spec.pack_utils.QEMU_PATH', '/path/to/qemu')
+    @patch('src.pack_spec.pack_utils.QEMU_CMD', 'qemu-riscv64 -cpu c910v')
+    def test_riscv_cfg_with_qemu_cmd_options(self, temp_dir):
+        """QEMU_CMD包含参数时，应只取第一个部分作为qemu_binary"""
+        utils = self._make_utils()
+        cfg_content = (
+            "intspeed,fpspeed:\n"
+            "   CC = clang --target=riscv64-unknown-linux-gnu\n"
+            "\n"
+            "625.x264_s:\n"
+            "   LDCFLAGS = -z muldefs\n"
+        )
+        cfg_path = self._write_cfg(temp_dir, cfg_content)
+        result = utils.inject_riscv_x264_submit(cfg_path)
+        assert result is True
+        with open(cfg_path) as f:
+            content = f.read()
+        assert "submit = /path/to/qemu/qemu-riscv64 $command" in content
+
+    def test_no_x264_section_not_injected(self, temp_dir):
+        """cfg中没有625.x264_s段时不应注入"""
+        utils = self._make_utils()
+        cfg_content = (
+            "intspeed,fpspeed:\n"
+            "   CC = clang --target=riscv64-unknown-linux-gnu\n"
+            "\n"
+            "600.perlbench_s:\n"
+            "   COPTIMIZE = -O3\n"
+        )
+        cfg_path = self._write_cfg(temp_dir, cfg_content)
+        result = utils.inject_riscv_x264_submit(cfg_path)
+        assert result is False
 
 
 class TestScriptGenerationIntegration:

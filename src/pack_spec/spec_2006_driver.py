@@ -308,6 +308,7 @@ class SPEC2006V1P01Driver(SPEC2006Driver):
                  utils: 'PackUtils',
                  iterations: int = 3,
                  rebuild: bool = False,
+                 debug_mode: bool = False,
                  allow_basepeak: bool = False,
                  ):
         """
@@ -322,9 +323,10 @@ class SPEC2006V1P01Driver(SPEC2006Driver):
             utils (PackUtils): 工具类实例
             iterations (int, optional): 测试迭代次数，默认3
             rebuild (bool, optional): 是否重新构建，默认False
+            debug_mode (bool, optional): 是否调试模式，默认False
             allow_basepeak (bool, optional): 是否允许basepeak配置，默认False
         """
         super().__init__(spec_cfg_path, tune_type, input_type, spec_mode, 
-                         spec_benches, utils, iterations, rebuild, allow_basepeak=allow_basepeak)
+                         spec_benches, utils, iterations, rebuild, debug_mode, allow_basepeak=allow_basepeak)
         # TODO: 目前v1.0.1版本的SPEC2006打包即将被废弃
         self.spec_build_dir = 'run'

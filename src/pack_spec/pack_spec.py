@@ -167,7 +167,7 @@ class PackSPEC:
         """
         # 任务配置
         task_config = config.get('task', {})
-        self.pack_name = task_config.get('pack_name', 'packspec')
+        self.pack_name = task_config.get('pack_name', '')
         self.setup_spec_enabled = task_config.get('setup_spec', False)
         self.pack_binaries_enabled = task_config.get('pack_binaries', False)
         self.pack_benches_enabled = task_config.get('pack_benches', False)
@@ -216,6 +216,10 @@ class PackSPEC:
             self.spec_mode, self.spec_benches, self.utils, self.iterations, self.rebuild,
             allow_basepeak=self.allow_basepeak
         )
+        if not self.pack_name:
+            self.pack_name = self.spec_driver.label if self.spec_driver.label else 'packspec'
+        
+        self.utils.pack_name = self.pack_name
         self.print_info()
 
 
@@ -705,6 +709,12 @@ class PackSPEC:
         shutil.copy2(src_cfg_path, dest_cfg_path)
         logger.info(self.msg.get("cfg_copied_to", src=src_cfg_path, dest=dest_cfg_path))
         
+        if self.pack_name and self.pack_name != self.spec_driver.label:
+            self.utils.update_cfg_label(dest_cfg_path, self.pack_name, self.spec_name)
+            self.spec_driver.label = self.pack_name
+        
+        self.utils.inject_riscv_x264_submit(dest_cfg_path)
+        
         self.spec_driver.spec_cfg_path = dest_cfg_path
         spec_setup_log_path = self.spec_driver.run_setup_spec(self.tune_type, self.input_type, rebuild=self.rebuild)
         
@@ -816,7 +826,9 @@ class PackSPEC:
         测试完成后可选择生成测试报告。
         
         Args:
-            output_dir (str, optional): 结果输出目录，默认自动生成
+            output_dir (str, optional): 结果输出目录，默认为
+                generated_files/{date}_{pack_name}/spec_results/run_{timestamp}，
+                如果指定则使用指定目录
             generate_report (bool, optional): 是否生成测试报告，默认True
             
         Returns:
@@ -840,6 +852,9 @@ class PackSPEC:
             >>> result = packer.run_spec()
             >>> print(f"INT分数: {result['results']['int_score']}")
         """
+        if output_dir is None:
+            output_dir = os.path.join(self.utils.get_pack_generated_dir_path(), "spec_results", f"run_{CURRENT_TIME}")
+
         logger.info("="*80)
         logger.info(self.msg.get("start_direct_run"))
         logger.info("="*80)

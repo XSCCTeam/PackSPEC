@@ -10,20 +10,20 @@ if __name__ == "__main__":
     """
     SPEC基准测试打包工具主程序
     
-    示例：打包SPEC2006整数基准测试套件
+    示例：打包SPEC2017整数基准测试套件
     """
     
     config = {
         # 任务配置
         "task": {
             # 打包任务名称
-            # 留空则自动使用SPEC cfg文件中的label（SPEC2006）或ext（SPEC2006）值
+            # 留空则自动使用SPEC cfg文件中的label（SPEC2017）或ext（SPEC2006）值
             # 如果cfg中也无法解析label则回退到默认值"packspec"
-            "pack_name": "x86_llvm19_novec_wll",
+            "pack_name": "riscv_llvm22_novec_wll",
 
             # 是否setup SPEC CPU 2006/2017
             # 也就是是否编译SPEC基准测试，默认为 False
-            "setup_spec": False,
+            "setup_spec": True,
 
             # 是否打包二进制文件，默认为 False
             # 需要显式设置为 True 才会执行打包二进制操作
@@ -53,14 +53,14 @@ if __name__ == "__main__":
             # 注意：setup 操作前会自动将 cfg 文件复制到 generated_files/{pack_name}/cfg/ 目录
             # 以保护源配置文件不被修改
             # 日志文件会自动保存到 generated_files/{pack_name}/log/ 目录
-            "spec_cfg_path": "/home/wll/sdbdata/pack_spec/tests/test_cfgs/spec06_x86_llvm19_novec.cfg",
+            "spec_cfg_path": "/home/wll/sdbdata/pack_spec/tests/test_cfgs/spec17_riscv_llvm22_novec.cfg",
 
             # SPEC基准测试版本选择
             # 可选值：
             #   SPECName.spec2006: SPEC2006基准套件
             #   SPECName.spec2006v1p01: SPEC2006 v1.0.1基准套件
             #   SPECName.spec2017: SPEC2017基准套件
-            "spec_name": SPECName.spec2006,
+            "spec_name": SPECName.spec2017,
 
             # SPEC基准测试优化级别
             # 可选值：
