@@ -320,6 +320,92 @@ def main(log_path, output_file, clock_rate):
     with open(output_file, "w") as f:
         f.write(csv_buffer)
 
+    # 生成 score.md
+    md_output_file = output_file.rsplit('.', 1)[0] + ".md" if '.' in output_file else output_file + ".md"
+    generate_score_md(md_output_file, benchmarks, run_time, max_benchname_len, clock_rate)
+
+
+def generate_score_md(md_output_file, benchmarks, run_time, max_benchname_len, clock_rate):
+    """生成 Markdown 格式的分数表格"""
+    lines = []
+
+    # 表头
+    headers = ["Bench", "RefTime"]
+    for i in range(run_time):
+        headers.append(f"#{i+1}Time")
+    headers.append("Median")
+    headers.append("Score")
+    if clock_rate != "1":
+        headers.append("S/GHz")
+
+    lines.append("| " + " | ".join(headers) + " |")
+    lines.append("| " + " | ".join(["---"] * len(headers)) + " |")
+
+    def format_row(name, ref_time, real_times, median_time, score, score_ghz=None):
+        cols = [name, f"{ref_time:.2f}" if ref_time != "-" else "-"]
+        for t in real_times:
+            cols.append(str(t) if t != "-" else "-")
+        cols.append(f"{median_time:.2f}" if median_time != "-" else "-")
+        cols.append(f"{score:.2f}" if score != "-" else "-")
+        if clock_rate != "1":
+            cols.append(f"{score_ghz:.2f}" if score_ghz != "-" else "-")
+        return "| " + " | ".join(cols) + " |"
+
+    def format_summary_row(name, score, score_ghz=None):
+        cols = [name, "-"]
+        for _ in range(run_time):
+            cols.append("-")
+        cols.append("-")
+        cols.append(f"{score:.2f}")
+        if clock_rate != "1":
+            cols.append(f"{score_ghz:.2f}")
+        return "| " + " | ".join(cols) + " |"
+
+    # INT benchmarks
+    int_scores = []
+    for benchmark_block in benchmarks:
+        bench_name = get_bench_name(benchmark_block)
+        if is_int_bench(bench_name):
+            ref_time = get_ref_time(benchmark_block)
+            real_times = [get_real_time(tb) for tb in get_test_block(benchmark_block)]
+            median_time = median(real_times)
+            score = ref_time / median_time
+            score_ghz = score / float(clock_rate) if clock_rate != "1" else None
+            lines.append(format_row(bench_name, ref_time, real_times, median_time, score, score_ghz))
+            int_scores.append(score)
+
+    if int_scores:
+        int_geomean = geomean(int_scores)
+        int_geomean_ghz = int_geomean / float(clock_rate) if clock_rate != "1" else None
+        lines.append(format_summary_row("**INT GEOMEAN**", int_geomean, int_geomean_ghz))
+
+    # FP benchmarks
+    fp_scores = []
+    for benchmark_block in benchmarks:
+        bench_name = get_bench_name(benchmark_block)
+        if is_fp_bench(bench_name):
+            ref_time = get_ref_time(benchmark_block)
+            real_times = [get_real_time(tb) for tb in get_test_block(benchmark_block)]
+            median_time = median(real_times)
+            score = ref_time / median_time
+            score_ghz = score / float(clock_rate) if clock_rate != "1" else None
+            lines.append(format_row(bench_name, ref_time, real_times, median_time, score, score_ghz))
+            fp_scores.append(score)
+
+    if fp_scores:
+        fp_geomean = geomean(fp_scores)
+        fp_geomean_ghz = fp_geomean / float(clock_rate) if clock_rate != "1" else None
+        lines.append(format_summary_row("**FP GEOMEAN**", fp_geomean, fp_geomean_ghz))
+
+    if int_scores and fp_scores:
+        all_scores = int_scores + fp_scores
+        all_geomean = geomean(all_scores)
+        all_geomean_ghz = all_geomean / float(clock_rate) if clock_rate != "1" else None
+        lines.append(format_summary_row("**GEOMEAN**", all_geomean, all_geomean_ghz))
+
+    with open(md_output_file, "w") as f:
+        f.write("\n".join(lines) + "\n")
+
 
 if __name__ == "__main__":
     import sys
