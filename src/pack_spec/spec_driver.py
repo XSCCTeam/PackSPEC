@@ -745,7 +745,7 @@ class SPECDriver:
         """
         raise NotImplementedError("子类必须实现 _build_run_command 方法")
 
-    def run_spec_directly(self, output_dir: Optional[str] = None) -> Dict:
+    def run_spec_directly(self, output_dir: str) -> Dict:
         """
         直接运行SPEC测试
         
@@ -753,9 +753,7 @@ class SPECDriver:
         测试完成后返回结果信息。
         
         Args:
-            output_dir (str, optional): 结果输出目录，
-                通过PackSPEC.run_spec()调用时默认为generated_files/{date}_{pack_name}/spec_results/run_{timestamp}，
-                直接调用spec_driver时默认为spec_results/run_{timestamp}
+            output_dir (str): 结果输出目录
             
         Returns:
             Dict: 包含以下键的结果字典：
@@ -777,10 +775,6 @@ class SPECDriver:
         self._check_spec_environment()
         
         spec_cmd = self._build_run_command()
-        
-        if output_dir is None:
-            from src.pack_spec.pack_config import RESULTS_OUTPUT_PATH, CURRENT_TIME
-            output_dir = os.path.join(RESULTS_OUTPUT_PATH, f"run_{CURRENT_TIME}")
         
         os.makedirs(output_dir, exist_ok=True)
         log_file = os.path.join(output_dir, "spec_run.log")

@@ -1,7 +1,7 @@
 [project]
 name = "packspec"
-description = "PackSPEC - SPEC benchmark packaging tool"
-version = "0.1.0"
+description = "PackSPEC - SPEC CPU 基准测试自动化打包与运行工具 / Automated SPEC CPU Benchmark Packaging and Execution Tool"
+version = "0.3.0"
 readme = "README.md"
 requires-python = ">=3.8"
 dependencies = [
@@ -26,23 +26,11 @@ addopts = "-v --tb=short"
 source = ["src/pack_spec"]
 omit = [
     "tests/*",
-    "src/pack_spec/spec_driver.py",
-    "src/pack_spec/spec_2006_driver.py",
-    "src/pack_spec/spec_2017_driver.py",
-    "src/pack_spec/pack_spec.py",
 ]
 
 [tool.coverage.report]
 show_missing = true
 fail_under = 80
 exclude_also = [
-    "def setup_spec",
-    "def pack_binaries",
-    "def pack_benches_cfg",
-    "def pack_qemu_verify",
-    "def run_spec_directly",
-    "def run_spec",
-    "def print_info",
-    "def parse_spec_results",
     "if __name__",
 ]
