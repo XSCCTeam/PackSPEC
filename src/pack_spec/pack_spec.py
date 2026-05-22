@@ -218,7 +218,9 @@ class PackSPEC:
         )
         if not self.pack_name:
             self.pack_name = self.spec_driver.label if self.spec_driver.label else 'packspec'
-        
+        elif self.pack_name != self.spec_driver.label:
+            self.spec_driver.label = self.pack_name
+            
         self.utils.pack_name = self.pack_name
         self.print_info()
 
