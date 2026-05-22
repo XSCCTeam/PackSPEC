@@ -17,6 +17,8 @@ if __name__ == "__main__":
         # 任务配置
         "task": {
             # 打包任务名称
+            # 留空则自动使用SPEC cfg文件中的label（SPEC2006）或ext（SPEC2006）值
+            # 如果cfg中也无法解析label则回退到默认值"packspec"
             "pack_name": "x86_llvm19_novec_wll",
 
             # 是否setup SPEC CPU 2006/2017
