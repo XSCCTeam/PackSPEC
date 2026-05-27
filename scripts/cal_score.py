@@ -1,4 +1,27 @@
 #!/bin/python3
+"""
+SPEC CPU 测试分数计算脚本
+
+从 SPEC 基准测试运行日志中解析各基准测试的运行时间和参考时间，
+计算各测试分数，并输出表格化的分数报告和 CSV/Markdown 格式文件。
+
+功能：
+- 解析 run_all.log 中的测试结果（支持 SPEC2006 和 SPEC2017）
+- 计算中位运行时间、分数和按主频归一化分数
+- 分别计算 INT/FP 以及总的 GEOMEAN（几何平均数）
+- 生成格式化的终端输出 + CSV 文件 + Markdown 分数报告
+
+用法:
+    python cal_score.py <log_file_path> [clock_rate] [output_file]
+
+参数:
+    log_file_path:  SPEC 运行日志文件路径（如 run_all.log）
+    clock_rate:     CPU 主频，单位 GHz，默认 1
+    output_file:    CSV 输出文件路径，默认 score.csv
+
+示例:
+    python cal_score.py run_all.log 2.5 score.csv
+"""
 
 SPEC2006_INT_BENCHES = ["400.perlbench", "401.bzip2", "403.gcc", "429.mcf", "445.gobmk", "456.hmmer",
                   "458.sjeng", "462.libquantum", "464.h264ref", "471.omnetpp", "473.astar", "483.xalancbmk"]
@@ -10,6 +33,12 @@ SPEC2017_INT_BENCHES = ["600.perlbench_s", "602.gcc_s", "605.mcf_s", "620.omnetp
                   "648.exchange2_s", "657.xz_s"]
 SPEC2017_FP_BENCHES = ["603.bwaves_s", "607.cactuBSSN_s", "619.lbm_s", "621.wrf_s", "627.cam4_s",
                   "628.pop2_s", "638.imagick_s", "644.nab_s", "649.fotonik3d_s", "654.roms_s"]
+SPEC2017_INT_RATE_BENCHES = ["500.perlbench_r", "502.gcc_r", "505.mcf_r", "520.omnetpp_r",
+                  "523.xalancbmk_r", "525.x264_r", "531.deepsjeng_r", "541.leela_r",
+                  "548.exchange2_r", "557.xz_r"]
+SPEC2017_FP_RATE_BENCHES = ["503.bwaves_r", "507.cactuBSSN_r", "508.namd_r", "510.parest_r",
+                  "511.povray_r", "519.lbm_r", "521.wrf_r", "526.blender_r", "527.cam4_r",
+                  "538.imagick_r", "544.nab_r", "549.fotonik3d_r", "554.roms_r"]
 
 def parse_benchmark_logs(log_file_path):
     """
@@ -105,10 +134,28 @@ def get_real_time(test_block):
     return 0.0
 
 def is_int_bench(bench_name):
-    return bench_name in SPEC2006_INT_BENCHES + SPEC2017_INT_BENCHES
+    """
+    判断是否为整数基准测试
+
+    Args:
+        bench_name (str): 基准测试名称
+
+    Returns:
+        bool: 如果属于 SPEC2006_INT、SPEC2017_INT 或 SPEC2017_INT_RATE 中任一集合则返回 True
+    """
+    return bench_name in SPEC2006_INT_BENCHES + SPEC2017_INT_BENCHES + SPEC2017_INT_RATE_BENCHES
 
 def is_fp_bench(bench_name):
-    return bench_name in SPEC2006_FP_BENCHES + SPEC2017_FP_BENCHES
+    """
+    判断是否为浮点基准测试
+
+    Args:
+        bench_name (str): 基准测试名称
+
+    Returns:
+        bool: 如果属于 SPEC2006_FP、SPEC2017_FP 或 SPEC2017_FP_RATE 中任一集合则返回 True
+    """
+    return bench_name in SPEC2006_FP_BENCHES + SPEC2017_FP_BENCHES + SPEC2017_FP_RATE_BENCHES
 
 def median(lst):
     """
@@ -151,9 +198,27 @@ def geomean(scores):
     return product ** (1.0 / len(scores))
 
 def get_run_time(benchmarks):
+    """
+    获取基准测试的迭代运行次数
+
+    Args:
+        benchmarks (list): 解析后的 benchmark block 列表
+
+    Returns:
+        int: 每个基准测试的迭代运行次数（从第一个 benchmark 的 test block 数量推断）
+    """
     return len(get_test_block(benchmarks[0]))
 
 def get_max_benchname_len(benchmarks):
+    """
+    获取所有基准测试名称的最大长度
+
+    Args:
+        benchmarks (list): 解析后的 benchmark block 列表
+
+    Returns:
+        int: 最长基准测试名称的字符数，用于格式化输出对齐
+    """
     max_benchname_len = 0
     for benchmark_block in benchmarks:
         bench_name_len = len(get_bench_name(benchmark_block))

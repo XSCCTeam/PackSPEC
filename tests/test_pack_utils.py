@@ -1349,3 +1349,140 @@ class TestScriptGenerationIntegration:
             commands.extend(utils.commands_to_cal_score(temp_dir, 1.0))
 
         assert any("LLVM_PROFILE_FILE" in cmd for cmd in commands)
+
+
+class TestEnumEncoderEdgeCases:
+    """EnumEncoder 边界情况测试"""
+
+    def test_default_with_non_enum_calls_super(self):
+        """测试 non-enum 对象传递给父类 default 方法时抛出 TypeError"""
+        encoder = EnumEncoder()
+        from datetime import datetime
+        # 传入非 Enum 且 JSON 不可直接序列化的对象，应调用 super().default 抛出 TypeError
+        with pytest.raises(TypeError):
+            encoder.default(datetime.now())
+
+
+class TestEnumDecoderEdgeCases:
+    """EnumDecoder 边界情况测试"""
+
+    def test_convert_enums_with_list(self):
+        """测试 _convert_enums 处理列表类型"""
+        decoder = EnumDecoder()
+        result = decoder._convert_enums([{"tune_type": "base"}, {"tune_type": "peak"}])
+        assert result[0]["tune_type"] == TuneType.base
+        assert result[1]["tune_type"] == TuneType.peak
+
+    def test_convert_enums_with_nested_list(self):
+        """测试 _convert_enums 处理嵌套列表"""
+        decoder = EnumDecoder()
+        result = decoder._convert_enums({"benches": [{"tune_type": "base"}]})
+        assert result["benches"][0]["tune_type"] == TuneType.base
+
+    def test_convert_field_non_string_value(self):
+        """测试 _convert_field 处理非字符串值"""
+        decoder = EnumDecoder()
+        result = decoder._convert_field("count", 5)
+        assert result == 5
+
+
+class TestPackUtilsSaveCfgInstance:
+    """PackUtils.save_pack_spec_cfg 实例方法测试"""
+
+    def test_save_pack_spec_cfg_instance(self, base_config, temp_dir):
+        """测试实例方法 save_pack_spec_cfg"""
+        utils = PackUtils(base_config, MagicMock())
+        utils.init_date = "260101"
+        with patch.object(utils, 'get_pack_generated_file_path', return_value=os.path.join(temp_dir, "test.json")):
+            cfg = {"spec_config": {"tune_type": TuneType.base}}
+            utils.save_pack_spec_cfg(cfg)
+            assert "date" in cfg
+            assert cfg["date"] == "260101"
+
+    def test_save_pack_spec_cfg_writes_file(self, base_config, temp_dir):
+        """测试实例方法 save_pack_spec_cfg 写入文件"""
+        utils = PackUtils(base_config, MagicMock())
+        utils.init_date = "260101"
+        output_path = os.path.join(temp_dir, "saved_cfg.json")
+        with patch.object(utils, 'get_pack_generated_file_path', return_value=output_path):
+            cfg = {"pack_name": "test"}
+            utils.save_pack_spec_cfg(cfg)
+            assert os.path.isfile(output_path)
+            with open(output_path) as f:
+                saved = json.load(f)
+            assert saved["pack_name"] == "test"
+
+
+class TestPackUtilsErrorPaths:
+    """PackUtils 错误路径测试"""
+
+    def test_copy_script_file_to_target_dir_not_found_raises(self, base_config, temp_dir):
+        """测试复制不存在的脚本文件时抛出 FileOperationError"""
+        utils = PackUtils(base_config, MagicMock())
+        with patch('src.pack_spec.pack_utils.SCRIPTS_PATH', '/nonexistent/path'):
+            with pytest.raises(FileOperationError, match="脚本文件不存在"):
+                utils.copy_script_file_to_target_dir("nonexistent.sh", temp_dir)
+
+    def test_use_template_to_create_script_failure_raises(self, base_config, temp_dir):
+        """测试模板创建脚本失败时抛出 CommandExecutionError"""
+        utils = PackUtils(base_config, MagicMock())
+        with patch('builtins.open', side_effect=Exception("IO Error")):
+            with pytest.raises(CommandExecutionError, match="IO Error"):
+                utils.use_template_to_create_script("test.template", temp_dir, {"{key}": "value"})
+
+    def test_create_env_file_handles_exception(self, base_config, temp_dir):
+        """测试 create_env_file 在写入失败时不抛出异常"""
+        utils = PackUtils(base_config, MagicMock())
+        with patch('builtins.open', side_effect=PermissionError("Permission denied")):
+            utils.create_env_file(temp_dir, "compile")
+
+    def test_execute_commands_called_process_error_raises(self, base_config):
+        """测试执行命令时 subprocess.CalledProcessError 抛出 CommandExecutionError"""
+        import subprocess
+        utils = PackUtils(base_config, MagicMock())
+        with patch('subprocess.run', side_effect=subprocess.CalledProcessError(1, 'cmd', stderr='error msg')):
+            with pytest.raises(CommandExecutionError, match='error msg'):
+                utils.execute_commands("some-command", "/tmp")
+
+    def test_execute_commands_generic_exception_raises(self, base_config):
+        """测试执行命令时通用异常抛出 CommandExecutionError"""
+        utils = PackUtils(base_config, MagicMock())
+        with patch('subprocess.run', side_effect=OSError("OS Error")):
+            with pytest.raises(CommandExecutionError, match="OS Error"):
+                utils.execute_commands("some-command", "/tmp")
+
+    def test_copy_script_file_to_target_dir_failure(self, base_config, temp_dir):
+        """测试复制脚本文件失败时不抛出异常并返回 False"""
+        utils = PackUtils(base_config, MagicMock())
+        with patch.object(utils, 'copy_file_to_target_dir', return_value=False):
+            result = utils.copy_script_file_to_target_dir("cal_score.py", temp_dir)
+            assert result is False
+
+    def test_copy_pack_log_file_to_target_dir(self, base_config, temp_dir):
+        """测试复制打包日志文件到目标目录"""
+        utils = PackUtils(base_config, MagicMock())
+        mock_path = os.path.join(temp_dir, "test_pack.json")
+        with patch.object(utils, 'get_pack_generated_file_path', return_value=mock_path):
+            with patch.object(utils, 'copy_file_to_target_dir', return_value=True) as mock_copy:
+                assert utils.copy_pack_log_file_to_target_dir(temp_dir) is True
+                mock_copy.assert_called_once()
+
+    def test_commands_to_send_md_message_copy_failure(self, base_config, temp_dir):
+        """测试 send_md_message 脚本复制失败时抛出 FileOperationError"""
+        utils = PackUtils(base_config, MagicMock())
+        with patch.object(utils, 'copy_script_file_to_target_dir', return_value=False):
+            with pytest.raises(FileOperationError, match="send_md_message.py"):
+                utils.commands_to_send_md_message(temp_dir, "title", "text", "md.md")
+
+    def test_get_spec_log_file_path_exception(self, base_config):
+        """测试 get_spec_log_file_path 读取文件异常时返回空字符串"""
+        utils = PackUtils(base_config, MagicMock())
+        with patch('builtins.open', side_effect=Exception("Read Error")):
+            result = utils.get_spec_log_file_path("/tmp/spec", "/some/log")
+            assert result == ""
+
+    def test_get_bench_dir_not_found_returns_empty(self, base_config):
+        """测试在目录列表中找不到匹配的 bench 目录时返回空字符串"""
+        utils = PackUtils(base_config, MagicMock())
+        result = utils.get_bench_dir("999.unknown", ["/path/to/400.perlbench/run/base"])
+        assert result == ""

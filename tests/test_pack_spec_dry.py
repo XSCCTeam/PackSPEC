@@ -14,6 +14,7 @@ import shutil
 from src.pack_spec.pack_config import (
     SPECName, TuneType, InputType, SPECMode, PACKMode, RunMode,
     ConfigError, FileOperationError, CommandExecutionError,
+    PackSPECError,
     DEFAULT_CORE_NUM,
 )
 from src.pack_spec.pack_spec import PackSPEC
@@ -169,6 +170,18 @@ class TestCopyBenchesDry:
         with pytest.raises(FileOperationError):
             packer.copy_benches(TuneType.base, InputType.ref, SPECMode.speed)
 
+    def test_with_build_bench_dir_not_found_skips_and_raises(self):
+        """测试 with_build=True 且 src_build_dir 未找到时跳过所有 bench 并抛异常"""
+        packer = _create_packer()
+        packer.spec_driver.spec_bench_list = ["600.perlbench_s"]
+        # get_bench_dir 对 build 返回空（模拟找不到）
+        packer.utils.get_bench_dir.return_value = ""
+        packer.utils.create_dest_dir.return_value = "/tmp/dest"
+        packer.spec_driver.get_bench_path.return_value = ["/fake/build_dir"]
+
+        with pytest.raises(FileOperationError, match="没有基准测试可复制"):
+            packer.copy_benches(TuneType.base, InputType.ref, SPECMode.speed, with_build=True)
+
 
 class TestSetupSpecDry:
     """PackSPEC.setup_spec 干测试"""
@@ -223,6 +236,31 @@ class TestRunSpecDry:
         with pytest.raises(FileOperationError):
             packer.run_spec(output_dir="/tmp/out")
 
+    def test_command_execution_error_raises(self):
+        """测试 run_spec 中 CommandExecutionError 被重新抛出"""
+        packer = _create_packer()
+        packer.spec_driver.run_spec_directly.side_effect = CommandExecutionError("exec failed")
+        with pytest.raises(CommandExecutionError):
+            packer.run_spec(output_dir="/tmp/out")
+
+    def test_generic_exception_wraps_as_command_error(self):
+        """测试 run_spec 中通用异常被包装为 CommandExecutionError"""
+        packer = _create_packer()
+        packer.spec_driver.run_spec_directly.side_effect = RuntimeError("unexpected error")
+        with pytest.raises(CommandExecutionError, match="unexpected error"):
+            packer.run_spec(output_dir="/tmp/out")
+
+    def test_run_spec_without_report(self):
+        """测试 run_spec 不生成报告时返回结果正确"""
+        packer = _create_packer()
+        packer.spec_driver.run_spec_directly.return_value = {
+            "success": True, "output_dir": "/tmp/out", "log_file": "/tmp/log",
+            "return_code": 0, "error_message": ""
+        }
+        result = packer.run_spec(output_dir="/tmp/out", generate_report=False)
+        assert result["success"] is True
+        assert "results" not in result
+
     def test_markdown_report_format(self):
         packer = _create_packer()
         packer.report_format = "markdown"
@@ -251,6 +289,41 @@ class TestPackQemuVerifyDry:
         packer.verify_mode = False
         with patch('src.pack_spec.pack_spec.QEMU_PATH', '/fake/qemu'):
             with pytest.raises(ConfigError):
+                packer.pack_qemu_verify()
+
+    def test_qemu_dir_not_exists_raises(self):
+        """测试 QEMU_PATH 目录不存在时抛出 ConfigError"""
+        packer = _create_packer()
+        packer.verify_mode = True
+        with patch('src.pack_spec.pack_spec.QEMU_PATH', '/nonexistent/qemu'), \
+             patch('os.path.isdir', return_value=False):
+            with pytest.raises(ConfigError):
+                packer.pack_qemu_verify()
+
+    def test_non_auto_mode_dir_exists_raises(self):
+        """测试非自动模式下 _qemu_verify 目录已存在且不能覆盖时抛出"""
+        packer = _create_packer()
+        packer.verify_mode = True
+        packer.auto_mode = False
+        packer.spec_driver.spec_bench_list = ["600.perlbench_s"]
+        with patch('src.pack_spec.pack_spec.QEMU_PATH', '/fake/qemu'), \
+             patch('os.path.isdir', return_value=True), \
+             patch('os.path.exists', return_value=True), \
+             patch('os.makedirs'):
+            with pytest.raises(PackSPECError):
+                packer.pack_qemu_verify()
+
+    def test_run_dir_not_found_raises(self):
+        """测试 run 目录不存在时抛出 FileOperationError"""
+        packer = _create_packer()
+        packer.verify_mode = True
+        packer.auto_mode = True
+        packer.spec_driver.spec_bench_list = ["600.perlbench_s"]
+        with patch('src.pack_spec.pack_spec.QEMU_PATH', '/fake/qemu'), \
+             patch('os.path.isdir', return_value=True), \
+             patch('os.path.exists', return_value=False), \
+             patch('os.makedirs'):
+            with pytest.raises(FileOperationError):
                 packer.pack_qemu_verify()
 
 
@@ -311,3 +384,49 @@ class TestRunMethodDry:
             assert mock_benches.call_count == 2
             assert "pack_benches_cfg" in result["steps"]
             assert "pack_builds" in result["steps"]
+
+
+class TestCreateRunAllScriptDry:
+    """PackSPEC.create_run_all_script 边界测试"""
+
+    def test_empty_bench_list_returns_early(self):
+        """测试空 bench 列表时 create_run_all_script 直接返回而不写文件"""
+        packer = _create_packer()
+        with patch('builtins.open') as mock_open:
+            packer.create_run_all_script("label", -1, [], TuneType.base, InputType.test)
+            mock_open.assert_not_called()
+
+    def test_empty_bench_list_for_specdiff_returns_early(self):
+        """测试空 bench 列表时 create_specdiff_all_script 直接返回"""
+        packer = _create_packer()
+        with patch('builtins.open') as mock_open:
+            packer.create_specdiff_all_script([], InputType.test)
+            mock_open.assert_not_called()
+
+
+class TestSetupSpecDryExtended:
+    """PackSPEC.setup_spec 扩展测试"""
+
+    def test_setup_spec_updates_cfg_label_when_different(self):
+        """测试当 pack_name 与 driver.label 不同时更新 cfg 的 label"""
+        packer = _create_packer()
+        packer.pack_name = "my_custom_label"
+        packer.spec_driver.label = "old_label"
+
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.cfg', delete=False) as f:
+            f.write("label = old_label\n")
+            cfg_path = f.name
+
+        try:
+            packer.spec_cfg_path = cfg_path
+            packer.utils.get_pack_generated_dir_path.return_value = tempfile.mkdtemp()
+            packer.spec_driver.run_setup_spec.return_value = "/tmp/setup.log"
+            packer.utils.inject_riscv_x264_submit.return_value = False
+            packer.utils.copy_spec_detail_log_to_generated_dir = MagicMock()
+            packer.utils.update_cfg_label = MagicMock()
+
+            packer.setup_spec()
+            packer.utils.update_cfg_label.assert_called_once()
+        finally:
+            os.unlink(cfg_path)
+            shutil.rmtree(packer.utils.get_pack_generated_dir_path.return_value)

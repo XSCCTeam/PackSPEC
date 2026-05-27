@@ -1542,11 +1542,14 @@ def generate_qemu_verify_script(bench_name: str, dest_dir: str,
     if os.path.exists(run_script_path):
         with open(run_script_path, 'r', encoding='utf-8') as f:
             run_script_lines = f.readlines()
-        
+
         script_content = script_header.copy()
         script_content.append("# 以下命令从 run_{}.sh 转换而来，使用 QEMU 运行二进制文件".format(input_type.name))
         script_content.append("")
-        
+
+        # 遍历原始运行脚本，将以 ./ 开头的本地二进制执行命令转换为 QEMU 执行命令
+        # 例如: ./perlbench_s_base.label ... -> $QEMU_PATH/$QEMU_CMD ./perlbench_s_base.label ...
+        # 跳过 shebang 行和空行，保留其他行（如环境变量设置、cd 命令等）
         for line in run_script_lines:
             stripped = line.strip()
             if stripped.startswith("#!") or stripped == "":
@@ -1671,6 +1674,11 @@ def generate_qemu_verify_all_script(bench_list: List[str],
         "RESULT_DIR=\"$SCRIPT_DIR/logs/results\"",
         "mkdir -p \"$RESULT_DIR\"",
         "",
+        # 并行执行控制：
+        # - 使用 wait_for_slot 确保同时运行任务数不超过 PARALLEL_JOBS
+        # - 每个 bench 在子 shell (...) & 中后台运行，启动后 RUNNING_JOBS++
+        # - 子 shell 内执行验证并将结果写入对应 status 文件
+        # - 最后 wait 收集所有后台任务，遍历 status 文件统计成功/失败
         "# 运行单个基准测试的函数",
         "run_bench() {",
         "    local bench_name=\"$1\"",

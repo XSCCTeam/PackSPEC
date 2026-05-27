@@ -232,7 +232,7 @@ class TestSPEC2017DriverBuildRunCommand:
         assert cmd[idx + 1] == "test,train,ref"
 
     def test_rate_mode(self):
-        driver = _create_2017_driver("600", spec_mode=SPECMode.rate)
+        driver = _create_2017_driver("500", spec_mode=SPECMode.rate)
         cmd = driver._build_run_command()
         assert "--rate" in cmd
 
