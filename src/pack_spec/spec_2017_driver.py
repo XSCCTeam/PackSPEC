@@ -34,35 +34,72 @@ from typing import List, Dict
 # SPEC 2017 Configs
 #########################################
 
-SPEC2017_INT_BENCHES = ["600.perlbench_s", "602.gcc_s", "605.mcf_s", "620.omnetpp_s", 
+SPEC2017_INT_SPEED_BENCHES = ["600.perlbench_s", "602.gcc_s", "605.mcf_s", "620.omnetpp_s", 
                   "623.xalancbmk_s", "625.x264_s", "631.deepsjeng_s", "641.leela_s", 
                   "648.exchange2_s", "657.xz_s"]
-"""SPEC2017整数基准测试列表，共10个测试"""
-
-SPEC2017_FP_BENCHES = ["603.bwaves_s", "607.cactuBSSN_s", "619.lbm_s", "621.wrf_s", "627.cam4_s",
+SPEC2017_FP_SPEED_BENCHES = ["603.bwaves_s", "607.cactuBSSN_s", "619.lbm_s", "621.wrf_s", "627.cam4_s",
                   "628.pop2_s", "638.imagick_s", "644.nab_s", "649.fotonik3d_s", "654.roms_s"]
-"""SPEC2017浮点基准测试列表，共10个测试"""
+SPEC2017_SPEED_BENCHES = SPEC2017_INT_SPEED_BENCHES + SPEC2017_FP_SPEED_BENCHES
 
-SPEC2017_BENCHES = SPEC2017_INT_BENCHES + SPEC2017_FP_BENCHES
-"""SPEC2017完整基准测试列表，共20个测试"""
+SPEC2017_INT_RATE_BENCHES = ["500.perlbench_r", "502.gcc_r", "505.mcf_r", "520.omnetpp_r", 
+                  "523.xalancbmk_r", "525.x264_r", "531.deepsjeng_r", "541.leela_r", 
+                  "548.exchange2_r", "557.xz_r"]
+SPEC2017_FP_RATE_BENCHES = ["503.bwaves_r", "507.cactuBSSN_r", "508.namd_r", "510.parest_r", 
+                  "511.povray_r", "519.lbm_r", "521.wrf_r", "526.blender_r", "527.cam4_r",
+                  "538.imagick_r", "544.nab_r", "549.fotonik3d_r", "554.roms_r"]
+SPEC2017_RATE_BENCHES = SPEC2017_INT_RATE_BENCHES + SPEC2017_FP_RATE_BENCHES
 
-SPEC2017_BIN_MAP = {
-    # INT - 整数基准测试二进制文件名映射
+SPEC2017_INT_BENCHES = SPEC2017_INT_SPEED_BENCHES
+SPEC2017_FP_BENCHES = SPEC2017_FP_SPEED_BENCHES
+SPEC2017_BENCHES = SPEC2017_SPEED_BENCHES
+
+SPEC2017_BENCHES_BY_MODE = {
+    SPECMode.speed: {
+        "int": SPEC2017_INT_SPEED_BENCHES,
+        "fp": SPEC2017_FP_SPEED_BENCHES,
+        "all": SPEC2017_SPEED_BENCHES,
+    },
+    SPECMode.rate: {
+        "int": SPEC2017_INT_RATE_BENCHES,
+        "fp": SPEC2017_FP_RATE_BENCHES,
+        "all": SPEC2017_RATE_BENCHES,
+    },
+}
+
+SPEC2017_SPEED_BIN_MAP = {
     "600.perlbench_s": "perlbench_s", "602.gcc_s": "sgcc", "605.mcf_s": "mcf_s", 
     "620.omnetpp_s": "omnetpp_s", "623.xalancbmk_s": "xalancbmk_s", "625.x264_s": "x264_s", 
     "631.deepsjeng_s": "deepsjeng_s", "641.leela_s": "leela_s", "648.exchange2_s": "exchange2_s", 
     "657.xz_s": "xz_s",
-    # FP - 浮点基准测试二进制文件名映射
-    "603.bwaves_s": "speed_bwaves_s", "607.cactuBSSN_s": "cactuBSSN_s", "619.lbm_s": "lbm_s", 
-    "621.wrf_s": "wrf_s", "627.cam4_s": "cam4_s", "628.pop2_s": "pop2_s", 
+    "603.bwaves_s": "speed_bwaves", "607.cactuBSSN_s": "cactuBSSN_s", "619.lbm_s": "lbm_s", 
+    "621.wrf_s": "wrf_s", "627.cam4_s": "cam4_s", "628.pop2_s": "speed_pop2", 
     "638.imagick_s": "imagick_s", "644.nab_s": "nab_s", "649.fotonik3d_s": "fotonik3d_s", 
-    "654.roms_s": "roms_s"
+    "654.roms_s": "sroms"
 }
-"""SPEC2017基准测试名称到二进制文件名的映射字典"""
 
-SPEC2017_REFTIME_MAP = {
-    # INT SPEED - 整数speed测试参考时间映射
-    # 格式: {bench_name: {input_type: [对应的rate测试名, "data", 目录名]}}
+SPEC2017_RATE_BIN_MAP = {
+    "500.perlbench_r": "perlbench_r", "502.gcc_r": "cpugcc_r", "505.mcf_r": "mcf_r", 
+    "520.omnetpp_r": "omnetpp_r", "523.xalancbmk_r": "cpuxalan_r", "525.x264_r": "x264_r", 
+    "531.deepsjeng_r": "deepsjeng_r", "541.leela_r": "leela_r", "548.exchange2_r": "exchange2_r", 
+    "557.xz_r": "xz_r",
+    "503.bwaves_r": "bwaves_r", "507.cactuBSSN_r": "cactusBSSN_r", "508.namd_r": "namd_r", 
+    "510.parest_r": "parest_r", "511.povray_r": "povray_r", "519.lbm_r": "lbm_r", 
+    "521.wrf_r": "wrf_r", "526.blender_r": "blender_r", "527.cam4_r": "cam4_r",
+    "538.imagick_r": "imagick_r", "544.nab_r": "nab_r", "549.fotonik3d_r": "fotonik3d_r", 
+    "554.roms_r": "roms_r"
+}
+
+SPEC2017_BIN_MAP = SPEC2017_SPEED_BIN_MAP
+
+SPEC2017_BIN_MAP_BY_MODE = {
+    SPECMode.speed: SPEC2017_SPEED_BIN_MAP,
+    SPECMode.rate: SPEC2017_RATE_BIN_MAP,
+}
+
+SPEC2017_SPEED_REFTIME_MAP = {
+    # 映射格式: {bench_name: {input_type: [path_component1, path_component2, ...]}}
+    # reftime文件路径 = SPEC2017_BENCH_PATH / path_component1 / path_component2 / ... / reftime
+    # 例如 600.perlbench_s 的 ref reftime: SPEC2017_BENCH_PATH/500.perlbench_r/data/refrate/reftime
     "600.perlbench_s": {"test": ["500.perlbench_r", "data", "test"], "train": ["500.perlbench_r", "data", "train"], "ref": ["500.perlbench_r", "data", "refrate"]},
     "602.gcc_s": {"test": ["502.gcc_r", "data", "test"], "train": ["502.gcc_r", "data", "train"], "ref": ["502.gcc_r", "data", "refspeed"]}, 
     "605.mcf_s": {"test": ["505.mcf_r", "data", "test"], "train": ["505.mcf_r", "data", "train"], "ref": ["505.mcf_r", "data", "refspeed"]}, 
@@ -73,7 +110,6 @@ SPEC2017_REFTIME_MAP = {
     "641.leela_s": {"test": ["541.leela_r", "data", "test"], "train": ["541.leela_r", "data", "train"], "ref": ["541.leela_r", "data", "refrate"]}, 
     "648.exchange2_s": {"test": ["548.exchange2_r", "data", "test"], "train": ["548.exchange2_r", "data", "train"], "ref": ["548.exchange2_r", "data", "refrate"]}, 
     "657.xz_s": {"test": ["557.xz_r", "data", "test"], "train": ["557.xz_r", "data", "train"], "ref": ["557.xz_r", "data", "refspeed"]},
-    # FP SPEED - 浮点speed测试参考时间映射
     "603.bwaves_s": {"test": ["503.bwaves_r", "data", "test"], "train": ["503.bwaves_r", "data", "train"], "ref": ["503.bwaves_r", "data", "refspeed"]}, 
     "607.cactuBSSN_s": {"test": ["507.cactuBSSN_r", "data", "test"], "train": ["507.cactuBSSN_r", "data", "train"], "ref": ["507.cactuBSSN_r", "data", "refspeed"]}, 
     "619.lbm_s": {"test": ["619.lbm_s", "data", "test"], "train": ["619.lbm_s", "data", "train"], "ref": ["619.lbm_s", "data", "refspeed"]}, 
@@ -85,7 +121,39 @@ SPEC2017_REFTIME_MAP = {
     "649.fotonik3d_s": {"test": ["549.fotonik3d_r", "data", "test"], "train": ["549.fotonik3d_r", "data", "train"], "ref": ["549.fotonik3d_r", "data", "refspeed"]}, 
     "654.roms_s": {"test": ["554.roms_r", "data", "test"], "train": ["554.roms_r", "data", "train"], "ref": ["554.roms_r", "data", "refspeed"]}
 }
-"""SPEC2017基准测试参考时间路径映射字典，用于定位reftime文件"""
+
+SPEC2017_RATE_REFTIME_MAP = {
+    "500.perlbench_r": {"test": ["500.perlbench_r", "data", "test"], "train": ["500.perlbench_r", "data", "train"], "ref": ["500.perlbench_r", "data", "refrate"]},
+    "502.gcc_r": {"test": ["502.gcc_r", "data", "test"], "train": ["502.gcc_r", "data", "train"], "ref": ["502.gcc_r", "data", "refrate"]},
+    "505.mcf_r": {"test": ["505.mcf_r", "data", "test"], "train": ["505.mcf_r", "data", "train"], "ref": ["505.mcf_r", "data", "refrate"]},
+    "520.omnetpp_r": {"test": ["520.omnetpp_r", "data", "test"], "train": ["520.omnetpp_r", "data", "train"], "ref": ["520.omnetpp_r", "data", "refrate"]},
+    "523.xalancbmk_r": {"test": ["523.xalancbmk_r", "data", "test"], "train": ["523.xalancbmk_r", "data", "train"], "ref": ["523.xalancbmk_r", "data", "refrate"]},
+    "525.x264_r": {"test": ["525.x264_r", "data", "test"], "train": ["525.x264_r", "data", "train"], "ref": ["525.x264_r", "data", "refrate"]},
+    "531.deepsjeng_r": {"test": ["531.deepsjeng_r", "data", "test"], "train": ["531.deepsjeng_r", "data", "train"], "ref": ["531.deepsjeng_r", "data", "refrate"]},
+    "541.leela_r": {"test": ["541.leela_r", "data", "test"], "train": ["541.leela_r", "data", "train"], "ref": ["541.leela_r", "data", "refrate"]},
+    "548.exchange2_r": {"test": ["548.exchange2_r", "data", "test"], "train": ["548.exchange2_r", "data", "train"], "ref": ["548.exchange2_r", "data", "refrate"]},
+    "557.xz_r": {"test": ["557.xz_r", "data", "test"], "train": ["557.xz_r", "data", "train"], "ref": ["557.xz_r", "data", "refrate"]},
+    "503.bwaves_r": {"test": ["503.bwaves_r", "data", "test"], "train": ["503.bwaves_r", "data", "train"], "ref": ["503.bwaves_r", "data", "refrate"]},
+    "507.cactuBSSN_r": {"test": ["507.cactuBSSN_r", "data", "test"], "train": ["507.cactuBSSN_r", "data", "train"], "ref": ["507.cactuBSSN_r", "data", "refrate"]},
+    "508.namd_r": {"test": ["508.namd_r", "data", "test"], "train": ["508.namd_r", "data", "train"], "ref": ["508.namd_r", "data", "refrate"]},
+    "510.parest_r": {"test": ["510.parest_r", "data", "test"], "train": ["510.parest_r", "data", "train"], "ref": ["510.parest_r", "data", "refrate"]},
+    "511.povray_r": {"test": ["511.povray_r", "data", "test"], "train": ["511.povray_r", "data", "train"], "ref": ["511.povray_r", "data", "refrate"]},
+    "519.lbm_r": {"test": ["519.lbm_r", "data", "test"], "train": ["519.lbm_r", "data", "train"], "ref": ["519.lbm_r", "data", "refrate"]},
+    "521.wrf_r": {"test": ["521.wrf_r", "data", "test"], "train": ["521.wrf_r", "data", "train"], "ref": ["521.wrf_r", "data", "refrate"]},
+    "526.blender_r": {"test": ["526.blender_r", "data", "test"], "train": ["526.blender_r", "data", "train"], "ref": ["526.blender_r", "data", "refrate"]},
+    "527.cam4_r": {"test": ["527.cam4_r", "data", "test"], "train": ["527.cam4_r", "data", "train"], "ref": ["527.cam4_r", "data", "refrate"]},
+    "538.imagick_r": {"test": ["538.imagick_r", "data", "test"], "train": ["538.imagick_r", "data", "train"], "ref": ["538.imagick_r", "data", "refrate"]},
+    "544.nab_r": {"test": ["544.nab_r", "data", "test"], "train": ["544.nab_r", "data", "train"], "ref": ["544.nab_r", "data", "refrate"]},
+    "549.fotonik3d_r": {"test": ["549.fotonik3d_r", "data", "test"], "train": ["549.fotonik3d_r", "data", "train"], "ref": ["549.fotonik3d_r", "data", "refrate"]},
+    "554.roms_r": {"test": ["554.roms_r", "data", "test"], "train": ["554.roms_r", "data", "train"], "ref": ["554.roms_r", "data", "refrate"]},
+}
+
+SPEC2017_REFTIME_MAP = SPEC2017_SPEED_REFTIME_MAP
+
+SPEC2017_REFTIME_MAP_BY_MODE = {
+    SPECMode.speed: SPEC2017_SPEED_REFTIME_MAP,
+    SPECMode.rate: SPEC2017_RATE_REFTIME_MAP,
+}
 
 
 class SPEC2017Driver(SPECDriver):
@@ -153,7 +221,7 @@ class SPEC2017Driver(SPECDriver):
             raise ConfigError(self.msg.get("spec_path_not_set"))
         self.spec_dir = SPEC2017_PATH
         self.spec_bench_path = SPEC2017_BENCH_PATH
-        self.spec_bench_map = SPEC2017_BIN_MAP
+        self.spec_bench_map = SPEC2017_BIN_MAP_BY_MODE[self.spec_mode]
         self.spec_build_dir = 'build'
         self.spec_run_dir = 'run'
         self.setup_script_path = os.path.join(SCRIPTS_PATH, "setup-spec17.sh")
@@ -162,35 +230,53 @@ class SPEC2017Driver(SPECDriver):
     def get_bench_list(self) -> List[str]:
         """
         根据spec_benches字符串获取基准测试列表
-        
-        解析spec_benches字符串，支持以下格式：
+
+        解析spec_benches字符串，根据当前spec_mode(speed/rate)选择对应的基准测试集合。
+        支持以下格式：
         - "all": 选择所有基准测试
-        - "int" 或 "intspeed": 选择所有整数speed基准测试
-        - "fp" 或 "fpspeed": 选择所有浮点speed基准测试
-        - "600 602": 选择指定编号的基准测试
-        
+        - "int"/"intspeed"/"intrate": 选择所有整数基准测试
+        - "fp"/"fpspeed"/"fprate": 选择所有浮点基准测试
+        - "600 602": 选择指定编号的基准测试（空格分隔）
+
         Returns:
             list: 排序后的基准测试名称列表，整数测试在前，浮点测试在后
-            
+
         Raises:
             BenchmarkError: 当没有选择到任何基准测试时抛出
+
+        Note:
+            - speed模式下，int/fp分别对应intspeed/fpspeed benchset
+            - rate模式下，int/fp分别对应intrate/fprate benchset
+            - 具体编号匹配时会遍历当前模式下的所有基准测试
         """
         spec_bench_set = set()
         spec_bench_list = []
 
+        benches_by_mode = SPEC2017_BENCHES_BY_MODE[self.spec_mode]
+        int_benches = benches_by_mode["int"]
+        fp_benches = benches_by_mode["fp"]
+        all_benches = benches_by_mode["all"]
+
+        mode_aliases = {
+            SPECMode.speed: {"int": ["int", "intspeed"], "fp": ["fp", "fpspeed"]},
+            SPECMode.rate: {"int": ["int", "intrate"], "fp": ["fp", "fprate"]},
+        }
+        int_aliases = mode_aliases[self.spec_mode]["int"]
+        fp_aliases = mode_aliases[self.spec_mode]["fp"]
+
         for bench in self.spec_benches.split():
             if bench == "all":
-                spec_bench_set.update(SPEC2017_BENCHES) 
-            elif bench in ["int", "intspeed"]:
-                spec_bench_set.update(SPEC2017_INT_BENCHES)
-            elif bench in ["fp", "fpspeed"]:
-                spec_bench_set.update(SPEC2017_FP_BENCHES)
+                spec_bench_set.update(all_benches) 
+            elif bench in int_aliases:
+                spec_bench_set.update(int_benches)
+            elif bench in fp_aliases:
+                spec_bench_set.update(fp_benches)
             else:
-                for spec_bench in SPEC2017_BENCHES:
+                for spec_bench in all_benches:
                     if bench == spec_bench.split('.')[0]:
                         spec_bench_set.add(spec_bench)
         spec_bench_list = sorted(spec_bench_set, 
-            key=lambda x: (0 if x in SPEC2017_INT_BENCHES else 1, 
+            key=lambda x: (0 if x in int_benches else 1, 
                 x.split('.')[0]))
 
         if spec_bench_list == []:
@@ -205,29 +291,33 @@ class SPEC2017Driver(SPECDriver):
     def get_ref_time(self, bench_name: str, input_type: InputType) -> str:
         """
         获取基准测试的参考时间
-        
-        从SPEC2017的reftime文件中读取指定基准测试和输入类型的参考时间。
-        SPEC2017的参考时间存储位置与SPEC2006不同，需要通过SPEC2017_REFTIME_MAP映射查找。
-        
+
+        根据当前spec_mode从SPEC2017_REFTIME_MAP_BY_MODE中查找参考时间文件路径，
+        读取并返回指定基准测试和输入类型的参考时间（以数字字符串形式返回）。
+
+        SPEC2017的参考时间存储位置与SPEC2006不同，需要通过映射表
+        SPEC2017_REFTIME_MAP_BY_MODE查找对应的data目录路径。
+
         Args:
             bench_name (str): 基准测试名称，如"600.perlbench_s"
             input_type (InputType): 输入数据集类型(test/train/ref)
-            
+
         Returns:
-            str: 参考时间字符串(数字)
-            
+            str: 参考时间字符串（数字），如"1234"
+
         Raises:
-            FileOperationError: 当无法读取参考时间文件时抛出
-            AssertionError: 当参考时间不是有效数字时抛出
-            
+            FileOperationError: 当reftime文件不存在或内容格式无效时抛出
+            FileOperationError: 当解析的参考时间不是有效数字时抛出
+
         Note:
-            - SPEC2017的speed测试参考时间可能存储在对应的rate测试目录中
-            - reftime文件中包含多行，需要根据input_type和spec_mode匹配正确的行
+            - ref模式下，reftime文件中的行格式为: ref{speed|rate} {n} {time}
+            - test/train模式下，reftime文件中的行格式为: {test|train} {n} {time}
         """
         reftime_result = ""
+        reftime_map = SPEC2017_REFTIME_MAP_BY_MODE[self.spec_mode]
         reftime_path = os.path.join(
             self.spec_bench_path, 
-            os.path.sep.join(SPEC2017_REFTIME_MAP[bench_name][input_type.name]),
+            os.path.sep.join(reftime_map[bench_name][input_type.name]),
             "reftime")
 
         try:

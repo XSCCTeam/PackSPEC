@@ -468,22 +468,54 @@ class SPECDriver:
         qemu_cmd_name = QEMU_CMD if QEMU_CMD else 'qemu-riscv64'
         qemu_binary = _shlex.split(qemu_cmd_name)[0]
 
-        patterns = []
-        if QEMU_PATH:
-            patterns.append(f"{QEMU_PATH}/{qemu_binary}")
-        patterns.append(qemu_binary)
+        qemu_binaries = list(set([
+            'qemu-riscv64', 'qemu-riscv32',
+            'qemu-aarch64', 'qemu-arm',
+            qemu_binary
+        ]))
 
-        for pattern in patterns:
-            if pattern in line:
-                idx = line.index(pattern)
-                after = line[idx + len(pattern):]
+        if QEMU_PATH:
+            for qb in qemu_binaries:
+                full_pattern = f"{QEMU_PATH}/{qb}"
+                if full_pattern in line:
+                    idx = line.index(full_pattern)
+                    after = line[idx + len(full_pattern):]
+                    remaining = after.lstrip()
+                    skip = len(after) - len(remaining)
+                    qemu_prefix_end = idx + len(full_pattern) + skip
+                    return line[:idx] + line[qemu_prefix_end:]
+
+        for qb in qemu_binaries:
+            if qb in line:
+                idx = line.index(qb)
+                path_start = idx
+                while path_start > 0 and line[path_start - 1] not in (' ', '\t'):
+                    path_start -= 1
+                after = line[idx + len(qb):]
                 remaining = after.lstrip()
                 skip = len(after) - len(remaining)
-                qemu_prefix_end = idx + len(pattern) + skip
-                line = line[:idx] + line[qemu_prefix_end:]
-                break
+                qemu_prefix_end = idx + len(qb) + skip
+                return line[:path_start] + line[qemu_prefix_end:]
 
         return line
+
+    @staticmethod
+    def _add_qemu_prefix(line: str) -> str:
+        from src.pack_spec.pack_utils import get_qemu_cmd_absolute
+        qemu_binaries = ['qemu-riscv64', 'qemu-riscv32', 'qemu-aarch64', 'qemu-arm']
+        stripped = line.lstrip()
+        if not stripped.startswith('./'):
+            return line
+        for qb in qemu_binaries:
+            if qb in line:
+                return line
+        if not QEMU_CMD:
+            return line
+        qemu_absolute = get_qemu_cmd_absolute()
+        if not qemu_absolute:
+            return line
+        indent = line[:len(line) - len(stripped)]
+        return indent + qemu_absolute + ' ' + stripped
 
     def execute_specinvoke(self, src_dir: str, dest_dir: str, input_type: InputType, binary_name_map: tuple = ("", "")) -> bool:
         """
@@ -610,7 +642,7 @@ class SPECDriver:
             line = line.replace(src_dir, ".")
             line = line.replace(f"../{src_dir_name}/", "./")
             line = line.replace(f"specperl {self.spec_dir}/bin/specdiff", "specdiff")
-            
+            line = self._add_qemu_prefix(line)
             if line.strip().startswith("specdiff") and ">" in line:
                 parts = line.strip().split()
                 for part in parts:

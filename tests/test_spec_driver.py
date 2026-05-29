@@ -1104,3 +1104,173 @@ class TestRemoveQemuPrefix:
         line = "# Starting run for copy #0"
         result = SPECDriver._remove_qemu_prefix(line)
         assert result == line
+
+    @patch('src.pack_spec.spec_driver.QEMU_PATH', None)
+    @patch('src.pack_spec.spec_driver.QEMU_CMD', 'qemu-riscv64')
+    def test_remove_qemu_with_path_but_no_env(self):
+        from src.pack_spec.spec_driver import SPECDriver
+        line = "/home/kd/workplace/llvm_tool/20240920-qemu/bin/qemu-riscv64 ./x264_s_base.test --pass 1"
+        result = SPECDriver._remove_qemu_prefix(line)
+        assert result == "./x264_s_base.test --pass 1"
+
+    @patch('src.pack_spec.spec_driver.QEMU_PATH', '/different/path')
+    @patch('src.pack_spec.spec_driver.QEMU_CMD', 'qemu-riscv64')
+    def test_remove_qemu_mismatched_path(self):
+        from src.pack_spec.spec_driver import SPECDriver
+        line = "/home/kd/workplace/llvm_tool/20240920-qemu/bin/qemu-riscv64 ./x264_s_base.test"
+        result = SPECDriver._remove_qemu_prefix(line)
+        assert result == "./x264_s_base.test"
+
+    @patch('src.pack_spec.spec_driver.QEMU_PATH', None)
+    @patch('src.pack_spec.spec_driver.QEMU_CMD', 'qemu-aarch64')
+    def test_remove_qemu_riscv_when_cmd_is_aarch64(self):
+        from src.pack_spec.spec_driver import SPECDriver
+        line = "/home/kd/workplace/llvm_tool/bin/qemu-riscv64 ./x264_s_base.test"
+        result = SPECDriver._remove_qemu_prefix(line)
+        assert result == "./x264_s_base.test"
+
+
+class TestAddQemuPrefix:
+
+    @patch('src.pack_spec.spec_driver.QEMU_PATH', '/home/kd/qemu')
+    @patch('src.pack_spec.spec_driver.QEMU_CMD', 'qemu-riscv64')
+    @patch('src.pack_spec.pack_utils.get_qemu_cmd_absolute', return_value='/home/kd/qemu/qemu-riscv64')
+    def test_add_qemu_with_full_path(self, mock_get_abs):
+        from src.pack_spec.spec_driver import SPECDriver
+        line = "./imagevalidate_525_base.riscv-xxx -avg -threshold 0.5"
+        result = SPECDriver._add_qemu_prefix(line)
+        assert result == "/home/kd/qemu/qemu-riscv64 ./imagevalidate_525_base.riscv-xxx -avg -threshold 0.5"
+
+    @patch('src.pack_spec.spec_driver.QEMU_PATH', '/home/kd/qemu')
+    @patch('src.pack_spec.spec_driver.QEMU_CMD', 'qemu-riscv64')
+    @patch('src.pack_spec.pack_utils.get_qemu_cmd_absolute', return_value='/home/kd/qemu/qemu-riscv64')
+    def test_add_qemu_preserves_leading_whitespace(self, mock_get_abs):
+        from src.pack_spec.spec_driver import SPECDriver
+        line = "   ./diffwrf_521_base.riscv-xxx arg1"
+        result = SPECDriver._add_qemu_prefix(line)
+        assert result == "   /home/kd/qemu/qemu-riscv64 ./diffwrf_521_base.riscv-xxx arg1"
+
+    @patch('src.pack_spec.spec_driver.QEMU_PATH', '/home/kd/qemu')
+    @patch('src.pack_spec.spec_driver.QEMU_CMD', 'qemu-riscv64')
+    def test_add_qemu_no_duplicate(self):
+        from src.pack_spec.spec_driver import SPECDriver
+        line = "/home/kd/qemu/qemu-riscv64 ./imagevalidate_525_base.riscv-xxx -avg"
+        result = SPECDriver._add_qemu_prefix(line)
+        assert result == line
+
+    @patch('src.pack_spec.spec_driver.QEMU_PATH', '/home/kd/qemu')
+    @patch('src.pack_spec.spec_driver.QEMU_CMD', 'qemu-riscv64')
+    def test_add_qemu_no_change_for_specdiff(self):
+        from src.pack_spec.spec_driver import SPECDriver
+        line = "specdiff -m -l 10 ref.out output.out > output.cmp"
+        result = SPECDriver._add_qemu_prefix(line)
+        assert result == line
+
+    @patch('src.pack_spec.spec_driver.QEMU_PATH', '/home/kd/qemu')
+    @patch('src.pack_spec.spec_driver.QEMU_CMD', '')
+    def test_add_qemu_no_cmd_set(self):
+        from src.pack_spec.spec_driver import SPECDriver
+        line = "./imagevalidate_525_base.riscv-xxx -avg"
+        result = SPECDriver._add_qemu_prefix(line)
+        assert result == line
+
+    @patch('src.pack_spec.spec_driver.QEMU_PATH', '/home/kd/qemu')
+    @patch('src.pack_spec.spec_driver.QEMU_CMD', 'qemu-riscv64')
+    def test_add_qemu_non_local_binary(self):
+        from src.pack_spec.spec_driver import SPECDriver
+        line = "/usr/bin/some_tool arg1 arg2"
+        result = SPECDriver._add_qemu_prefix(line)
+        assert result == line
+
+    @patch('src.pack_spec.spec_driver.QEMU_PATH', '/home/kd/qemu')
+    @patch('src.pack_spec.spec_driver.QEMU_CMD', 'qemu-riscv64')
+    def test_add_qemu_comment_line_unchanged(self):
+        from src.pack_spec.spec_driver import SPECDriver
+        line = "# Starting run for copy #0"
+        result = SPECDriver._add_qemu_prefix(line)
+        assert result == line
+
+
+class TestExecuteSpecdiffWithQemu:
+
+    @patch('src.pack_spec.spec_driver.QEMU_CMD', 'qemu-riscv64')
+    @patch('src.pack_spec.spec_driver.QEMU_PATH', '/home/kd/qemu')
+    @patch('src.pack_spec.pack_utils.get_qemu_cmd_absolute', return_value='/home/kd/qemu/qemu-riscv64')
+    def test_execute_specdiff_adds_qemu_to_local_binary(self, mock_get_abs):
+        import tempfile
+
+        from src.pack_spec.spec_driver import SPECDriver
+        with patch.object(SPECDriver, '__init__', lambda self, *args, **kwargs: None):
+            driver = SPECDriver.__new__(SPECDriver)
+            driver.spec_dir = "/fake/spec"
+            driver.msg = get_log_messages(DEFAULT_LOG_LANGUAGE)
+            driver.utils = MagicMock()
+            driver.utils.execute_commands.return_value = [
+                "# Starting run for copy #0",
+                "./imagevalidate_525_base.riscv-xxx -avg -threshold 0.5 frame_200.yuv /ref/frame_200.org.tga > imagevalidate_frame_200.out 2>> imagevalidate_frame_200.err"
+            ]
+
+            with tempfile.TemporaryDirectory() as tmpdir:
+                result = driver.execute_specdiff("/path/to/src", tmpdir, InputType.test)
+
+                assert result
+                script_path = os.path.join(tmpdir, "specdiff_test.sh")
+                with open(script_path, 'r') as f:
+                    content = f.read()
+                assert any(
+                    line.startswith("/home/kd/qemu/qemu-riscv64 ./imagevalidate")
+                    for line in content.splitlines()
+                )
+
+    @patch('src.pack_spec.spec_driver.QEMU_CMD', 'qemu-riscv64')
+    @patch('src.pack_spec.spec_driver.QEMU_PATH', '/home/kd/qemu')
+    @patch('src.pack_spec.pack_utils.get_qemu_cmd_absolute', return_value='/home/kd/qemu/qemu-riscv64')
+    def test_execute_specdiff_no_qemu_for_specdiff_command(self, mock_get_abs):
+        import tempfile
+
+        from src.pack_spec.spec_driver import SPECDriver
+        with patch.object(SPECDriver, '__init__', lambda self, *args, **kwargs: None):
+            driver = SPECDriver.__new__(SPECDriver)
+            driver.spec_dir = "/fake/spec"
+            driver.msg = get_log_messages(DEFAULT_LOG_LANGUAGE)
+            driver.utils = MagicMock()
+            driver.utils.execute_commands.return_value = [
+                "# Starting run for copy #0",
+                "specdiff -m -l 10 /ref/out.out output.out > output.cmp"
+            ]
+
+            with tempfile.TemporaryDirectory() as tmpdir:
+                result = driver.execute_specdiff("/path/to/src", tmpdir, InputType.test)
+
+                assert result
+                script_path = os.path.join(tmpdir, "specdiff_test.sh")
+                with open(script_path, 'r') as f:
+                    content = f.read()
+                for line in content.splitlines():
+                    if "specdiff" in line:
+                        assert not line.strip().startswith("/home/kd/qemu/qemu-riscv64")
+
+    @patch('src.pack_spec.spec_driver.QEMU_CMD', '')
+    @patch('src.pack_spec.spec_driver.QEMU_PATH', '/home/kd/qemu')
+    def test_execute_specdiff_no_qemu_when_cmd_not_set(self):
+        import tempfile
+
+        from src.pack_spec.spec_driver import SPECDriver
+        with patch.object(SPECDriver, '__init__', lambda self, *args, **kwargs: None):
+            driver = SPECDriver.__new__(SPECDriver)
+            driver.spec_dir = "/fake/spec"
+            driver.msg = get_log_messages(DEFAULT_LOG_LANGUAGE)
+            driver.utils = MagicMock()
+            driver.utils.execute_commands.return_value = [
+                "# Starting run for copy #0",
+                "./imagevalidate_525_base.riscv-xxx -avg -threshold 0.5"
+            ]
+
+            with tempfile.TemporaryDirectory() as tmpdir:
+                result = driver.execute_specdiff("/path/to/src", tmpdir, InputType.test)
+
+                assert result
+                script_path = os.path.join(tmpdir, "specdiff_test.sh")
+                with open(script_path, 'r') as f:
+                    content = f.read()
+                assert "/home/kd/qemu/qemu-riscv64" not in content

@@ -1,4 +1,23 @@
 #!/usr/bin/python3
+"""
+钉钉 Markdown 消息发送脚本
+
+通过自定义消息服务 API 发送 Markdown 格式的测试结果消息，
+支持 @指定用户。消息内容和标题通过命令行参数指定。
+
+用法:
+    send_md_message.py --api_key <key> --title <title> --text <text> --md_path <path> [--at_mobiles <mobiles>]
+
+参数:
+    --api_key:     API 密钥（通过环境变量 BOSC_API_KEY 传递更安全）
+    --title:       消息标题
+    --text:        消息正文摘要
+    --md_path:     要发送的 Markdown 文件路径（内容会嵌入消息中）
+    --at_mobiles:  要 @ 的手机号（可选）
+
+环境变量:
+    BOSC_MESSAGE_URL: 消息服务基础 URL，默认 http://172.38.8.102:8848
+"""
 
 import requests
 import json
