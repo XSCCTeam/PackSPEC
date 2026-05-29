@@ -274,7 +274,7 @@ def main(log_path, output_file, clock_rate):
                 real_times.append(real_time)
                 print("{:>8} ".format(real_time), end="")
                 csv_buffer = csv_buffer + f"{real_time},"
-            median_time = median(real_times)
+            median_time = median(real_times) or 0.01
             score = ref_time/median_time
             if clock_rate!= "1":
                 score_ghz = score/float(clock_rate)
@@ -331,7 +331,7 @@ def main(log_path, output_file, clock_rate):
                 real_times.append(real_time)
                 print("{:>8} ".format(real_time), end="")
                 csv_buffer = csv_buffer + f"{real_time},"
-            median_time = median(real_times)
+            median_time = median(real_times) or 0.01
             score = ref_time/median_time
             if clock_rate!= "1":
                 score_ghz = score/float(clock_rate)
@@ -433,7 +433,7 @@ def generate_score_md(md_output_file, benchmarks, run_time, max_benchname_len, c
         if is_int_bench(bench_name):
             ref_time = get_ref_time(benchmark_block)
             real_times = [get_real_time(tb) for tb in get_test_block(benchmark_block)]
-            median_time = median(real_times)
+            median_time = median(real_times) or 0.01
             score = ref_time / median_time
             score_ghz = score / float(clock_rate) if clock_rate != "1" else None
             lines.append(format_row(bench_name, ref_time, real_times, median_time, score, score_ghz))
@@ -451,7 +451,7 @@ def generate_score_md(md_output_file, benchmarks, run_time, max_benchname_len, c
         if is_fp_bench(bench_name):
             ref_time = get_ref_time(benchmark_block)
             real_times = [get_real_time(tb) for tb in get_test_block(benchmark_block)]
-            median_time = median(real_times)
+            median_time = median(real_times) or 0.01
             score = ref_time / median_time
             score_ghz = score / float(clock_rate) if clock_rate != "1" else None
             lines.append(format_row(bench_name, ref_time, real_times, median_time, score, score_ghz))
